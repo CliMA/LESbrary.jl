@@ -1,3 +1,67 @@
+using ArgParse
+
+s = ArgParseSettings(description="Run simulations of a stratified fluid forced by surface heat fluxes and wind" *
+                     "stresses, simulating an oceanic boundary layer that develops a deepening mixed layer.")
+
+@add_arg_table s begin
+    "--horizontal-resolution", "-N"
+        arg_type=Int
+        required=true
+        help="Number of grid points in the horizontal (Nx, Ny) = (N, N)."
+    "--vertical-resolution", "-V"
+        arg_type=Int
+        required=true
+        help="Number of grid points in the vertical Nz."
+    "--length", "-L"
+        arg_type=Float64
+        required=true
+        help="Horizontal size of the domain (Lx, Ly) = (L, L) [meters] ."
+    "--height", "-H"
+        arg_type=Float64
+        required=true
+        help="Vertical height (or depth) of the domain Lz [meters]."
+    "--dTdz"
+        arg_type=Float64
+        required=true
+        help="Temperature gradient (stratification) to impose [K/m]."
+    "--heat-flux", "-Q"
+        arg_type=Float64
+        required=true
+        help="Heat flux to impose at the surface [W/m²]. Negative values imply a cooling flux."
+    "--wind-stress"
+        arg_type=Float64
+        required=true
+        help="Wind stress to impose at the surface in the x-direction [N/m²]."
+    "--days"
+        arg_type=Float64
+        required=true
+        help="Number of Europa days to run the model."
+    "--output-dir", "-d"
+        arg_type=AbstractString
+        required=true
+        help="Base directory to save output to."
+end
+
+parsed_args = parse_args(s)
+Nh = parsed_args["horizontal-resolution"]
+Nz = parsed_args["vertical-resolution"]
+L  = parsed_args["length"]
+H  = parsed_args["height"]
+Q  = parsed_args["heat-flux"]
+τ  = parsed_args["wind-stress"]
+∂T∂z = parsed_args["dTdz"]
+
+parse_int(n) = isinteger(n) ? Int(n) : n
+Nh, Nz, L, H, Q, days = parse_int.([Nh, Nz, L, H, Q, days])
+
+base_dir = parsed_args["output-dir"]
+filename_prefix = "mixed_layer_simulation" * "_Q" * str(Q) * "_dTdz" * str(∂T∂z) * "_tau" * str(τ)
+
+if !isdir(base_dir)
+    @info "Creating directory: $base_dir"
+    mkpath(output_dir)
+end
+
 using Statistics, Printf
 using Oceananigans
 
@@ -21,24 +85,18 @@ end
 ρ₀ = 1027    # Density of seawater [kg/m³]
 cₚ = 4181.3  # Specific heat capacity of seawater at constant pressure [J/(kg·K)]
 
-# Simulation parameters.
-Q    = -50
-∂T∂z = 0.01
-τ    = 0
-
-# We impose the wind stress as a flux at the surface.
+# We impose the wind stress Fu as a flux at the surface.
 # To impose a flux boundary condition, the top flux imposed should be negative
-# for a heating flux and positive for a cooling flux, thus the minus sign.
+# for a heating flux and positive for a cooling flux, thus the minus sign on Fθ.
 Fu = τ / ρ₀
 Fθ = -Q / (ρ₀*cₚ)
 
 # Model parameters
 FT = Float64
 arch = HAVE_CUDA ? GPU() : CPU()
-Nx, Ny, Nz = 256, 256, 256
-Lx, Ly, Lz = 100, 100, 100
-end_time = 8day
-Δt = 3
+Nx, Ny, Nz = N, N, Nz
+Lx, Ly, Lz = L, L, H
+end_time = days * day
 ν, κ = 1e-5, 1e-5
 
 ubcs = HorizontallyPeriodicBCs(   top = BoundaryCondition(Flux, Fu))
