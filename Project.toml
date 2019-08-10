@@ -1,0 +1,10 @@
+name = "seasonal-cycle-mixed-layers"
+uuid = "0d21a966-bb61-11e9-3e8e-8da3363c58dd"
+authors = ["ali-ramadhan <ali.hh.ramadhan@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
+JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
