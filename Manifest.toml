@@ -219,7 +219,9 @@ version = "0.8.0"
 
 [[Oceananigans]]
 deps = ["Adapt", "CUDAdrv", "CUDAnative", "CuArrays", "Distributed", "FFTW", "FileIO", "GPUifyLoops", "JLD2", "LinearAlgebra", "NetCDF", "OffsetArrays", "Printf", "Random", "StaticArrays", "Statistics", "Test", "TimerOutputs"]
-git-tree-sha1 = "3229189c3f859568e88cc5ec43d393885162d803"
+git-tree-sha1 = "66bb4cb00b4ef6dbc059fe9dd1828387a280f5cb"
+repo-rev = "v094"
+repo-url = "https://github.com/climate-machine/Oceananigans.jl.git"
 uuid = "9e8cae18-63c1-5223-a75c-80ca9d6e9a09"
 version = "0.9.3"
 

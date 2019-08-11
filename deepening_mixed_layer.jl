@@ -80,7 +80,7 @@ Fθ = -Q / (ρ₀*cₚ)
 # Model parameters
 FT = Float64
 arch = HAVE_CUDA ? GPU() : CPU()
-Nx, Ny, Nz = N, N, Nz
+Nx, Ny, Nz = Nh, Nh, Nz
 Lx, Ly, Lz = L, L, H
 end_time = days * day
 ν, κ = 1e-5, 1e-5
@@ -130,7 +130,7 @@ fields = Dict(
     :kappaT => model -> Array(model.diffusivities.κₑ.T.data.parent),
     :nu => model -> Array(model.diffusivities.νₑ.data.parent))
 
-field_writer = JLD2OutputWriter(model, fields; dir=base_dir, prefix=filename * "_fields",
+field_writer = JLD2OutputWriter(model, fields; dir=base_dir, prefix=prefix * "_fields",
                                 init=init_save_parameters_and_bcs,
                                 max_filesize=100GiB, interval=6hour, force=true, verbose=true)
 push!(model.output_writers, field_writer)
@@ -191,8 +191,8 @@ while model.clock.time < end_time
 
     update_Δt!(Δt_wizard, model)
 
-    @printf("[%06.2f%%] i: %d, t: %.3f Europan days, umax: (%6.3g, %6.3g, %6.3g) m/s, CFL: %6.4g, next Δt: %3.2f s, ⟨wall time⟩: %s\n",
-            progress, model.clock.iteration, model.clock.time / europa_day,
+    @printf("[%06.2f%%] i: %d, t: %.3f days, umax: (%6.3g, %6.3g, %6.3g) m/s, CFL: %6.4g, next Δt: %3.2f s, ⟨wall time⟩: %s\n",
+            progress, model.clock.iteration, model.clock.time / day,
             umax, vmax, wmax, CFL, Δt_wizard.Δt, prettytime(walltime / Ni))
 end
 
