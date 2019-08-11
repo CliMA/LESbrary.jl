@@ -1,4 +1,6 @@
+using Statistics, Printf
 using ArgParse
+using Oceananigans
 
 s = ArgParseSettings(description="Run simulations of a stratified fluid forced by surface heat fluxes and wind" *
                      "stresses, simulating an oceanic boundary layer that develops a deepening mixed layer.")
@@ -7,79 +9,63 @@ s = ArgParseSettings(description="Run simulations of a stratified fluid forced b
     "--horizontal-resolution", "-N"
         arg_type=Int
         required=true
+        dest_name="Nh"
         help="Number of grid points in the horizontal (Nx, Ny) = (N, N)."
     "--vertical-resolution", "-V"
         arg_type=Int
         required=true
+        dest_name="Nz"
         help="Number of grid points in the vertical Nz."
     "--length", "-L"
         arg_type=Float64
         required=true
+        dest_name="L"
         help="Horizontal size of the domain (Lx, Ly) = (L, L) [meters] ."
     "--height", "-H"
         arg_type=Float64
         required=true
+        dest_name="H"
         help="Vertical height (or depth) of the domain Lz [meters]."
     "--dTdz"
         arg_type=Float64
         required=true
+        dest_name="∂T∂z"
         help="Temperature gradient (stratification) to impose [K/m]."
     "--heat-flux", "-Q"
         arg_type=Float64
         required=true
+        dest_name="Q"
         help="Heat flux to impose at the surface [W/m²]. Negative values imply a cooling flux."
     "--wind-stress"
         arg_type=Float64
         required=true
+        dest_name="τ"
         help="Wind stress to impose at the surface in the x-direction [N/m²]."
     "--days"
         arg_type=Float64
         required=true
+        dest_name="days"
         help="Number of Europa days to run the model."
     "--output-dir", "-d"
         arg_type=AbstractString
         required=true
+        dest_name="base_dir"
         help="Base directory to save output to."
 end
 
 parsed_args = parse_args(s)
-Nh = parsed_args["horizontal-resolution"]
-Nz = parsed_args["vertical-resolution"]
-L  = parsed_args["length"]
-H  = parsed_args["height"]
-Q  = parsed_args["heat-flux"]
-τ  = parsed_args["wind-stress"]
-∂T∂z = parsed_args["dTdz"]
-
 parse_int(n) = isinteger(n) ? Int(n) : n
-Nh, Nz, L, H, Q, days = parse_int.([Nh, Nz, L, H, Q, days])
+Nh, Nz, L, H, Q, τ, ∂T∂z, days = [parsed_args[k] for k in ["Nh", "Nz", "L", "H", "Q", "τ", "∂T∂z", "days"]]
+Nh, Nz, L, H, Q, τ, ∂T∂z, days = parse_int.([Nh, Nz, L, H, Q, τ, ∂T∂z, days])
 
-base_dir = parsed_args["output-dir"]
-filename_prefix = "mixed_layer_simulation" * "_Q" * str(Q) * "_dTdz" * str(∂T∂z) * "_tau" * str(τ)
-
+base_dir = parsed_args["base_dir"]
 if !isdir(base_dir)
     @info "Creating directory: $base_dir"
     mkpath(output_dir)
 end
 
-using Statistics, Printf
-using Oceananigans
-
-function horizontal_avg(model, field)
-    function havg(model)
-        f = Array(ardata(field))
-        return mean(f, dims=[1, 2])[:]
-    end
-    return havg
-end
-
-function horizontal_avg(model, f1, f2)
-    function havg(model)
-        prod = Array(ardata(f1)) .* Array(ardata(f2))
-        return mean(prod, dims=[1, 2])[:]
-    end
-    return havg
-end
+# Filename prefix for output files.
+prefix = @sprintf("mixed_layer_simulation_Q%d_dTdz%.2f_tau%.2f", Q, ∂T∂z, τ)
 
 # Physical constants.
 ρ₀ = 1027    # Density of seawater [kg/m³]
@@ -136,62 +122,77 @@ function init_save_parameters_and_bcs(file, model)
     file["boundary_conditions/bottom/dTdz"] = ∂T∂z
 end
 
-u(model) = Array(model.velocities.u.data.parent)
-v(model) = Array(model.velocities.v.data.parent)
-w(model) = Array(model.velocities.w.data.parent)
-θ(model) = Array(model.tracers.T.data.parent)
-κTe(model) = Array(model.diffusivities.κₑ.T.data.parent)
-νe(model) = Array(model.diffusivities.νₑ.data.parent)
+fields = Dict(
+    :u => model -> Array(model.velocities.u.data.parent),
+    :v => model -> Array(model.velocities.v.data.parent),
+    :w => model -> Array(model.velocities.w.data.parent),
+    :T => model -> Array(model.tracers.T.data.parent),
+    :kappaT => model -> Array(model.diffusivities.κₑ.T.data.parent),
+    :nu => model -> Array(model.diffusivities.νₑ.data.parent))
 
-fields = Dict(:u=>u, :v=>v, :w=>w, :T=>θ, :kappaT=>κTe, :nu=>νe)
-
-filename = @sprintf("mixed_layer_simulation_fields_Q%d_Tz%.2f", Q, ∂T∂z)
-field_writer = JLD2OutputWriter(model, fields; dir="data", prefix=filename,
-                                init=init_save_parameters_and_bcs, interval=6hour, force=true)
-
-profiles = Dict{Symbol, Function}()
-
-# Horizontal profiles for u, v, w, T, S.
-for fs in [:velocities, :tracers]
-    for f in propertynames(getproperty(model, fs))
-        field = getproperty(getproperty(model, fs), f)
-        profiles[f] = horizontal_avg(model, field)
-    end
-end
-
-profiles[:wT] = horizontal_avg(model, model.velocities.w, model.tracers.T)
-profiles[:kappaT] = horizontal_avg(model, model.diffusivities.κₑ.T)
-profiles[:nu] = horizontal_avg(model, model.diffusivities.νₑ)
-
-# Horizontal profiles for velocity covariances.
-U = model.velocities
-for i in propertynames(U)
-    for j in propertynames(U)
-        f = Symbol(string(i) * string(j))
-        ui = getproperty(U, i)
-        uj = getproperty(U, j)
-        profiles[f] = horizontal_avg(model, ui, uj)
-    end
-end
-
-filename = @sprintf("mixed_layer_simulation_profiles_Q%d_Tz%.2f", Q, ∂T∂z)
-profile_writer = JLD2OutputWriter(model, profiles; dir="data", prefix=filename,
-                                  init=init_save_parameters_and_bcs, interval=10minute, force=true)
-
+field_writer = JLD2OutputWriter(model, fields; dir=base_dir, prefix=filename * "_fields",
+                                init=init_save_parameters_and_bcs,
+                                max_filesize=100GiB, interval=6hour, force=true, verbose=true)
 push!(model.output_writers, field_writer)
+
+# Set up diagnostics.
+push!(model.diagnostics, NaNChecker(model))
+
+Δtₚ = 10minute  # Time interval for computing and saving profiles.
+
+Up = VerticalProfile(model, model.velocities.u; interval=Δtₚ)
+Vp = VerticalProfile(model, model.velocities.v; interval=Δtₚ)
+Wp = VerticalProfile(model, model.velocities.w; interval=Δtₚ)
+Tp = VerticalProfile(model, model.tracers.T;    interval=Δtₚ)
+νp = VerticalProfile(model, model.diffusivities.νₑ; interval=Δtₚ)
+κp = VerticalProfile(model, model.diffusivities.κₑ.T; interval=Δtₚ)
+wT = ProductProfile(model, model.velocities.w, model.tracers.T; interval=Δtₚ)
+vc = VelocityCovarianceProfiles(model; interval=Δtₚ)
+
+append!(model.diagnostics, [Up, Vp, Wp, Tp, wT, νp, κp, vc])
+
+profiles = Dict(
+     :u => model -> Array(Up.profile),
+     :v => model -> Array(Vp.profile),
+     :w => model -> Array(Wp.profile),
+     :T => model -> Array(Tp.profile),
+    :nu => model -> Array(νp.profile),
+:kappaT => model -> Array(κp.profile),
+    :wT => model -> Array(wT.profile),
+    :uu => model -> Array(vc.uu.profile),
+    :uv => model -> Array(vc.uv.profile),
+    :uw => model -> Array(vc.uw.profile),
+    :vv => model -> Array(vc.vv.profile),
+    :vw => model -> Array(vc.vw.profile),
+    :ww => model -> Array(vc.ww.profile))
+
+profile_writer = JLD2OutputWriter(model, profiles; dir=base_dir, prefix=prefix * "_profiles",
+                                  init=init_save_parameters_and_bcs,
+                                  interval=Δtₚ, max_filesize=25GiB, force=true, verbose=true)
+
 push!(model.output_writers, profile_writer)
 
-Ni = 100  # Number of intermediate time steps to take before printing a progress message.
+# Wizard utility that calculates safe adaptive time steps.
+Δt_wizard = TimeStepWizard(cfl=0.15, Δt=3.0, max_change=1.2, max_Δt=30.0)
+
+# Take Ni "intermediate" time steps at a time before printing a progress
+# statement and updating the time step.
+Ni = 50
+
 while model.clock.time < end_time
-    walltime = @elapsed time_step!(model; Nt=Ni, Δt=Δt)
+    walltime = @elapsed time_step!(model; Nt=Ni, Δt=Δt_wizard.Δt)
+
+    progress = 100 * (model.clock.time / end_time)
 
     umax = maximum(abs, model.velocities.u.data.parent)
     vmax = maximum(abs, model.velocities.v.data.parent)
     wmax = maximum(abs, model.velocities.w.data.parent)
-    CFL = Δt / cell_advection_timescale(model)
+    CFL = Δt_wizard.Δt / cell_advection_timescale(model)
 
-    progress = 100 * (model.clock.time / end_time)
-    @printf("[%06.2f%%] i: %d, t: %8.5g, umax: (%6.3g, %6.3g, %6.3g), CFL: %6.4g, ⟨wall time⟩: %s\n",
-            progress, model.clock.iteration, model.clock.time, umax, vmax, wmax, CFL, prettytime(1e9*walltime / Ni))
+    update_Δt!(Δt_wizard, model)
+
+    @printf("[%06.2f%%] i: %d, t: %.3f Europan days, umax: (%6.3g, %6.3g, %6.3g) m/s, CFL: %6.4g, next Δt: %3.2f s, ⟨wall time⟩: %s\n",
+            progress, model.clock.iteration, model.clock.time / europa_day,
+            umax, vmax, wmax, CFL, Δt_wizard.Δt, prettytime(walltime / Ni))
 end
 
