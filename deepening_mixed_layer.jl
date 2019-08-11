@@ -45,7 +45,7 @@ s = ArgParseSettings(description="Run simulations of a stratified fluid forced b
         arg_type=Float64
         required=true
         dest_name="days"
-        help="Number of Europa days to run the model."
+        help="Number of days to run the simulation."
     "--output-dir", "-d"
         arg_type=AbstractString
         required=true
@@ -65,7 +65,7 @@ if !isdir(base_dir)
 end
 
 # Filename prefix for output files.
-prefix = @sprintf("mixed_layer_simulation_Q%d_dTdz%.2f_tau%.2f", Q, ∂T∂z, τ)
+prefix = @sprintf("mixed_layer_simulation_Q%d_dTdz%.3f_tau%.2f", Q, ∂T∂z, τ)
 
 # Physical constants.
 ρ₀ = 1027    # Density of seawater [kg/m³]
