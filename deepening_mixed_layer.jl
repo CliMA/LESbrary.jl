@@ -99,13 +99,13 @@ model = Model(float_type = FT,
 
 # Set initial condition. Initial velocity and salinity fluctuations needed for AMD.
 ε(μ) = μ * randn() # noise
-T₀(x, y, z) = 20 + ∂T∂z * z + ε(1e-4)
+T₀(x, y, z) = 20 + ∂T∂z * z + ε(1e-10) * exp(z/25)
 
 # Noise is needed so that AMD does not blow up due to dividing by ∇u or ∇S.
-u₀(x, y, z) = ε(1e-4)
-v₀(x, y, z) = ε(1e-4)
-w₀(x, y, z) = ε(1e-4)
-S₀(x, y, z) = ε(1e-4)
+u₀(x, y, z) = ε(1e-10) * exp(z/25)
+v₀(x, y, z) = ε(1e-10) * exp(z/25)
+w₀(x, y, z) = ε(1e-10) * exp(z/25)
+S₀(x, y, z) = ε(1e-10) * exp(z/25)
 
 set_ic!(model, u=u₀, v=v₀, w=w₀, T=T₀, S=S₀)
 
@@ -195,4 +195,3 @@ while model.clock.time < end_time
             progress, model.clock.iteration, model.clock.time / day,
             umax, vmax, wmax, CFL, Δt_wizard.Δt, prettytime(walltime / Ni))
 end
-
