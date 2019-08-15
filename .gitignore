@@ -1,0 +1,6 @@
+# Output data
+*.jld2
+
+# Plots and movies
+*.png
+*.mp4
