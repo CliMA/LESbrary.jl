@@ -8,6 +8,8 @@ import matplotlib
 import matplotlib.pyplot as plt
 
 from numpy import reshape, linspace, amax
+from matplotlib.ticker import LogLocator
+from matplotlib.colors import LogNorm
 
 logging.basicConfig(level=logging.INFO)
 
@@ -34,7 +36,7 @@ def sort_nicely(l):
     """
     l.sort(key=alphanum_key)
 
-def plot_horizontal_slice(file, field, i, level, sym=False, save=True):
+def plot_horizontal_slice(file, field, i, level, sym=False, log=False, save=True):
     rotation_period = 86400
 
     i = str(i)
@@ -56,6 +58,8 @@ def plot_horizontal_slice(file, field, i, level, sym=False, save=True):
     if sym:
         vmax = max(abs(amin(F_k)), abs(amax(F_k)))
         im = ax1.contourf(x, y, F_k, 30, vmin=-vmax, vmax=vmax, cmap="coolwarm")
+    elif log:
+         im = ax1.pcolormesh(x, y, F_k, cmap="inferno", norm=LogNorm(vmin=F_k.min(), vmax=F_k.max()),)
     else:
         im = ax1.contourf(x, y, F_k, 30, cmap="inferno")
 
@@ -88,8 +92,8 @@ if __name__ == "__main__":
     k = 20
     Ip = [Is[n] for n in [5, 10, 20, -1]]  # Iterations to plot.
     for (i, file) in Ip:
-        plot_horizontal_slice(file, "T", i, k)
-        plot_horizontal_slice(file, "w", i, k, sym=True)
-        plot_horizontal_slice(file, "nu", i, k)
-        plot_horizontal_slice(file, "kappaT", i, k)
+        # plot_horizontal_slice(file, "T", i, k)
+        # plot_horizontal_slice(file, "w", i, k, sym=True)
+        plot_horizontal_slice(file, "nu", i, k, log=True)
+        plot_horizontal_slice(file, "kappaT", i, k, log=True)
 
