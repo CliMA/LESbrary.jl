@@ -32,7 +32,7 @@ def plot_vertical_slice_frame(filepath, field, i, slice_idx, frame_number, vmin,
     Nx, Lx = file["grid/Nx"][()], file["grid/Lx"][()]
     Ny, Ly = file["grid/Ny"][()], file["grid/Ly"][()]
     Nz, Lz, dz = file["grid/Nz"][()], file["grid/Lz"][()], file["grid/Δz"][()]
-    x, y, z = linspace(0, Lx, Nx), linspace(0, Ly, Ny), linspace(0, Lz, Nz)
+    x, y, z = linspace(0, Lx, Nx), linspace(0, Ly, Ny), linspace(0, -Lz, Nz)
 
     F_slice = file["timeseries/" + field + "/" + i][()][1:Nz+1, 1:Ny+1, slice_idx]
     
@@ -53,7 +53,7 @@ def plot_vertical_slice_frame(filepath, field, i, slice_idx, frame_number, vmin,
     ax1.set_ylabel("z (m)")
     
     if save:
-        filename = f"{field}_vertical_slice_x{level:d}_{frame_number:06d}.png"
+        filename = f"{field}_vertical_slice_x{slice_idx:d}_{frame_number:06d}.png"
         print(f"Saving: {filename:s}")
         plt.savefig(filename, dpi=300, format="png", transparent=False)
         plt.close(fig)
@@ -65,13 +65,13 @@ def make_vertical_slice_movie(Is, field, slice_idx, vmin, vmax, sym=False, log=F
 
     (
         ffmpeg
-        .input(f"{field}_vertical_slice_x{level:d}_%06d.png", framerate=30)
-        .output(f"{field}_vertical_slice_x{level:d}_movie.mp4", crf=15, pix_fmt='yuv420p')
+        .input(f"{field}_vertical_slice_x{slice_idx:d}_%06d.png", framerate=30)
+        .output(f"{field}_vertical_slice_x{slice_idx:d}_movie.mp4", crf=15, pix_fmt='yuv420p')
         .overwrite_output()
         .run()
     )
 
-    for fn in glob.glob(f"{field}_vertical_slice_x{level:d}_*.png"):
+    for fn in glob.glob(f"{field}_vertical_slice_x{slice_idx:d}_*.png"):
         os.remove(fn)
 
 if __name__ == "__main__":
