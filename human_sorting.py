@@ -1,3 +1,5 @@
+import re
+
 # Human sorting: https://nedbatchelder.com/blog/200712/human_sorting.html
 def tryint(s):
     try:
