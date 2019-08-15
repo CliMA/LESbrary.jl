@@ -34,17 +34,17 @@ def sort_nicely(l):
     """
     l.sort(key=alphanum_key)
 
-def plot_vertical_profiles(file, field, Is, save=True):
+def plot_vertical_profiles(field, Is, save=True):
     rotation_period = 86400
 
     fig, ax1 = plt.subplots(nrows=1, ncols=1, figsize=(9, 16))
-    for i in Is:
+    for (i, file) in Is:
         i = str(i)
         t = file["timeseries/t/" + i][()]
         Nz, Lz, dz = file["grid/Nz"][()], file["grid/Lz"][()], file["grid/Δz"][()]
         z = linspace(0, -Lz, Nz)
 
-       if field == "K * dT/dz":
+        if field == "K * dT/dz":
            T = file["timeseries/T/" + i][()][1:Nz+1, 1:Ny+1, 1:Nx+1]
            K = file["timeseries/kappaT/" + i][()][1:Nz+1, 1:Ny+1, 1:Nx+1]
 
@@ -88,6 +88,5 @@ if __name__ == "__main__":
     logging.info(f"Found {len(Is):d} snapshots per field across {len(files):d} files: i={Is[0][0]}->{Is[-1][0]}")
     
     Ip = [Is[n] for n in [1, 10, 30, -1]]  # Iterations to plot.
-    for (i, file) in Ip:
-        plot_horizontal_slice(file, "K * dT/dz", i)
+    plot_vertical_profiles("K * dT/dz", Ip)
 
