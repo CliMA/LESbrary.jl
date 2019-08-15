@@ -10,6 +10,7 @@ import joblib
 import ffmpeg
 
 from numpy import reshape, linspace
+from matplotlib.colors import Normalize, LogNorm
 
 from human_sorting import sort_nicely
 
@@ -39,30 +40,33 @@ def plot_horizontal_slice_frame(filepath, field, i, level, frame_number, vmin, v
         z = linspace(-dz/2, -Lz+dz/2, Nz)
 
     F_k = file["timeseries/" + field + "/" + i][()][level, 1:Ny+1, 1:Nx+1]
-
+    
     fig, ax1 = plt.subplots(nrows=1, ncols=1, figsize=(16, 9))
-
+    
     if sym:
-        im = ax1.contourf(x, y, F_k, 30, vmin=vmin, vmax=vmax, cmap="coolwarm")
+        im = ax1.contourf(x, y, F_k, levels=linspace(vmin, vmax, 30), cmap="coolwarm")
     elif log:
          im = ax1.pcolormesh(x, y, F_k, cmap="inferno", norm=LogNorm(vmin=vmin, vmax=vmax))
     else:
-        im = ax1.contourf(x, y, F_k, 30, cmap="inferno", vmin=vmin, vmax=vmax)
+        im = ax1.contourf(x, y, F_k, 30, levels=linspace(vmin, vmax, 30), cmap="inferno")
+   
+    fig.colorbar(im)
+    im.set_clim(vmin=vmin, vmax=vmax)
 
-    fig.colorbar(im, ax=ax1)
-    ax1.set_title("{:s} @ z={:.1f} m, t={:.2f} days".format(field, z[k], t / rotation_period))
+    ax1.set_title("{:s} @ z={:.1f} m, t={:.2f} days".format(field, z[level], t / rotation_period))
     ax1.set_xlabel("x (m)")
     ax1.set_ylabel("y (m)")
-
+    
     if save:
         filename = f"{field}_horizontal_slice_k{level:d}_{frame_number:06d}.png"
-        logging.info(f"Saving: {filename:s}")
+        print(f"Saving: {filename:s}")
         plt.savefig(filename, dpi=300, format="png", transparent=False)
+        plt.close(fig)
 
 def make_horizontal_slice_movie(Is, field, level, vmin, vmax, sym=False, log=False):
     joblib.Parallel(n_jobs=48)(
-         joblib.delayed(plot_horizontal_slice_frame)(Is[frame_number][1], field, Is[frame_number][0], level, frame_number, sym, log, vmin, vmax)
-         for frame_number, i in enumerate(Is))
+         joblib.delayed(plot_horizontal_slice_frame)(I[1], field, I[0], level, frame_number, vmin, vmax, sym=sym, log=log)
+         for frame_number, I in enumerate(Is))
 
     (
         ffmpeg
@@ -80,18 +84,22 @@ if __name__ == "__main__":
     parser.add_argument("-f", "--files", type=str, nargs='+', required=True, help="JLD2 output filepaths")
     args = parser.parse_args()
     filepaths = args.files
-
     sort_nicely(filepaths)
-    files = [h5py.File(fp, 'r') for fp in filepaths]
 
     Is = []  # We'll generate a list of iterations with output across all files.
-    for file in files:
+    for fp in filepaths:
+        file = h5py.File(fp, 'r')
         new_Is = sorted(list(map(int, list(file["timeseries/t"].keys()))))
-        tuplified_Is = list(map(lambda i: (i, file), new_Is))
+        tuplified_Is = list(map(lambda i: (i, fp), new_Is))
         Is.extend(tuplified_Is)
 
-    logging.info(f"Found {len(Is):d} snapshots per field across {len(files):d} files: i={Is[0][0]}->{Is[-1][0]}")
+    logging.info(f"Found {len(Is):d} snapshots per field across {len(filepaths):d} files: i={Is[0][0]}->{Is[-1][0]}")
 
     k = 20
-    make_horizontal_slice_movie(Is, "T", k, 19.5, 20.0)
-
+    make_horizontal_slice_movie(Is, "T", k, 19.5, 20)
+    make_horizontal_slice_movie(Is, "w", k, -0.02, 0.02, sym=True)
+    make_horizontal_slice_movie(Is, "nu", k, 1e-5, 1e-2, log=True)
+    make_horizontal_slice_movie(Is, "kappaT", k, 1e-5, 1e-2, log=True)
+    make_horizontal_slice_movie(Is, "nu", 225, 1e-5, 1e-2, log=True)
+    make_horizontal_slice_movie(Is, "kappaT", 225, 1e-5, 1e-2, log=True)
+    
