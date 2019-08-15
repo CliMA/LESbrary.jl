@@ -41,6 +41,8 @@ def plot_vertical_profiles(field, Is, save=True):
     for (i, file) in Is:
         i = str(i)
         t = file["timeseries/t/" + i][()]
+        Nx, Lx = file["grid/Nx"][()], file["grid/Lx"][()]
+        Ny, Ly = file["grid/Ny"][()], file["grid/Ly"][()]
         Nz, Lz, dz = file["grid/Nz"][()], file["grid/Lz"][()], file["grid/Δz"][()]
         z = linspace(0, -Lz, Nz)
 
