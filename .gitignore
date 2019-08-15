@@ -1,3 +1,6 @@
+# Pythonic stuff
+__pycache__/
+
 # Output data
 *.jld2
 
