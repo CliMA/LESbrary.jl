@@ -6,7 +6,7 @@ import h5py
 import matplotlib
 import matplotlib.pyplot as plt
 
-from numpy import reshape, linspace, amax
+from numpy import reshape, linspace, amin, amax
 from matplotlib.ticker import LogLocator
 from matplotlib.colors import LogNorm
 
@@ -75,8 +75,9 @@ if __name__ == "__main__":
     k = 20
     Ip = [Is[n] for n in [5, 10, 20, -1]]  # Iterations to plot.
     for (i, file) in Ip:
-        # plot_horizontal_slice(file, "T", i, k)
-        # plot_horizontal_slice(file, "w", i, k, sym=True)
-        plot_horizontal_slice(file, "nu", i, k, log=True)
-        plot_horizontal_slice(file, "kappaT", i, k, log=True)
+        plot_horizontal_slice(file, "T", i, k)
+        plot_horizontal_slice(file, "u", i, k, sym=True)
+        plot_horizontal_slice(file, "w", i, k, sym=True)
+        plot_horizontal_slice(file, "nu", i, k)
+        plot_horizontal_slice(file, "kappaT", i, k)
 

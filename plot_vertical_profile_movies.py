@@ -52,7 +52,7 @@ def plot_vertical_profile_frame(filepath, field, i, xlims, frame_number, save=Tr
         plt.close(fig)
 
 def make_vertical_profile_movie(filepath, field, Is, xlims):
-    joblib.Parallel(n_jobs=-1)(
+    joblib.Parallel(n_jobs=48)(
          joblib.delayed(plot_vertical_profile_frame)(filepath, field, i, xlims, frame_number)
          for frame_number, i in enumerate(Is))
 
@@ -78,7 +78,7 @@ if __name__ == "__main__":
     file.close()
     logging.info(f"{len(Is):d} vertical profiles found: i={min(Is)}->{max(Is)}")
 
-    # make_vertical_profile_movie(filepath, "T", Is, [19, 20])
+    make_vertical_profile_movie(filepath, "T", Is, [19, 20])
     make_vertical_profile_movie(filepath, "u", Is, [-1e-3, 1e-3])
     make_vertical_profile_movie(filepath, "wT", Is, [-0.5e-5, 1.5e-5])
     make_vertical_profile_movie(filepath, "nu", Is, [0.8e-6, 2e-2])
