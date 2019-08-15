@@ -11,6 +11,8 @@ import ffmpeg
 
 from numpy import reshape, linspace
 
+from human_sorting import sort_nicely
+
 logging.basicConfig(level=logging.INFO)
 
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"  # Needed on Supercloud =/

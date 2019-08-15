@@ -11,30 +11,14 @@ from numpy import reshape, linspace, amin, amax
 from matplotlib.ticker import LogLocator
 from matplotlib.colors import LogNorm
 
+from human_sorting import sort_nicely
+
 logging.basicConfig(level=logging.INFO)
 
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"  # Needed on Supercloud =/
 
 matplotlib.rcParams['figure.dpi'] = 200
 plt.style.use('dark_background')
-
-# Human sorting: https://nedbatchelder.com/blog/200712/human_sorting.html
-def tryint(s):
-    try:
-        return int(s)
-    except ValueError:
-        return s
-
-def alphanum_key(s):
-    """ Turn a string into a list of string and number chunks.
-        "z23a" -> ["z", 23, "a"]
-    """
-    return [tryint(c) for c in re.split('([0-9]+)', s)]
-
-def sort_nicely(l):
-    """ Sort the given list in the way that humans expect.
-    """
-    l.sort(key=alphanum_key)
 
 def plot_horizontal_slice(file, field, i, level, sym=False, log=False, save=True):
     rotation_period = 86400
