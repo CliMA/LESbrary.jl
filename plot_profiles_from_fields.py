@@ -7,7 +7,7 @@ import h5py
 import matplotlib
 import matplotlib.pyplot as plt
 
-from numpy import reshape, linspace, diff, mean, amax
+from numpy import reshape, linspace, arange, diff, mean, amax
 
 logging.basicConfig(level=logging.INFO)
 
@@ -46,7 +46,7 @@ def plot_vertical_profiles(field, Is, save=True):
         Nz, Lz, dz = file["grid/Nz"][()], file["grid/Lz"][()], file["grid/Δz"][()]
         z = linspace(0, -Lz, Nz)
 
-        if field == "K * dT/dz":
+        if field == "K_dTdz":
            T = file["timeseries/T/" + i][()][1:Nz+1, 1:Ny+1, 1:Nx+1]
            K = file["timeseries/kappaT/" + i][()][1:Nz+1, 1:Ny+1, 1:Nx+1]
 
@@ -54,11 +54,11 @@ def plot_vertical_profiles(field, Is, save=True):
            dTdz = diff(T, n=1, axis=0) / dz
 
            diffusive_flux_z = K * dTdz
-           Fp = mean(diffusive_flux_z, axis=[1, 2])
+           Fp = mean(diffusive_flux_z, axis=(1, 2))
 
         Fp = reshape(Fp, Nz)
 
-        ax1.plot(Fp, z, label="{:.2f} days".format(t / rotation_period))
+        ax1.semilogx(Fp, z, label="{:.2f} days".format(t / rotation_period))
 
     ax1.set_title("Horizontally averaged {:s} profiles".format(field))
     ax1.set_ylim([-Lz, 0])
@@ -89,6 +89,6 @@ if __name__ == "__main__":
     
     logging.info(f"Found {len(Is):d} snapshots per field across {len(files):d} files: i={Is[0][0]}->{Is[-1][0]}")
     
-    Ip = [Is[n] for n in [1, 10, 30, -1]]  # Iterations to plot.
-    plot_vertical_profiles("K * dT/dz", Ip)
+    Ip = [Is[n] for n in [1, 10, 20, -1]]  # Iterations to plot.
+    plot_vertical_profiles("K_dTdz", Ip)
 
