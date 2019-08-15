@@ -41,8 +41,8 @@ def plot_vertical_profiles(field, Is, save=True):
     for (i, file) in Is:
         i = str(i)
         t = file["timeseries/t/" + i][()]
-        Nx, Lx = file["grid/Nx"][()], file["grid/Lx"][()]
-        Ny, Ly = file["grid/Ny"][()], file["grid/Ly"][()]
+        Nx, Lx, dx = file["grid/Nx"][()], file["grid/Lx"][()], file["grid/Δx"][()]
+        Ny, Ly, dy = file["grid/Ny"][()], file["grid/Ly"][()], file["grid/Δy"][()]
         Nz, Lz, dz = file["grid/Nz"][()], file["grid/Lz"][()], file["grid/Δz"][()]
         z = linspace(0, -Lz, Nz)
 
@@ -55,6 +55,22 @@ def plot_vertical_profiles(field, Is, save=True):
 
            diffusive_flux_z = K * dTdz
            Fp = mean(diffusive_flux_z, axis=(1, 2))
+        
+       elif field == "nu_grad_w":
+           u = file["timeseries/u/" + i][()][1:Nz+1, 1:Ny+1, 1:Nx+1]
+           nu = file["timeseries/nu/" + i][()][1:Nz+1, 1:Ny+1, 1:Nx+1]
+
+           dwdx = w.take(arange(-1, Nx), axis=2, mode="wrap")
+           dwdx = diff(dwdx, n=1, axis=2) / dx
+
+           dwdy = w.take(arange(-1, Nx), axis=1, mode="wrap")
+           dwdy = diff(dwdy, n=1, axis=1) / dy
+
+           dwdz = w.take(arange(-1, Nx), axis=0, mode="wrap")
+           dwdz = diff(dwdz, n=1, axis=0) / dz
+
+           viscous_flux_w = nu * (dwdx + dwdy + dwdz)
+           Fp = mean(viscous_flux_w, axis=(1, 2))
 
         Fp = reshape(Fp, Nz)
 
@@ -91,4 +107,6 @@ if __name__ == "__main__":
     
     Ip = [Is[n] for n in [1, 10, 20, -1]]  # Iterations to plot.
     plot_vertical_profiles("K_dTdz", Ip)
+    plot_vertical_profiles("nu_grad_w", Ip)
+
 
