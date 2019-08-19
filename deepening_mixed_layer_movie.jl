@@ -145,7 +145,7 @@ movie_slices = Dict(
 slice_writer = JLD2OutputWriter(model, movie_slices; dir=base_dir, prefix=prefix * "_slices",
                                 init=init_save_parameters_and_bcs,
                                 max_filesize=10GiB, interval=Δtₛ, force=true, verbose=false)
-push!(model.output_writers, field_writer)
+push!(model.output_writers, slice_writer)
 
 
 Up = VerticalProfile(model, model.velocities.u; interval=Δtₛ)
