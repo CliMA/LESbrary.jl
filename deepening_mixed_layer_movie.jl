@@ -140,10 +140,45 @@ movie_slices = Dict(
     :T_xz_slice => model -> xz_slice(model.tracers.T),
     :T_yz_slice => model -> yz_slice(model.tracers.T))
 
+Δtₛ = 5second  # Time interval for saving slices and profiles.
+
 slice_writer = JLD2OutputWriter(model, movie_slices; dir=base_dir, prefix=prefix * "_slices",
                                 init=init_save_parameters_and_bcs,
-                                max_filesize=100GiB, interval=5second, force=true, verbose=true)
+                                max_filesize=10GiB, interval=Δtₛ, force=true, verbose=true)
 push!(model.output_writers, field_writer)
+
+
+Up = VerticalProfile(model, model.velocities.u; interval=Δtₛ)
+Vp = VerticalProfile(model, model.velocities.v; interval=Δtₛ)
+Wp = VerticalProfile(model, model.velocities.w; interval=Δtₛ)
+Tp = VerticalProfile(model, model.tracers.T;    interval=Δtₛ)
+νp = VerticalProfile(model, model.diffusivities.νₑ; interval=Δtₛ)
+κp = VerticalProfile(model, model.diffusivities.κₑ.T; interval=Δtₛ)
+wT = ProductProfile(model, model.velocities.w, model.tracers.T; interval=Δtₛ)
+vc = VelocityCovarianceProfiles(model; interval=Δtₛ)
+
+append!(model.diagnostics, [Up, Vp, Wp, Tp, wT, νp, κp, vc])
+
+profiles = Dict(
+     :u => model -> Array(Up.profile),
+     :v => model -> Array(Vp.profile),
+     :w => model -> Array(Wp.profile),
+     :T => model -> Array(Tp.profile),
+    :nu => model -> Array(νp.profile),
+:kappaT => model -> Array(κp.profile),
+    :wT => model -> Array(wT.profile),
+    :uu => model -> Array(vc.uu.profile),
+    :uv => model -> Array(vc.uv.profile),
+    :uw => model -> Array(vc.uw.profile),
+    :vv => model -> Array(vc.vv.profile),
+    :vw => model -> Array(vc.vw.profile),
+    :ww => model -> Array(vc.ww.profile))
+
+profile_writer = JLD2OutputWriter(model, profiles; dir=base_dir, prefix=prefix * "_profiles",
+                                  init=init_save_parameters_and_bcs,
+                                  interval=Δtₛ, max_filesize=10GiB, force=true, verbose=true)
+
+push!(model.output_writers, profile_writer)
 
 # Wizard utility that calculates safe adaptive time steps.
 Δt_wizard = TimeStepWizard(cfl=0.15, Δt=3second, max_change=1.2, max_Δt=5second)
