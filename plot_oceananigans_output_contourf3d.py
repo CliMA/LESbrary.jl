@@ -3,13 +3,17 @@ import matplotlib
 matplotlib.use("Agg")
 
 import os
+import logging
+import argparse
+
 import h5py
 import numpy as np
-import xarray as xr
 import matplotlib.pyplot as plt
 
 from numpy import ones, meshgrid, linspace, square, mean
 from mpl_toolkits.mplot3d import axes3d
+
+from human_sorting import sort_nicely
 
 plt.switch_backend("Agg")
 
@@ -34,18 +38,14 @@ def plot_contourf3d_from_jld2(jld2_filepath, png_filepath, field, i, vmin, vmax,
 
     x, y, z = linspace(0, Lx, Nx), linspace(0, Ly, Ny), linspace(0, Lz, Nz)
    
-    xy_slice = file["timeseries/" + field + "_xy_slice/" + i][()]
-    xz_slice = file["timeseries/" + field + "_xz_slice/" + i][()]
-    yz_slice = file["timeseries/" + field + "_yz_slice/" + i][()]
+    xy_slice = file["timeseries/" + field + "_xy_slice/" + i][()][1:Nx+1, 1:Ny+1]
+    xz_slice = file["timeseries/" + field + "_xz_slice/" + i][()][1:Nx+1, 1:Nz+1]
+    yz_slice = file["timeseries/" + field + "_yz_slice/" + i][()][1:Ny+1, 1:Nz+1]
 
     fig = plt.figure(figsize=(16, 9))
 
     ax = plt.subplot2grid((3, 4), (0, 0), rowspan=3, colspan=3, projection="3d")
     plt.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.95, hspace=0.25)
-
-    data_z_slice = data.sel(yC=slice(0, Lx//2), zC=zC[0]).values - var_offset
-    data_x_slice = data.sel(xC=xC[-1], yC=slice(0, Lx//2)).values - var_offset
-    data_y_slice = data.sel(yC=yC.values[Ny//2]).values - var_offset
 
     XC_z, YC_z = meshgrid(linspace(0, Lx, Nx), linspace(0, Ly, Ny))
     YC_x, ZC_x = meshgrid(linspace(0, Ly, Ny), linspace(0, -Lz, Nz))
@@ -66,13 +66,13 @@ def plot_contourf3d_from_jld2(jld2_filepath, png_filepath, field, i, vmin, vmax,
     ax.set_ylim3d(0, Ly)
     ax.set_zlim3d(-Lz, 0)
 
-    ax.set_xlabel(r"$x$ (m)")
-    ax.set_ylabel(r"$y$ (m)")
-    ax.set_zlabel(r"$z$ (m)")
+    ax.set_xlabel("x (m)")
+    ax.set_ylabel("y (m)")
+    ax.set_zlabel("z (m)")
 
-    ax.view_init(elev=30, azim=45)
+    ax.view_init(elev=30, azim=-135)
 
-    ax.set_title("t = {:05d} s ({:02.2f} hours)".format(int(t), t / 3600, y=1.05)
+    ax.set_title("t = {:05d} s ({:02.2f} hours)".format(int(t), t / 3600), y=1.05)
 
     ax.set_xticks(linspace(0, Lx, num=5))
     ax.set_yticks(linspace(0, Ly, num=5))
@@ -125,7 +125,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Make horizontal slice movies from Oceananigans.jl JLD2 output.")
     parser.add_argument("-s", "--slices", type=str, nargs='+', required=True, help="JLD2 slice output filepaths")
     args = parser.parse_args()
-    filepaths = args.files
+    filepaths = args.slices
     sort_nicely(filepaths)
 
     Is = []  # We'll generate a list of iterations with output across all files.
@@ -138,5 +138,5 @@ if __name__ == "__main__":
     logging.info(f"Found {len(Is):d} snapshots per field across {len(filepaths):d} files: i={Is[0][0]}->{Is[-1][0]}")
     
     # Plot many frames in parallel.
-    plot_contourf3d_from_jld2(jld2_filepath=Is[0][1], png_filepath="test_frame.png", var="T", vmin=19, vmax=20.05, n_contours=100)
+    plot_contourf3d_from_jld2(jld2_filepath=Is[-1][1], i=Is[-1][0], png_filepath="test_frame.png", field="T", vmin=19, vmax=20.05, n_contours=100)
 
