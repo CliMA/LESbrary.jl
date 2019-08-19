@@ -144,7 +144,7 @@ movie_slices = Dict(
 
 slice_writer = JLD2OutputWriter(model, movie_slices; dir=base_dir, prefix=prefix * "_slices",
                                 init=init_save_parameters_and_bcs,
-                                max_filesize=10GiB, interval=Δtₛ, force=true, verbose=true)
+                                max_filesize=10GiB, interval=Δtₛ, force=true, verbose=false)
 push!(model.output_writers, field_writer)
 
 
@@ -176,12 +176,12 @@ profiles = Dict(
 
 profile_writer = JLD2OutputWriter(model, profiles; dir=base_dir, prefix=prefix * "_profiles",
                                   init=init_save_parameters_and_bcs,
-                                  interval=Δtₛ, max_filesize=10GiB, force=true, verbose=true)
+                                  interval=Δtₛ, max_filesize=10GiB, force=true, verbose=false)
 
 push!(model.output_writers, profile_writer)
 
 # Wizard utility that calculates safe adaptive time steps.
-Δt_wizard = TimeStepWizard(cfl=0.15, Δt=3second, max_change=1.2, max_Δt=5second)
+Δt_wizard = TimeStepWizard(cfl=0.2, Δt=0.5second, max_change=1.2, max_Δt=5second)
 
 # Take Ni "intermediate" time steps at a time before printing a progress
 # statement and updating the time step.
