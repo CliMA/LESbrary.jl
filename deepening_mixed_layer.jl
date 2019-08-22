@@ -94,7 +94,7 @@ model = Model(float_type = FT,
                        N = (Nx, Ny, Nz),
                        L = (Lx, Ly, Lz),
                      eos = LinearEquationOfState(βS=0.0),
-                 closure = AnisotropicMinimumDissipation(FT; ν = ν, κ = κ),
+                 closure = VerstappenAnisotropicMinimumDissipation(FT; ν = ν, κ = κ),
                      bcs = BoundaryConditions(u=ubcs, T=Tbcs))
 
 # Set initial condition. Initial velocity and salinity fluctuations needed for AMD.
