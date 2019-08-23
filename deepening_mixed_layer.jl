@@ -173,25 +173,33 @@ profile_writer = JLD2OutputWriter(model, profiles; dir=base_dir, prefix=prefix *
 push!(model.output_writers, profile_writer)
 
 # Wizard utility that calculates safe adaptive time steps.
-Δt_wizard = TimeStepWizard(cfl=0.15, Δt=3.0, max_change=1.2, max_Δt=30.0)
+wizard = TimeStepWizard(cfl=0.15, Δt=3.0, max_change=1.2, max_Δt=30.0)
 
 # Take Ni "intermediate" time steps at a time before printing a progress
 # statement and updating the time step.
 Ni = 50
 
 while model.clock.time < end_time
-    walltime = @elapsed time_step!(model; Nt=Ni, Δt=Δt_wizard.Δt)
+    walltime = @elapsed time_step!(model; Nt=Ni, Δt=wizard.Δt)
 
     progress = 100 * (model.clock.time / end_time)
 
     umax = maximum(abs, model.velocities.u.data.parent)
     vmax = maximum(abs, model.velocities.v.data.parent)
     wmax = maximum(abs, model.velocities.w.data.parent)
-    CFL = Δt_wizard.Δt / cell_advection_timescale(model)
+    CFL = wizard.Δt / cell_advection_timescale(model)
 
-    update_Δt!(Δt_wizard, model)
+    νmax = maximum(model.diffusivities.νₑ.data.parent)
+    κmax = maximum(model.diffusivities.κₑ.T.data.parent)
+    
+    Δ = min(model.grid.Δx, model.grid.Δy, model.grid.Δz)
+    νCFL = wizard.Δt / (Δ^2 / νmax)
+    κCFL = wizard.Δt / (Δ^2 / κmax)
 
-    @printf("[%06.2f%%] i: %d, t: %.3f days, umax: (%6.3g, %6.3g, %6.3g) m/s, CFL: %6.4g, next Δt: %3.2f s, ⟨wall time⟩: %s\n",
+    update_Δt!(wizard, model)
+
+    @printf("[%06.2f%%] i: %d, t: %5.2f days, umax: (%6.3g, %6.3g, %6.3g) m/s, CFL: %6.4g, νκmax: (%6.3g, %6.3g), νκCFL: (%6.4g, %6.4g), next Δt: %8.5g, ⟨wall time⟩: %s\n",
             progress, model.clock.iteration, model.clock.time / day,
-            umax, vmax, wmax, CFL, Δt_wizard.Δt, prettytime(walltime / Ni))
+            umax, vmax, wmax, CFL, νmax, κmax, νCFL, κCFL,
+            wizard.Δt, prettytime(walltime / Ni))
 end
