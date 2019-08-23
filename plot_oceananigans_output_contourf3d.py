@@ -7,6 +7,7 @@ import logging
 import argparse
 
 import h5py
+import ffmpeg
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -18,7 +19,7 @@ from human_sorting import sort_nicely
 
 plt.switch_backend("Agg")
 
-from joblib import Parallel, delayed
+import joblib
 
 def plot_contourf3d_from_jld2(slice_filepath, profile_filepath, png_filepath, field, i, vmin, vmax, n_contours, cmap="inferno"):
     # For some reason I need to do the import here so it shows up on all joblib workers.
@@ -26,8 +27,6 @@ def plot_contourf3d_from_jld2(slice_filepath, profile_filepath, png_filepath, fi
 
     # Enforcing style in here so that it's applied to all workers launched by joblib.
     plt.style.use("dark_background")
-
-    contour_spacing = (vmax - vmin) / n_contours
 
     sfile = h5py.File(slice_filepath, "r")
     pfile = h5py.File(profile_filepath, "r")
@@ -55,9 +54,12 @@ def plot_contourf3d_from_jld2(slice_filepath, profile_filepath, png_filepath, fi
 
     x_offset, y_offset, z_offset = Lx/1000, 0, 0
 
-    cf1 = ax.contourf(XC_z, YC_z, xy_slice, zdir="z", offset=z_offset, levels=np.arange(vmin, vmax, contour_spacing), cmap=cmap, norm=PowerNorm(gamma=3))
-    cf2 = ax.contourf(yz_slice, YC_x, ZC_x, zdir="x", offset=x_offset, levels=np.arange(vmin, vmax, contour_spacing), cmap=cmap, norm=PowerNorm(gamma=3))
-    cf3 = ax.contourf(XC_y, xz_slice, ZC_y, zdir="y", offset=y_offset, levels=np.arange(vmin, vmax, contour_spacing), cmap=cmap, norm=PowerNorm(gamma=3))
+    vmax = xy_slice.max() + 0.01
+    contour_spacing = (vmax - vmin) / n_contours
+
+    cf1 = ax.contourf(XC_z, YC_z, xy_slice, zdir="z", offset=z_offset, levels=np.arange(vmin, vmax, contour_spacing), cmap=cmap, norm=PowerNorm(gamma=5))
+    cf2 = ax.contourf(yz_slice, YC_x, ZC_x, zdir="x", offset=x_offset, levels=np.arange(vmin, vmax, contour_spacing), cmap=cmap, norm=PowerNorm(gamma=5))
+    cf3 = ax.contourf(XC_y, xz_slice, ZC_y, zdir="y", offset=y_offset, levels=np.arange(vmin, vmax, contour_spacing), cmap=cmap, norm=PowerNorm(gamma=5))
 
     clb = fig.colorbar(cf3, ticks=[19.0, 19.2, 19.4, 19.6, 19.8, 20.0], shrink=0.9)
     clb.ax.set_title(r"T (°C)")
@@ -136,6 +138,15 @@ if __name__ == "__main__":
     logging.info(f"Found {len(Is):d} snapshots per field across {len(slice_filepaths):d} files: i={Is[0][0]}->{Is[-1][0]}")
     
     # Plot many frames in parallel.
-    plot_contourf3d_from_jld2(slice_filepath=Is[-1][1], profile_filepath=profile_filepath, i=Is[-1][0], png_filepath="test_frame.png",
-                              field="T", vmin=19, vmax=20.05, n_contours=100)
+    joblib.Parallel(n_jobs=-1)(
+         joblib.delayed(plot_contourf3d_from_jld2)(slice_filepath=I[1], profile_filepath=profile_filepath, i=I[0], png_filepath="convecting_wind_stress_{:05d}.png".format(frame_number),
+                                                   field="T", vmin=19, vmax=20.05, n_contours=100)
+         for frame_number, I in enumerate(Is[1:500]))
 
+    (
+        ffmpeg
+        .input("convecting_wind_stress_%05d.png", framerate=30)
+        .output("convecting_wind_stress.mp4", crf=15, pix_fmt='yuv420p')
+        .overwrite_output()
+        .run()
+    )
