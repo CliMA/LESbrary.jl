@@ -60,9 +60,10 @@ const a = 1.5 * Φavg             # Asymmetry factor.
 const C = c
 
 # Seasonal cycle forcing.
-@inline Qsurface(i, j, grid, c, Gc, κ_bottom, t, iter, U, Φ) = (Φavg + a*CUDAnative.sin(C*ωs*t))
+# @inline Qsurface(i, j, grid, c, Gc, κ_bottom, t, iter, U, Φ) = (Φavg + a*sin(C*ωs*t))
+@inline Qsurface(t) = (Φavg + a*sin(C*ωs*t))
 
-Tbcs = HorizontallyPeriodicBCs(   top = BoundaryCondition(Flux, Qsurface),
+Tbcs = HorizontallyPeriodicBCs(   top = BoundaryCondition(Flux, Qsurface(0)),
                                bottom = BoundaryCondition(Gradient, ∂T∂z))
 
 """
@@ -201,6 +202,8 @@ wizard = TimeStepWizard(cfl=0.30, Δt=0.1, max_change=1.2, max_Δt=30.0)
 Ni = 50
 
 while model.clock.time < end_time
+    model.boundary_conditions.T.z.top = BoundaryCondition(Flux, Qsurface(model.clock.time))
+    
     walltime = @elapsed time_step!(model; Nt=Ni, Δt=wizard.Δt)
     progress = 100 * (model.clock.time / end_time)
 
