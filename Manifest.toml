@@ -46,9 +46,9 @@ version = "0.6.2"
 
 [[CUDAapi]]
 deps = ["Libdl", "Logging"]
-git-tree-sha1 = "a17bc2b4624ac59a0c03be5dd2ea7e9f9834025c"
+git-tree-sha1 = "9b2b4b71d6b7f946c9689bb4dea03ff92e3c7091"
 uuid = "3895d2a7-ec45-59b8-82bb-cfc6a382f9b3"
-version = "1.0.1"
+version = "1.1.0"
 
 [[CUDAdrv]]
 deps = ["CUDAapi", "Libdl", "Printf"]
@@ -58,9 +58,9 @@ version = "3.1.0"
 
 [[CUDAnative]]
 deps = ["Adapt", "CUDAapi", "CUDAdrv", "DataStructures", "InteractiveUtils", "LLVM", "Libdl", "Logging", "Printf", "TimerOutputs"]
-git-tree-sha1 = "36cbb94f74cd3e5db774134a68dc5d033ae2c87e"
+git-tree-sha1 = "0a00bef482b7c9127495c7f4a2a85e73b13b5af8"
 uuid = "be33ccc6-a3ff-5ff2-a52e-74243cff1e17"
-version = "2.2.1"
+version = "2.3.0"
 
 [[Cassette]]
 git-tree-sha1 = "da85d135b6048d3e78603e277cf9a4609f7e0673"
@@ -99,9 +99,9 @@ version = "4.0.0"
 
 [[CuArrays]]
 deps = ["AbstractFFTs", "Adapt", "CUDAapi", "CUDAdrv", "CUDAnative", "GPUArrays", "LinearAlgebra", "MacroTools", "NNlib", "Printf", "Random", "Requires", "SparseArrays", "TimerOutputs"]
-git-tree-sha1 = "e1fae3c0cbddc4ea7e5ecddb04d045936bc444f5"
+git-tree-sha1 = "46b48742a84bb839e74215b7e468a4a1c6ba30f9"
 uuid = "3a865a2d-5b23-5a0f-bc46-62713ec82fae"
-version = "1.1.0"
+version = "1.2.1"
 
 [[DataAPI]]
 git-tree-sha1 = "8903f0219d3472543fc4b2f5ebaf675a07f817c0"
@@ -152,9 +152,9 @@ version = "0.3.5"
 
 [[GPUArrays]]
 deps = ["Adapt", "FFTW", "FillArrays", "LinearAlgebra", "Printf", "Random", "Serialization", "StaticArrays", "Test"]
-git-tree-sha1 = "4310da9bc8d51dccbffbd77138546208d0da93bf"
+git-tree-sha1 = "dd169c636d1d3656a9faca772f5bd7c226a61254"
 uuid = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
-version = "1.0.0"
+version = "1.0.1"
 
 [[GPUifyLoops]]
 deps = ["Cassette", "Requires", "StaticArrays"]
@@ -229,12 +229,12 @@ uuid = "30363a11-5582-574a-97bb-aa9a979735b9"
 version = "0.8.0"
 
 [[Oceananigans]]
-deps = ["Adapt", "CUDAdrv", "CUDAnative", "CuArrays", "Distributed", "FFTW", "FileIO", "GPUifyLoops", "JLD2", "LinearAlgebra", "NetCDF", "OffsetArrays", "Printf", "Random", "StaticArrays", "Statistics", "Test", "TimerOutputs"]
-git-tree-sha1 = "7e0041d6735d05967e99d00d1924ee5ee087692f"
-repo-rev = "v094-couette"
+deps = ["Adapt", "CUDAdrv", "CUDAnative", "CuArrays", "Distributed", "FFTW", "GPUifyLoops", "JLD2", "LinearAlgebra", "NetCDF", "OffsetArrays", "Printf", "Random", "StaticArrays", "Statistics", "Test", "TimerOutputs"]
+git-tree-sha1 = "31ca4269bb435585c38b221c23f53f24b7dce811"
+repo-rev = "v0.10-pre"
 repo-url = "https://github.com/climate-machine/Oceananigans.jl.git"
 uuid = "9e8cae18-63c1-5223-a75c-80ca9d6e9a09"
-version = "0.9.3"
+version = "0.9.5"
 
 [[OffsetArrays]]
 git-tree-sha1 = "1af2f79c7eaac3e019a0de41ef63335ff26a0a57"
