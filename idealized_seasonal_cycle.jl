@@ -1,4 +1,5 @@
-using ArgParse
+using ArgParse, Printf
+using Oceananigans
 
 s = ArgParseSettings(description="Run simulations of a mixed layer over an idealized seasonal cycle.")
 
@@ -6,168 +7,215 @@ s = ArgParseSettings(description="Run simulations of a mixed layer over an ideal
     "--resolution", "-N"
         arg_type=Int
         required=true
+        dest_name="N"
         help="Number of grid points in each dimension (Nx, Ny, Nz) = (N, N, N)."
     "--dTdz"
         arg_type=Float64
         required=true
-        help="Temperature gradient to impose at the bottom [K/m]."
-    "--diffusivity"
-        arg_type=Float64
-        required=true
-        help="Diffusivity κ [m²/s]."
+        dest_name="dTdz"
+        help="Temperature gradient (and stratification) to impose in the initial condition and bottom [K/m]."
     "--cycles"
         arg_type=Int
         required=true
         help="Number of idealized seasonal cycles."
-    "--simulation-time", "-T"
+    "--days"
         arg_type=Float64
         required=true
-        help="Simulation length in seconds."
+        dest_name="days"
+        help="Simulation length in days."
     "--output-dir", "-d"
         arg_type=AbstractString
         required=true
+        dest_name="base_dir"
         help="Base directory to save output to."
 end
 
+
+# Parse command line arguments.
 parsed_args = parse_args(s)
-N = parsed_args["resolution"]
-dTdz = parsed_args["dTdz"]
-κ = parsed_args["diffusivity"]
-c = parsed_args["cycles"]
-T = parsed_args["simulation-time"]
+parse_int(n) = isinteger(n) ? Int(n) : n
+N, ∂T∂z, c, days = [parsed_args[k] for k in ["N", "dTdz", "c", "days"]]
+N, ∂T∂z, c, days = parse_int.([N, ∂T∂z, c, days])
 
-N  = isinteger(N) ? Int(N) : N
-c  = isinteger(c) ? Int(c) : c
-T  = isinteger(T) ? Int(T) : T
-
-base_dir = parsed_args["output-dir"]
-
-filename_prefix = "idealized_seasonal_cycle_N" * string(N) * "_dTdz" * string(dTdz) *
-                  "_k" * string(κ) * "_c" * string(c) * "_T" * string(T)
-output_dir = joinpath(base_dir, filename_prefix)
-
-if !isdir(output_dir)
-    println("Creating directory: $output_dir")
-    mkpath(output_dir)
+base_dir = parsed_args["base_dir"]
+if !isdir(base_dir)
+    @info "Creating directory: $base_dir"
+    mkpath(base_dir)
 end
 
-"""
-    add_sponge_layer!(model; damping_timescale)
+# Filename prefix for output files.
+prefix = @sprintf("idealized_seasonal_cycle_dTdz%.2f_c%d_days%d", ∂T∂z, c, days)
 
-Adds a sponge layer to the bottom layer of the `model`. The purpose of this
+# Physical constants.
+ρ₀ = 1027  # Density of seawater [kg/m³]
+cₚ = 4000  # Specific heat capacity of seawater at constant pressure [J/(kg·K)]
+
+ωs = 2π / T                # Seasonal frequency [s⁻¹]
+Φavg = dTdz * Lz^2 / (8T)  # Average heat flux.
+a = 1.5 * Φavg             # Asymmetry factor.
+
+# Seasonal cycle forcing.
+@inline Qsurface(t) = (Φavg + a*sin(c*ωs*t))
+
+Tbcs = HorizontallyPeriodicBCs(   top = BoundaryCondition(Flux, Qsurface),
+                               bottom = BoundaryCondition(Gradient, ∂T∂z))
+
+"""
+Add a sponge layer to the bottom layer of the `model`. The purpose of this
 sponge layer is to effectively dampen out waves reaching the bottom of the
 domain and avoid having waves being continuously generated and reflecting from
 the bottom, some of which may grow unrealistically large in amplitude.
 
 Numerically the sponge layer acts as an extra source term in the momentum
 equations. It takes on the form Gu[i, j, k] += -u[i, j, k]/τ for each momentum
-source term where τ is a damping timescale. Typially, Δt << τ.
+source term where τ is a damping timescale. Typially, Δt << τ, otherwise
+it's easy to find yourself not satisfying the diffusive stability criterion.
 """
-function add_sponge_layer!(model; damping_timescale)
-    τ = damping_timescale
+@inline Fu(grid, U, Φ, i, j, k) = @inbounds ifelse(k == grid.Nz, -u[i, j, k] / τ, 0)
+@inline Fv(grid, U, Φ, i, j, k) = @inbounds ifelse(k == grid.Nz, -v[i, j, k] / τ, 0)
+@inline Fw(grid, U, Φ, i, j, k) = @inbounds ifelse(k == grid.Nz, -w[i, j, k] / τ, 0)
 
-    @inline damping_u(grid, u, v, w, T, S, i, j, k) = ifelse(k == grid.Nz, -u[i, j, k] / τ, 0)
-    @inline damping_v(grid, u, v, w, T, S, i, j, k) = ifelse(k == grid.Nz, -v[i, j, k] / τ, 0)
-    @inline damping_w(grid, u, v, w, T, S, i, j, k) = ifelse(k == grid.Nz, -w[i, j, k] / τ, 0)
-
-    model.forcing = Forcing(damping_u, damping_v, wave_damping_w, nothing, nothing)
-end
-
-using Statistics, Printf
-using CUDAnative, CuArrays, JLD2, FileIO
-using Oceananigans
-
-# Physical constants.
-ρ₀ = 1027    # Density of seawater [kg/m³]
-cₚ = 4181.3  # Specific heat capacity of seawater at constant pressure [J/(kg·K)]
-
-# Set more simulation parameters.
-Nx, Ny, Nz = N, N, N
-Lx, Ly, Lz = 200, 200, 200
-ν = κ  # This is also implicitly setting the Prandtl number Pr = 1.
-
-ωs = 2π / T  # Seasonal frequency.
-Φavg = dTdz * Lz^2 / (8T)
-a = 1.5 * Φavg
-@inline Qsurface(t) = (Φavg + a*sin(c*ωs*t))
-
-@info @sprintf("Φavg = %.3f W/m², Φmax = %.3f W/m², Φmin = %.3f W/m²",
-               Φavg*ρ₀*cₚ, (Φavg+a)*ρ₀*cₚ, (Φavg-a)*ρ₀*cₚ)
+forcing = Forcing(Fu=Fu, Fv=Fv, Fw=Fw)
 
 # Create the model.
-model = Model(N=(Nx, Ny, Nz), L=(Lx, Ly, Lz), ν=ν, κ=κ, arch=GPU(), float_type=Float64)
+model = Model(N = (N, N, N),
+              L = (200, 200, 200),
+           arch = GPU(),
+     float_type = Float64,
+            eos = LinearEquationOfState(βS=0.0),  # Turn off salinity for now.
+            bcs = BoundaryConditions(T=Tbcs),
+        closure = AnisotropicMinimumDissipation(),  # Use AMD with molecular viscosities.
+        forcing = forcing)
 
-# Set boundary conditions.
-model.boundary_conditions.T.z.right = BoundaryCondition(Gradient, dTdz)
+@info @printf("""
+    Simulating an idealized seasonal cycle
+        N : %d, %d, %d
+        L : %.3g, %.3g, %.3g [m]
+        Δ : %.3g, %.3g, %.3g [m]
+     ∂T∂z : %.3g [K/m]
+       ωs : %.3g [s⁻¹]
+     Φavg : %.3g [W/m²]
+        a : %.3g [W/m²]
+     Φmin : %.3g [W/m²]
+     Φmax : %.3g [W/m²]
+     days : %d
+  closure : %s
+    """, model.grid.Nx, model.grid.Ny, model.grid.Nz,
+         model.grid.Lx, model.grid.Ly, model.grid.Lz,
+         model.grid.Δx, model.grid.Δy, model.grid.Δz,
+         ∂T∂z, ωs, Φavg, a, Φavg-a, Φavg+a, days, typeof(model.closure))
 
 # Set initial conditions.
-T_prof = 20 .+ dTdz .* model.grid.zC  # Initial temperature profile.
-T_3d = repeat(reshape(T_prof, 1, 1, Nz), Nx, Ny, 1)  # Convert to a 3D array.
+# AMD requires noise on initial conditions everywhere as it divides by velocity
+# and tracer gradients, so there can't be a zero gradient anywhere.
 
-# Add small normally distributed random noise to the top half of the domain to
-# facilitate numerical convection.
-@. T_3d[:, :, 1:round(Int, Nz/2)] += 0.00001*randn()
+ε(σ) = σ * randn()  # Gaussian noise with mean 0 and standard deviation σ.
 
-ardata_view(model.tracers.T) .= CuArray(T_3d)
+u₀(x, y, z) = ε(1e-12)
+v₀(x, y, z) = ε(1e-12)
+w₀(x, y, z) = ε(1e-12)
+T₀(x, y, z) = ∂T∂z * z + ε(1e-12)
+S₀(x, y, z) = ε(1e-12)
+set!(model; u=u₀, v=v₀, w=w₀, T=T₀, S=S₀)
 
-# Add a NaN checker diagnostic that will check for NaN values in the vertical
-# velocity field every 1,000 time steps and abort the simulation if NaN values
-# are detected.
-nan_checker = NaNChecker(1000, [model.velocities.w], ["w"])
-push!(model.diagnostics, nan_checker)
+# Saving fields.
+function init_save_parameters_and_bcs(file, model)
+    file["parameters/density"] = ρ₀
+    file["parameters/specific_heat_capacity"] = cₚ
+    file["parameters/temperature_gradient"] = ∂T∂z
+    file["parameters/seasonal_frequency"] = ωs
+    file["parameters/Phi_avg"] = Φavg
+    file["parameters/a"] = a
+    file["parameters/simulation_days"] = days
+end
 
-# Add a checkpointer that saves the entire model state.
-# checkpoint_freq = Int(7*spd / dt)  # Every 7 days.
-# checkpointer = Checkpointer(dir=joinpath(output_dir, "checkpoints"), prefix="seasonal_cycle_",
-#                             frequency=checkpoint_freq, padding=2)
-# push!(model.output_writers, checkpointer)
+fields = Dict(
+    :u => model -> Array(model.velocities.u.data.parent),
+    :v => model -> Array(model.velocities.v.data.parent),
+    :w => model -> Array(model.velocities.w.data.parent),
+    :T => model -> Array(model.tracers.T.data.parent),
+   :nu => model -> Array(model.diffusivities.νₑ.data.parent),
+:kappaT=> model -> Array(model.diffusivities.κₑ.T.data.parent))
 
+field_writer = JLD2OutputWriter(model, fields; dir=base_dir, prefix=prefix * "_fields",
+                                init=init_save_parameters_and_bcs,
+                                interval=6hour, max_filesize=25GiB, force=true, verbose=true)
+push!(model.output_writers, field_writer)
 
-Δt_wizard = TimeStepWizard(cfl=0.1, Δt=10.0, max_change=1.2, max_Δt=60.0)
+# Checkpoint infrequently in case we need to pick up.
+checkpointer = Checkpointer(model; interval=30day, dir=base_dir, prefix=prefix*"_checkpoint", force=true)
+push!(model.output_writers, checkpointer)
+
+# Set up diagnostics.
+push!(model.diagnostics, NaNChecker(model))
+
+Δtₚ = 15minute  # Time interval for computing and saving profiles.
+
+Up = HorizontalAverage(model, model.velocities.u; interval=Δtₚ)
+Vp = HorizontalAverage(model, model.velocities.v; interval=Δtₚ)
+Wp = HorizontalAverage(model, model.velocities.w; interval=Δtₚ)
+Tp = HorizontalAverage(model, model.tracers.T;    interval=Δtₚ)
+wT = HorizontalAverage(model, [model.velocities.w, model.tracers.T]; interval=Δtₚ)
+νp = HorizontalAverage(model, model.diffusivities.νₑ; interval=Δtₚ)
+κp = HorizontalAverage(model, model.diffusivities.κₑ.T; interval=Δtₚ)
+UUp = HorizontalAverage(model, [model.velocities.u, model.velocities.u]; interval=Δtₚ)
+VVp = HorizontalAverage(model, [model.velocities.v, model.velocities.v]; interval=Δtₚ)
+WWp = HorizontalAverage(model, [model.velocities.w, model.velocities.w]; interval=Δtₚ)
+UVp = HorizontalAverage(model, [model.velocities.u, model.velocities.v]; interval=Δtₚ)
+UWp = HorizontalAverage(model, [model.velocities.u, model.velocities.w]; interval=Δtₚ)
+VWp = HorizontalAverage(model, [model.velocities.v, model.velocities.w]; interval=Δtₚ)
+
+append!(model.diagnostics, [Up, Vp, Wp, Tp, wT, UUp, VVp, WWp, UVp, UWp, VWp])
+
+profiles = Dict(
+     :u => model -> Array(Up.profile),
+     :v => model -> Array(Vp.profile),
+     :w => model -> Array(Wp.profile),
+     :T => model -> Array(Tp.profile),
+    :wT => model -> Array(wT.profile),
+    :nu => model -> Array(νp.profile),
+:kappaT => model -> Array(κp.profile),
+    :uu => model -> Array(UUp.profile),
+    :vv => model -> Array(VVp.profile),
+    :ww => model -> Array(WWp.profile),
+    :uv => model -> Array(UVp.profile),
+    :uw => model -> Array(UWp.profile),
+    :vw => model -> Array(VWp.profile))
+
+profile_writer = JLD2OutputWriter(model, profiles; dir=base_dir, prefix=prefix * "_profiles",
+                                  init=init_save_parameters_and_bcs,
+                                  interval=Δtₚ, max_filesize=25GiB, force=true, verbose=true)
+
+push!(model.output_writers, profile_writer)
+
+# Wizard utility that calculates safe adaptive time steps.
+Δt_wizard = TimeStepWizard(cfl=0.30, Δt=0.1, max_change=1.2, max_Δt=30.0)
 
 # Take Ni "intermediate" time steps at a time before printing a progress
 # statement and updating the time step.
 Ni = 50
 
-# Write output to disk every No time steps.
-No = 1000
-
-while model.clock.time < T
-    tic = time_ns()
-    for j in 1:Ni
-        model.boundary_conditions.T.z.left = BoundaryCondition(Flux, Qsurface(model.clock.time))
-        time_step!(model, 1, Δt_wizard.Δt)
-    end
-    toc = time_ns()
-
-    progress = 100 * (model.clock.time / T)
+end_time = days * day
+while model.clock.time < end_time
+    walltime = @elapsed time_step!(model; Nt=Ni, Δt=wizard.Δt)
+    progress = 100 * (model.clock.time / end_time)
 
     umax = maximum(abs, model.velocities.u.data.parent)
     vmax = maximum(abs, model.velocities.v.data.parent)
     wmax = maximum(abs, model.velocities.w.data.parent)
-    CFL = Δt_wizard.Δt / cell_advection_timescale(model)
+    CFL = wizard.Δt / cell_advection_timescale(model)
 
-    update_Δt!(Δt_wizard, model)
+    νmax = maximum(model.diffusivities.νₑ.data.parent)
+    κmax = maximum(model.diffusivities.κₑ.T.data.parent)
 
-    @printf("[%06.2f%%] i: %d, t: %.3f days, umax: (%6.3g, %6.3g, %6.3g) m/s, CFL: %6.4g, next Δt: %3.2f s, ⟨wall time⟩: %s",
-            progress, model.clock.iteration, model.clock.time / 86400,
-            umax, vmax, wmax, CFL, Δt_wizard.Δt, prettytime((toc-tic) / Ni))
+    Δ = min(model.grid.Δx, model.grid.Δy, model.grid.Δz)
+    νCFL = wizard.Δt / (Δ^2 / νmax)
+    κCFL = wizard.Δt / (Δ^2 / κmax)
 
-    if model.clock.iteration % No == 0
-        filename = filename_prefix  * "_" * string(model.clock.iteration) * ".jld2"
-        io_time = @elapsed save(filename,
-            Dict("t" => model.clock.time,
-                 "xC" => Array(model.grid.xC),
-                 "yC" => Array(model.grid.yC),
-                 "zC" => Array(model.grid.zC),
-                 "xF" => Array(model.grid.xF),
-                 "yF" => Array(model.grid.yF),
-                 "zF" => Array(model.grid.zF),
-                 "u"  => Array(model.velocities.u.data.parent),
-                 "v"  => Array(model.velocities.v.data.parent),
-                 "w"  => Array(model.velocities.w.data.parent),
-                 "T"  => Array(model.tracers.T.data.parent)))
-        @printf(", IO time: %s", prettytime(1e9*io_time))
-     end
-     @printf("\n")
+    update_Δt!(wizard, model)
+
+    @printf("[%06.2f%%] i: %d, t: %5.2f days, umax: (%6.3g, %6.3g, %6.3g) m/s, CFL: %6.4g, νκmax: (%6.3g, %6.3g), νκCFL: (%6.4g, %6.4g), next Δt: %8.5g, ⟨wall time⟩: %s\n",
+            progress, model.clock.iteration, model.clock.time / day,
+            umax, vmax, wmax, CFL, νmax, κmax, νCFL, κCFL,
+            wizard.Δt, prettytime(walltime / Ni))
 end
