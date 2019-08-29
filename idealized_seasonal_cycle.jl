@@ -17,6 +17,7 @@ s = ArgParseSettings(description="Run simulations of a mixed layer over an ideal
     "--cycles"
         arg_type=Int
         required=true
+        dest_name="c"
         help="Number of idealized seasonal cycles."
     "--days"
         arg_type=Float64
@@ -46,16 +47,20 @@ end
 # Filename prefix for output files.
 prefix = @sprintf("idealized_seasonal_cycle_dTdz%.2f_c%d_days%d", ∂T∂z, c, days)
 
+L = 200
+end_time = days * day
+
 # Physical constants.
 ρ₀ = 1027  # Density of seawater [kg/m³]
 cₚ = 4000  # Specific heat capacity of seawater at constant pressure [J/(kg·K)]
 
-ωs = 2π / T                # Seasonal frequency [s⁻¹]
-Φavg = dTdz * Lz^2 / (8T)  # Average heat flux.
-a = 1.5 * Φavg             # Asymmetry factor.
+const ωs = 2π / end_time                # Seasonal frequency [s⁻¹]
+const Φavg = ∂T∂z * L^2 / (8end_time)  # Average heat flux.
+const a = 1.5 * Φavg             # Asymmetry factor.
+const C = c
 
 # Seasonal cycle forcing.
-@inline Qsurface(t) = (Φavg + a*sin(c*ωs*t))
+@inline Qsurface(i, j, grid, c, Gc, κ_bottom, t, iter, U, Φ) = (Φavg + a*CUDAnative.sin(C*ωs*t))
 
 Tbcs = HorizontallyPeriodicBCs(   top = BoundaryCondition(Flux, Qsurface),
                                bottom = BoundaryCondition(Gradient, ∂T∂z))
@@ -71,15 +76,15 @@ equations. It takes on the form Gu[i, j, k] += -u[i, j, k]/τ for each momentum
 source term where τ is a damping timescale. Typially, Δt << τ, otherwise
 it's easy to find yourself not satisfying the diffusive stability criterion.
 """
-@inline Fu(grid, U, Φ, i, j, k) = @inbounds ifelse(k == grid.Nz, -u[i, j, k] / τ, 0)
-@inline Fv(grid, U, Φ, i, j, k) = @inbounds ifelse(k == grid.Nz, -v[i, j, k] / τ, 0)
-@inline Fw(grid, U, Φ, i, j, k) = @inbounds ifelse(k == grid.Nz, -w[i, j, k] / τ, 0)
+@inline Fu(grid, U, Φ, i, j, k) = @inbounds ifelse(k == grid.Nz, -U.u[i, j, k] / 3600, 0)
+@inline Fv(grid, U, Φ, i, j, k) = @inbounds ifelse(k == grid.Nz, -U.v[i, j, k] / 3600, 0)
+@inline Fw(grid, U, Φ, i, j, k) = @inbounds ifelse(k == grid.Nz, -U.w[i, j, k] / 3600, 0)
 
 forcing = Forcing(Fu=Fu, Fv=Fv, Fw=Fw)
 
 # Create the model.
 model = Model(N = (N, N, N),
-              L = (200, 200, 200),
+              L = (L, L, L),
            arch = GPU(),
      float_type = Float64,
             eos = LinearEquationOfState(βS=0.0),  # Turn off salinity for now.
@@ -87,7 +92,7 @@ model = Model(N = (N, N, N),
         closure = AnisotropicMinimumDissipation(),  # Use AMD with molecular viscosities.
         forcing = forcing)
 
-@info @printf("""
+@printf("""
     Simulating an idealized seasonal cycle
         N : %d, %d, %d
         L : %.3g, %.3g, %.3g [m]
@@ -189,13 +194,12 @@ profile_writer = JLD2OutputWriter(model, profiles; dir=base_dir, prefix=prefix *
 push!(model.output_writers, profile_writer)
 
 # Wizard utility that calculates safe adaptive time steps.
-Δt_wizard = TimeStepWizard(cfl=0.30, Δt=0.1, max_change=1.2, max_Δt=30.0)
+wizard = TimeStepWizard(cfl=0.30, Δt=0.1, max_change=1.2, max_Δt=30.0)
 
 # Take Ni "intermediate" time steps at a time before printing a progress
 # statement and updating the time step.
 Ni = 50
 
-end_time = days * day
 while model.clock.time < end_time
     walltime = @elapsed time_step!(model; Nt=Ni, Δt=wizard.Δt)
     progress = 100 * (model.clock.time / end_time)
