@@ -77,9 +77,9 @@ equations. It takes on the form Gu[i, j, k] += -u[i, j, k]/τ for each momentum
 source term where τ is a damping timescale. Typially, Δt << τ, otherwise
 it's easy to find yourself not satisfying the diffusive stability criterion.
 """
-@inline Fu(grid, U, Φ, i, j, k) = @inbounds ifelse(k == grid.Nz, -U.u[i, j, k] / 3600, 0)
-@inline Fv(grid, U, Φ, i, j, k) = @inbounds ifelse(k == grid.Nz, -U.v[i, j, k] / 3600, 0)
-@inline Fw(grid, U, Φ, i, j, k) = @inbounds ifelse(k == grid.Nz, -U.w[i, j, k] / 3600, 0)
+@inline Fu(grid, U, Φ, i, j, k) = @inbounds ifelse(k == grid.Nz, -U.u[i, j, k] / 60, 0)
+@inline Fv(grid, U, Φ, i, j, k) = @inbounds ifelse(k == grid.Nz, -U.v[i, j, k] / 60, 0)
+@inline Fw(grid, U, Φ, i, j, k) = @inbounds ifelse(k == grid.Nz, -U.w[i, j, k] / 60, 0)
 
 forcing = Forcing(Fu=Fu, Fv=Fv, Fw=Fw)
 
