@@ -120,7 +120,7 @@ model = Model(N = (N, N, N),
 u₀(x, y, z) = ε(1e-12)
 v₀(x, y, z) = ε(1e-12)
 w₀(x, y, z) = ε(1e-12)
-T₀(x, y, z) = ∂T∂z * z + ε(1e-12)
+T₀(x, y, z) = 20 + ∂T∂z * z + ε(1e-12)
 S₀(x, y, z) = ε(1e-12)
 set!(model; u=u₀, v=v₀, w=w₀, T=T₀, S=S₀)
 
