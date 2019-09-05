@@ -77,11 +77,20 @@ equations. It takes on the form Gu[i, j, k] += -u[i, j, k]/τ for each momentum
 source term where τ is a damping timescale. Typially, Δt << τ, otherwise
 it's easy to find yourself not satisfying the diffusive stability criterion.
 """
-@inline Fu(grid, U, Φ, i, j, k) = @inbounds ifelse(k == grid.Nz, -U.u[i, j, k] / 60, 0)
-@inline Fv(grid, U, Φ, i, j, k) = @inbounds ifelse(k == grid.Nz, -U.v[i, j, k] / 60, 0)
-@inline Fw(grid, U, Φ, i, j, k) = @inbounds ifelse(k == grid.Nz, -U.w[i, j, k] / 60, 0)
+const τ⁻¹ = 1 / 60  # Damping/relaxation time scale [s⁻¹].
+const Δμ = 0.01L    # Sponge layer width [m] set to 1% of the domain height.
+@inline μ(z, Lz) = τ⁻¹ * exp(-(z+Lz) / Δμ)
 
-forcing = Forcing(Fu=Fu, Fv=Fv, Fw=Fw)
+@inline Fu(grid, U, Φ, i, j, k) = @inbounds -μ(grid.zC[k], grid.Lz) * U.u[i, j, k]
+@inline Fv(grid, U, Φ, i, j, k) = @inbounds -μ(grid.zC[k], grid.Lz) * U.v[i, j, k]
+@inline Fw(grid, U, Φ, i, j, k) = @inbounds -μ(grid.zF[k], grid.Lz) * U.w[i, j, k]
+
+const Tₛ = 20.0  # Surface temperature [°C].
+const dTdz = ∂T∂z
+@inline T₀(z) = Tₛ + dTdz * z 
+@inline FT(grid, U, Φ, i, j, k) = @inbounds -μ(grid.zC[k], grid.Lz) * (Φ.T[i, j, k] - θ₀(grid.zC[k]))
+
+forcing = Forcing(Fu=Fu, Fv=Fv, Fw=Fw, FT=FT)
 
 # Create the model.
 model = Model(N = (N, N, N),
