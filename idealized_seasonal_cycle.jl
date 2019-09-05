@@ -88,7 +88,7 @@ const Δμ = 0.01L    # Sponge layer width [m] set to 1% of the domain height.
 const Tₛ = 20.0  # Surface temperature [°C].
 const dTdz = ∂T∂z
 @inline T₀(z) = Tₛ + dTdz * z 
-@inline FT(grid, U, Φ, i, j, k) = @inbounds -μ(grid.zC[k], grid.Lz) * (Φ.T[i, j, k] - θ₀(grid.zC[k]))
+@inline FT(grid, U, Φ, i, j, k) = @inbounds -μ(grid.zC[k], grid.Lz) * (Φ.T[i, j, k] - T₀(grid.zC[k]))
 
 forcing = Forcing(Fu=Fu, Fv=Fv, Fw=Fw, FT=FT)
 
