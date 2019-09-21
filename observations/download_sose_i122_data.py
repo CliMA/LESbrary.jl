@@ -42,6 +42,8 @@ urls = [
     "http://sose.ucsd.edu/SO6/ITER122/bsose_i122_2013to2017_1day_MLD.nc",
     # net surface heat flux into the ocean (+=down), >0 increases theta [W/m^2]
     "http://sose.ucsd.edu/SO6/ITER122/daily/bsose_i122_2013to2017_daily_oceQnet.nc",
+    # net Short-Wave radiation (+=down), >0 increases theta [W/m^2]
+    "http://sose.ucsd.edu/SO6/ITER122/daily/bsose_i122_2013to2017_daily_oceQsw.nc",
     # net surface Fresh-Water flux into the ocean (+=down), >0 decreases salinity [kg/m^2/s]
     "http://sose.ucsd.edu/SO6/ITER122/daily/bsose_i122_2013to2017_daily_oceFWflx.nc"
 ]
