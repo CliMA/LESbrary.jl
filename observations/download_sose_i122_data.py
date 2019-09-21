@@ -1,13 +1,4 @@
-import logging
-
 from subprocess import run
-
-logging.basicConfig(
-    level   = logging.INFO,
-    format  = "[%(asctime)s.%(msecs)03d] %(funcName)s:%(levelname)s: %(message)s",
-    datefmt = "%Y-%m-%d %H:%M:%S"
-)
-logger = logging.getLogger(__name__)
 
 # Links from http://sose.ucsd.edu/BSOSE6_iter122_solution.html
 # Also see: http://sose.ucsd.edu/SO6/ITER122/budgets/available_diagnostics.log
@@ -49,5 +40,4 @@ urls = [
 ]
 
 for url in urls:
-    logger.info(f"Downloading {url}...")
-    run("wget", "-N", url)
+    run(["wget", "-N", url])
