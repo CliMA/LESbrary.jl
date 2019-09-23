@@ -68,8 +68,8 @@ end
 prefix = @sprintf("mixed_layer_simulation_Q%d_dTdz%.3f_tau%.2f", Q, ∂T∂z, τ)
 
 # Physical constants.
-ρ₀ = 1027    # Density of seawater [kg/m³]
-cₚ = 4181.3  # Specific heat capacity of seawater at constant pressure [J/(kg·K)]
+ρ₀ = 1027  # Density of seawater [kg/m³]
+cₚ = 4000  # Specific heat capacity of seawater at constant pressure [J/(kg·K)]
 
 # We impose the wind stress Fu as a flux at the surface.
 # To impose a flux boundary condition, the top flux imposed should be negative
@@ -83,19 +83,19 @@ arch = HAVE_CUDA ? GPU() : CPU()
 Nx, Ny, Nz = Nh, Nh, Nz
 Lx, Ly, Lz = L, L, H
 end_time = days * day
-ν, κ = 1e-5, 1e-5
 
 ubcs = HorizontallyPeriodicBCs(   top = BoundaryCondition(Flux, Fu))
 Tbcs = HorizontallyPeriodicBCs(   top = BoundaryCondition(Flux, Fθ),
                                bottom = BoundaryCondition(Gradient, ∂T∂z))
 
 model = Model(float_type = FT,
-                    arch = arch,
+            architecture = arch,
                        N = (Nx, Ny, Nz),
                        L = (Lx, Ly, Lz),
-                     eos = LinearEquationOfState(βS=0.0),
-                 closure = VerstappenAnisotropicMinimumDissipation(FT; ν = ν, κ = κ),
-                     bcs = BoundaryConditions(u=ubcs, T=Tbcs))
+                rotation = FPlane(FT; f=1e-4),
+                buoyancy = SeawaterBuoyancy(FT; equation_of_state=LinearEquationOfState(β=0)),
+                 closure = AnisotropicMinimumDissipation(FT),
+     boundary_conditions = BoundaryConditions(u=ubcs, T=Tbcs))
 
 # Set initial condition. Initial velocity and salinity fluctuations needed for AMD.
 ε(μ) = μ * randn() # noise
@@ -136,35 +136,88 @@ field_writer = JLD2OutputWriter(model, fields; dir=base_dir, prefix=prefix * "_f
 push!(model.output_writers, field_writer)
 
 # Set up diagnostics.
-push!(model.diagnostics, NaNChecker(model))
+push!(model.diagnostics, NaNChecker(model; frequency=1000, fields=Dict(:w => model.velocities.w))
 
 Δtₚ = 10minute  # Time interval for computing and saving profiles.
 
-Up = VerticalProfile(model, model.velocities.u; interval=Δtₚ)
-Vp = VerticalProfile(model, model.velocities.v; interval=Δtₚ)
-Wp = VerticalProfile(model, model.velocities.w; interval=Δtₚ)
-Tp = VerticalProfile(model, model.tracers.T;    interval=Δtₚ)
-νp = VerticalProfile(model, model.diffusivities.νₑ; interval=Δtₚ)
-κp = VerticalProfile(model, model.diffusivities.κₑ.T; interval=Δtₚ)
-wT = ProductProfile(model, model.velocities.w, model.tracers.T; interval=Δtₚ)
-vc = VelocityCovarianceProfiles(model; interval=Δtₚ)
+Up = HorizontalAverage(model, model.velocities.u;       return_type=Array)
+Vp = HorizontalAverage(model, model.velocities.v;       return_type=Array)
+Wp = HorizontalAverage(model, model.velocities.w;       return_type=Array)
+Tp = HorizontalAverage(model, model.tracers.T;          return_type=Array)
+νp = HorizontalAverage(model, model.diffusivities.νₑ;   return_type=Array)
+κp = HorizontalAverage(model, model.diffusivities.κₑ.T; return_type=Array)
 
-append!(model.diagnostics, [Up, Vp, Wp, Tp, wT, νp, κp, vc])
+uu = HorizontalAverage(model, [model.velocities.u, model.velocities.u]; return_type=Array)
+vv = HorizontalAverage(model, [model.velocities.v, model.velocities.v]; return_type=Array)
+ww = HorizontalAverage(model, [model.velocities.w, model.velocities.w]; return_type=Array)
+uv = HorizontalAverage(model, [model.velocities.u, model.velocities.v]; return_type=Array)
+uw = HorizontalAverage(model, [model.velocities.u, model.velocities.w]; return_type=Array)
+vw = HorizontalAverage(model, [model.velocities.v, model.velocities.w]; return_type=Array)
+wT = HorizontalAverage(model, [model.velocities.w, model.tracers.T];    return_type=Array)
+
+function K∂zT(model::Model, havg, K, T)
+    K, T = K.data, T.data
+    Nz, Δz = model.grid.Nz, model.grid.Δz
+
+    fill_halo_regions!(K, model.boundary_conditions.pressure,    model.architecture, model.grid)
+    fill_halo_regions!(T, model.boundary_conditions.solution[4], model.architecture, model.grid)
+
+    # Use pressure as scratch space for the product of fields.
+    tmp = model.pressures.pNHS.data.parent
+
+    @views @inbounds @. tmp[:, :, 1:Nz] = K[:, :, 1:Nz] * (T[:, :, 1:Nz] - T[:, :, 0:Nz-1]) / Δz
+
+    zero_halo_regions!(tmp, model.grid)
+
+    sum!(havg.profile, tmp)
+    normalize_horizontal_sum!(havg, model.grid)
+
+    return Array(havg.profile)
+end
+
+function K∂zT(model::Model, havg, K₀, K, T)
+    K, T = K.data, T.data
+    Nz, Δz = model.grid.Nz, model.grid.Δz
+
+    fill_halo_regions!(K, model.boundary_conditions.pressure,    model.architecture, model.grid)
+    fill_halo_regions!(T, model.boundary_conditions.solution[4], model.architecture, model.grid)
+
+    # Use pressure as scratch space for the product of fields.
+    tmp = model.pressures.pNHS.data.parent
+
+    @views @inbounds @. tmp[:, :, 1:Nz] = (K₀ + K[:, :, 1:Nz]) * (T[:, :, 1:Nz] - T[:, :, 0:Nz-1]) / Δz
+
+    zero_halo_regions!(tmp, model.grid)
+
+    sum!(havg.profile, tmp)
+    normalize_horizontal_sum!(havg, model.grid)
+
+    return Array(havg.profile)
+end
 
 profiles = Dict(
-     :u => model -> Array(Up.profile),
-     :v => model -> Array(Vp.profile),
-     :w => model -> Array(Wp.profile),
-     :T => model -> Array(Tp.profile),
-    :nu => model -> Array(νp.profile),
-:kappaT => model -> Array(κp.profile),
-    :wT => model -> Array(wT.profile),
-    :uu => model -> Array(vc.uu.profile),
-    :uv => model -> Array(vc.uv.profile),
-    :uw => model -> Array(vc.uw.profile),
-    :vv => model -> Array(vc.vv.profile),
-    :vw => model -> Array(vc.vw.profile),
-    :ww => model -> Array(vc.ww.profile))
+    :u => Up(model),
+    :v => Vp(model),
+    :w => Wp(model),
+    :T => Tp(model),
+   :nu => νp(model),
+:kappa => κT(model),
+   :uu => uu(model),
+   :vv => vv(model),
+   :ww => ww(model),
+   :uv => uv(model),
+   :uw => uw(model),
+   :vw => vw(model),
+
+   :nu_dudz => K∂zT(model, Up, model.diffusivities.νₑ, model.velocities.u),
+   :nu_dvdz => K∂zT(model, Up, model.diffusivities.νₑ, model.velocities.v),
+   :nu_dwdz => K∂zT(model, Up, model.diffusivities.νₑ, model.velocities.w),
+:nuSGS_dudz => K∂zT(model, Up, model.closure.ν, model.diffusivities.νₑ, model.velocities.u),
+:nuSGS_dvdz => K∂zT(model, Up, model.closure.ν, model.diffusivities.νₑ, model.velocities.v),
+:nuSGS_dwdz => K∂zT(model, Up, model.closure.ν, model.diffusivities.νₑ, model.velocities.w),
+
+   :kappa_dTdz => K∂zT(model, Up, model.diffusivities.κₑ.T, model.tracers.T),
+:kappaSGS_dTdz => K∂zT(model, Up, model.closure.κ, model.diffusivities.κₑ.T, model.tracers.T))
 
 profile_writer = JLD2OutputWriter(model, profiles; dir=base_dir, prefix=prefix * "_profiles",
                                   init=init_save_parameters_and_bcs,
@@ -173,7 +226,7 @@ profile_writer = JLD2OutputWriter(model, profiles; dir=base_dir, prefix=prefix *
 push!(model.output_writers, profile_writer)
 
 # Wizard utility that calculates safe adaptive time steps.
-wizard = TimeStepWizard(cfl=0.15, Δt=3.0, max_change=1.2, max_Δt=30.0)
+wizard = TimeStepWizard(cfl=0.25, Δt=3.0, max_change=1.2, max_Δt=30.0)
 
 # Take Ni "intermediate" time steps at a time before printing a progress
 # statement and updating the time step.
@@ -191,7 +244,7 @@ while model.clock.time < end_time
 
     νmax = maximum(model.diffusivities.νₑ.data.parent)
     κmax = maximum(model.diffusivities.κₑ.T.data.parent)
-    
+
     Δ = min(model.grid.Δx, model.grid.Δy, model.grid.Δz)
     νCFL = wizard.Δt / (Δ^2 / νmax)
     κCFL = wizard.Δt / (Δ^2 / κmax)
