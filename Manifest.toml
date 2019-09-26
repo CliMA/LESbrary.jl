@@ -146,9 +146,9 @@ version = "0.6.4"
 
 [[Formatting]]
 deps = ["Printf"]
-git-tree-sha1 = "aef8983c0f77c84ae77ced1bb3ecf5ab7d687700"
+git-tree-sha1 = "a0c901c29c0e7c763342751c0a94211d56c0de5c"
 uuid = "59287772-0a20-5a39-b81b-1366585eb4c0"
-version = "0.4.0"
+version = "0.4.1"
 
 [[GPUArrays]]
 deps = ["Adapt", "FFTW", "FillArrays", "LinearAlgebra", "Printf", "Random", "Serialization", "StaticArrays", "Test"]

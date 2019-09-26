@@ -1,8 +1,11 @@
 using Statistics, Printf
 using ArgParse
 
+using CUDAnative, CuArrays
+using GPUifyLoops: @launch, @loop
+
 using Oceananigans
-using Oceananigans: fill_halo_regions!, zero_halo_regions!
+using Oceananigans: device, launch_config, cell_advection_timescale, fill_halo_regions!, zero_halo_regions!, normalize_horizontal_sum!
 
 s = ArgParseSettings(description="Run simulations of a stratified fluid forced by surface heat fluxes and wind" *
                      "stresses, simulating an oceanic boundary layer that develops a deepening mixed layer.")
@@ -81,6 +84,7 @@ Fθ = -Q / (ρ₀*cₚ)
 
 # Model parameters
 FT = Float64
+arch = GPU()
 Nx, Ny, Nz = Nh, Nh, Nz
 Lx, Ly, Lz = L, L, H
 end_time = days * day
@@ -90,7 +94,7 @@ Tbcs = HorizontallyPeriodicBCs(   top = BoundaryCondition(Flux, Fθ),
                                bottom = BoundaryCondition(Gradient, ∂T∂z))
 
 model = Model(float_type = FT,
-            architecture = GPU(),
+            architecture = arch,
 	            grid = RegularCartesianGrid(N=(Nx, Ny, Nz), L=(Lx, Ly, Lz)),
                 coriolis = FPlane(FT; f=1e-4),
                 buoyancy = SeawaterBuoyancy(FT; equation_of_state=LinearEquationOfState(β=0)),
@@ -155,9 +159,20 @@ uw = HorizontalAverage(model, [model.velocities.u, model.velocities.w]; return_t
 vw = HorizontalAverage(model, [model.velocities.v, model.velocities.w]; return_type=Array)
 wT = HorizontalAverage(model, [model.velocities.w, model.tracers.T];    return_type=Array)
 
+function flux!(grid, K0, K, T, tmp)
+    @loop for k in (1:grid.Nz; (blockIdx().z - 1) * blockDim().z + threadIdx().z)
+        @loop for j in (1:grid.Ny; (blockIdx().y - 1) * blockDim().y + threadIdx().y)
+            @loop for i in (1:grid.Nx; (blockIdx().x - 1) * blockDim().x + threadIdx().x)
+                @inbounds tmp[i, j, k] = (K0 + K[i, j, k]) * (T[i, j, k] - T[i, j, k-1]) / grid.Δz
+            end
+        end
+    end
+end
+
 function K∂zT(model::Model, havg, K, T)
     K, T = K.data, T.data
     Nz, Δz = model.grid.Nz, model.grid.Δz
+    arch, grid = model.architecture, model.grid
 
     fill_halo_regions!(K, model.boundary_conditions.pressure,    model.architecture, model.grid)
     fill_halo_regions!(T, model.boundary_conditions.solution[4], model.architecture, model.grid)
@@ -165,7 +180,7 @@ function K∂zT(model::Model, havg, K, T)
     # Use pressure as scratch space for the product of fields.
     tmp = model.pressures.pNHS.data.parent
 
-    @views @inbounds @. tmp[:, :, 1:Nz] = K[:, :, 1:Nz] * (T[:, :, 1:Nz] - T[:, :, 0:Nz-1]) / Δz
+    @launch device(arch) config=launch_config(grid, 3) flux!(grid, 0, K, T, tmp)
 
     zero_halo_regions!(tmp, model.grid)
 
@@ -178,6 +193,7 @@ end
 function K∂zT(model::Model, havg, K₀, K, T)
     K, T = K.data, T.data
     Nz, Δz = model.grid.Nz, model.grid.Δz
+    arch, grid = model.architecture, model.grid
 
     fill_halo_regions!(K, model.boundary_conditions.pressure,    model.architecture, model.grid)
     fill_halo_regions!(T, model.boundary_conditions.solution[4], model.architecture, model.grid)
@@ -185,7 +201,7 @@ function K∂zT(model::Model, havg, K₀, K, T)
     # Use pressure as scratch space for the product of fields.
     tmp = model.pressures.pNHS.data.parent
 
-    @views @inbounds @. tmp[:, :, 1:Nz] = (K₀ + K[:, :, 1:Nz]) * (T[:, :, 1:Nz] - T[:, :, 0:Nz-1]) / Δz
+    @launch device(arch) config=launch_config(grid, 3) flux!(grid, K₀, K, T, tmp)
 
     zero_halo_regions!(tmp, model.grid)
 
@@ -196,28 +212,28 @@ function K∂zT(model::Model, havg, K₀, K, T)
 end
 
 profiles = Dict(
-    :u => Up(model),
-    :v => Vp(model),
-    :w => Wp(model),
-    :T => Tp(model),
-   :nu => νp(model),
-:kappa => κp(model),
-   :uu => uu(model),
-   :vv => vv(model),
-   :ww => ww(model),
-   :uv => uv(model),
-   :uw => uw(model),
-   :vw => vw(model),
+    :u => model -> Up(model),
+    :v => model -> Vp(model),
+    :w => model -> Wp(model),
+    :T => model -> Tp(model),
+   :nu => model -> νp(model),
+:kappa => model -> κp(model),
+   :uu => model -> uu(model),
+   :vv => model -> vv(model),
+   :ww => model -> ww(model),
+   :uv => model -> uv(model),
+   :uw => model -> uw(model),
+   :vw => model -> vw(model),
 
-   :nu_dudz => K∂zT(model, Up, model.diffusivities.νₑ, model.velocities.u),
-   :nu_dvdz => K∂zT(model, Up, model.diffusivities.νₑ, model.velocities.v),
-   :nu_dwdz => K∂zT(model, Up, model.diffusivities.νₑ, model.velocities.w),
-:nuSGS_dudz => K∂zT(model, Up, model.closure.ν, model.diffusivities.νₑ, model.velocities.u),
-:nuSGS_dvdz => K∂zT(model, Up, model.closure.ν, model.diffusivities.νₑ, model.velocities.v),
-:nuSGS_dwdz => K∂zT(model, Up, model.closure.ν, model.diffusivities.νₑ, model.velocities.w),
+   :nu_dudz => model -> K∂zT(model, Up, model.diffusivities.νₑ, model.velocities.u),
+   :nu_dvdz => model -> K∂zT(model, Up, model.diffusivities.νₑ, model.velocities.v),
+   :nu_dwdz => model -> K∂zT(model, Up, model.diffusivities.νₑ, model.velocities.w),
+:nuSGS_dudz => model -> K∂zT(model, Up, model.closure.ν, model.diffusivities.νₑ, model.velocities.u),
+:nuSGS_dvdz => model -> K∂zT(model, Up, model.closure.ν, model.diffusivities.νₑ, model.velocities.v),
+:nuSGS_dwdz => model -> K∂zT(model, Up, model.closure.ν, model.diffusivities.νₑ, model.velocities.w),
 
-   :kappa_dTdz => K∂zT(model, Up, model.diffusivities.κₑ.T, model.tracers.T),
-:kappaSGS_dTdz => K∂zT(model, Up, model.closure.κ, model.diffusivities.κₑ.T, model.tracers.T))
+   :kappa_dTdz => model -> K∂zT(model, Up, model.diffusivities.κₑ.T, model.tracers.T),
+:kappaSGS_dTdz => model -> K∂zT(model, Up, model.closure.κ, model.diffusivities.κₑ.T, model.tracers.T))
 
 profile_writer = JLD2OutputWriter(model, profiles; dir=base_dir, prefix=prefix * "_profiles",
                                   init=init_save_parameters_and_bcs,
