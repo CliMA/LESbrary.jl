@@ -1,6 +1,8 @@
 using Statistics, Printf
 using ArgParse
+
 using Oceananigans
+using Oceananigans: fill_halo_regions!, zero_halo_regions!
 
 s = ArgParseSettings(description="Run simulations of a stratified fluid forced by surface heat fluxes and wind" *
                      "stresses, simulating an oceanic boundary layer that develops a deepening mixed layer.")
@@ -61,7 +63,7 @@ Nh, Nz, L, H, Q, τ, ∂T∂z, days = parse_int.([Nh, Nz, L, H, Q, τ, ∂T∂z,
 base_dir = parsed_args["base_dir"]
 if !isdir(base_dir)
     @info "Creating directory: $base_dir"
-    mkpath(output_dir)
+    mkpath(base_dir)
 end
 
 # Filename prefix for output files.
@@ -79,7 +81,6 @@ Fθ = -Q / (ρ₀*cₚ)
 
 # Model parameters
 FT = Float64
-arch = HAVE_CUDA ? GPU() : CPU()
 Nx, Ny, Nz = Nh, Nh, Nz
 Lx, Ly, Lz = L, L, H
 end_time = days * day
@@ -89,10 +90,9 @@ Tbcs = HorizontallyPeriodicBCs(   top = BoundaryCondition(Flux, Fθ),
                                bottom = BoundaryCondition(Gradient, ∂T∂z))
 
 model = Model(float_type = FT,
-            architecture = arch,
-                       N = (Nx, Ny, Nz),
-                       L = (Lx, Ly, Lz),
-                rotation = FPlane(FT; f=1e-4),
+            architecture = GPU(),
+	            grid = RegularCartesianGrid(N=(Nx, Ny, Nz), L=(Lx, Ly, Lz)),
+                coriolis = FPlane(FT; f=1e-4),
                 buoyancy = SeawaterBuoyancy(FT; equation_of_state=LinearEquationOfState(β=0)),
                  closure = AnisotropicMinimumDissipation(FT),
      boundary_conditions = BoundaryConditions(u=ubcs, T=Tbcs))
@@ -112,8 +112,8 @@ set_ic!(model, u=u₀, v=v₀, w=w₀, T=T₀, S=S₀)
 function init_save_parameters_and_bcs(file, model)
     file["parameters/density"] = ρ₀
     file["parameters/specific_heat_capacity"] = cₚ
-    file["parameters/viscosity"] = ν
-    file["parameters/diffusivity"] = κ
+    file["parameters/viscosity"] = model.closure.ν
+    file["parameters/diffusivity"] = model.closure.κ
     file["parameters/surface_cooling"] = Q
     file["parameters/temperature_gradient"] = ∂T∂z
     file["parameters/wind_stress"] = τ
@@ -136,7 +136,7 @@ field_writer = JLD2OutputWriter(model, fields; dir=base_dir, prefix=prefix * "_f
 push!(model.output_writers, field_writer)
 
 # Set up diagnostics.
-push!(model.diagnostics, NaNChecker(model; frequency=1000, fields=Dict(:w => model.velocities.w))
+push!(model.diagnostics, NaNChecker(model; frequency=1000, fields=Dict(:w => model.velocities.w)))
 
 Δtₚ = 10minute  # Time interval for computing and saving profiles.
 
@@ -201,7 +201,7 @@ profiles = Dict(
     :w => Wp(model),
     :T => Tp(model),
    :nu => νp(model),
-:kappa => κT(model),
+:kappa => κp(model),
    :uu => uu(model),
    :vv => vv(model),
    :ww => ww(model),
