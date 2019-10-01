@@ -1,6 +1,8 @@
 using Statistics, Printf
 using ArgParse
+
 using Oceananigans
+using Oceananigans: fill_halo_regions!, zero_halo_regions!
 
 s = ArgParseSettings(description="Run simulations of a stratified fluid forced by surface heat fluxes and wind" *
                      "stresses, simulating an oceanic boundary layer that develops a deepening mixed layer.")
@@ -61,15 +63,15 @@ Nh, Nz, L, H, Q, τ, ∂T∂z, days = parse_int.([Nh, Nz, L, H, Q, τ, ∂T∂z,
 base_dir = parsed_args["base_dir"]
 if !isdir(base_dir)
     @info "Creating directory: $base_dir"
-    mkpath(output_dir)
+    mkpath(base_dir)
 end
 
 # Filename prefix for output files.
 prefix = @sprintf("mixed_layer_simulation_Q%d_dTdz%.3f_tau%.2f", Q, ∂T∂z, τ)
 
 # Physical constants.
-ρ₀ = 1027    # Density of seawater [kg/m³]
-cₚ = 4181.3  # Specific heat capacity of seawater at constant pressure [J/(kg·K)]
+ρ₀ = 1027  # Density of seawater [kg/m³]
+cₚ = 4000  # Specific heat capacity of seawater at constant pressure [J/(kg·K)]
 
 # We impose the wind stress Fu as a flux at the surface.
 # To impose a flux boundary condition, the top flux imposed should be negative
@@ -79,23 +81,21 @@ Fθ = -Q / (ρ₀*cₚ)
 
 # Model parameters
 FT = Float64
-arch = HAVE_CUDA ? GPU() : CPU()
 Nx, Ny, Nz = Nh, Nh, Nz
 Lx, Ly, Lz = L, L, H
 end_time = days * day
-ν, κ = 1e-5, 1e-5
 
 ubcs = HorizontallyPeriodicBCs(   top = BoundaryCondition(Flux, Fu))
 Tbcs = HorizontallyPeriodicBCs(   top = BoundaryCondition(Flux, Fθ),
                                bottom = BoundaryCondition(Gradient, ∂T∂z))
 
 model = Model(float_type = FT,
-                    arch = arch,
-                       N = (Nx, Ny, Nz),
-                       L = (Lx, Ly, Lz),
-                     eos = LinearEquationOfState(βS=0.0),
-                 closure = AnisotropicMinimumDissipation(FT; ν = ν, κ = κ),
-                     bcs = BoundaryConditions(u=ubcs, T=Tbcs))
+            architecture = GPU(),
+                    grid = RegularCartesianGrid(N=(Nx, Ny, Nz), L=(Lx, Ly, Lz)),
+                coriolis = FPlane(FT; f=1e-4),
+                buoyancy = SeawaterBuoyancy(FT; equation_of_state=LinearEquationOfState(β=0)),
+                 closure = AnisotropicMinimumDissipation(FT),
+     boundary_conditions = BoundaryConditions(u=ubcs, T=Tbcs))
 
 # Set initial condition. Initial velocity and salinity fluctuations needed for AMD.
 ε(μ) = μ * randn() # noise
@@ -112,8 +112,8 @@ set_ic!(model, u=u₀, v=v₀, w=w₀, T=T₀, S=S₀)
 function init_save_parameters_and_bcs(file, model)
     file["parameters/density"] = ρ₀
     file["parameters/specific_heat_capacity"] = cₚ
-    file["parameters/viscosity"] = ν
-    file["parameters/diffusivity"] = κ
+    file["parameters/viscosity"] = model.closure.ν
+    file["parameters/diffusivity"] = model.closure.κ
     file["parameters/surface_cooling"] = Q
     file["parameters/temperature_gradient"] = ∂T∂z
     file["parameters/wind_stress"] = τ
@@ -147,59 +147,60 @@ slice_writer = JLD2OutputWriter(model, movie_slices; dir=base_dir, prefix=prefix
                                 max_filesize=10GiB, interval=Δtₛ, force=true, verbose=false)
 push!(model.output_writers, slice_writer)
 
-
-Up = VerticalProfile(model, model.velocities.u; interval=Δtₛ)
-Vp = VerticalProfile(model, model.velocities.v; interval=Δtₛ)
-Wp = VerticalProfile(model, model.velocities.w; interval=Δtₛ)
-Tp = VerticalProfile(model, model.tracers.T;    interval=Δtₛ)
-νp = VerticalProfile(model, model.diffusivities.νₑ; interval=Δtₛ)
-κp = VerticalProfile(model, model.diffusivities.κₑ.T; interval=Δtₛ)
-wT = ProductProfile(model, model.velocities.w, model.tracers.T; interval=Δtₛ)
-vc = VelocityCovarianceProfiles(model; interval=Δtₛ)
-
-append!(model.diagnostics, [Up, Vp, Wp, Tp, wT, νp, κp, vc])
+Up = HorizontalAverage(model, model.velocities.u;       return_type=Array)
+Vp = HorizontalAverage(model, model.velocities.v;       return_type=Array)
+Wp = HorizontalAverage(model, model.velocities.w;       return_type=Array)
+Tp = HorizontalAverage(model, model.tracers.T;          return_type=Array)
+νp = HorizontalAverage(model, model.diffusivities.νₑ;   return_type=Array)
+κp = HorizontalAverage(model, model.diffusivities.κₑ.T; return_type=Array)
+wT = HorizontalAverage(model, [model.velocities.w, model.tracers.T]; return_type=Array)
 
 profiles = Dict(
-     :u => model -> Array(Up.profile),
-     :v => model -> Array(Vp.profile),
-     :w => model -> Array(Wp.profile),
-     :T => model -> Array(Tp.profile),
-    :nu => model -> Array(νp.profile),
-:kappaT => model -> Array(κp.profile),
-    :wT => model -> Array(wT.profile),
-    :uu => model -> Array(vc.uu.profile),
-    :uv => model -> Array(vc.uv.profile),
-    :uw => model -> Array(vc.uw.profile),
-    :vv => model -> Array(vc.vv.profile),
-    :vw => model -> Array(vc.vw.profile),
-    :ww => model -> Array(vc.ww.profile))
+    :u => Up(model),
+    :v => Vp(model),
+    :w => Wp(model),
+    :T => Tp(model),
+   :nu => νp(model),
+:kappa => κp(model),
+   :wT => wT(model))
 
 profile_writer = JLD2OutputWriter(model, profiles; dir=base_dir, prefix=prefix * "_profiles",
                                   init=init_save_parameters_and_bcs,
-                                  interval=Δtₛ, max_filesize=10GiB, force=true, verbose=false)
+                                  interval=Δtₛ, max_filesize=25GiB, force=true, verbose=true)
 
 push!(model.output_writers, profile_writer)
 
+# Set up diagnostics.
+push!(model.diagnostics, NaNChecker(model; frequency=1000, fields=Dict(:w => model.velocities.w)))
+
 # Wizard utility that calculates safe adaptive time steps.
-Δt_wizard = TimeStepWizard(cfl=0.2, Δt=0.5second, max_change=1.2, max_Δt=5second)
+wizard = TimeStepWizard(cfl=0.2, Δt=0.5second, max_change=1.2, max_Δt=5second)
 
 # Take Ni "intermediate" time steps at a time before printing a progress
 # statement and updating the time step.
 Ni = 50
 
 while model.clock.time < end_time
-    walltime = @elapsed time_step!(model; Nt=Ni, Δt=Δt_wizard.Δt)
+    walltime = @elapsed time_step!(model; Nt=Ni, Δt=wizard.Δt)
 
     progress = 100 * (model.clock.time / end_time)
 
     umax = maximum(abs, model.velocities.u.data.parent)
     vmax = maximum(abs, model.velocities.v.data.parent)
     wmax = maximum(abs, model.velocities.w.data.parent)
-    CFL = Δt_wizard.Δt / cell_advection_timescale(model)
+    CFL = wizard.Δt / cell_advection_timescale(model)
 
-    update_Δt!(Δt_wizard, model)
+    νmax = maximum(model.diffusivities.νₑ.data.parent)
+    κmax = maximum(model.diffusivities.κₑ.T.data.parent)
 
-    @printf("[%06.2f%%] i: %d, t: %.3f days, umax: (%6.3g, %6.3g, %6.3g) m/s, CFL: %6.4g, next Δt: %3.2f s, ⟨wall time⟩: %s\n",
+    Δ = min(model.grid.Δx, model.grid.Δy, model.grid.Δz)
+    νCFL = wizard.Δt / (Δ^2 / νmax)
+    κCFL = wizard.Δt / (Δ^2 / κmax)
+
+    update_Δt!(wizard, model)
+
+    @printf("[%06.2f%%] i: %d, t: %5.2f days, umax: (%6.3g, %6.3g, %6.3g) m/s, CFL: %6.4g, νκmax: (%6.3g, %6.3g), νκCFL: (%6.4g, %6.4g), next Δt: %8.5g, ⟨wall time⟩: %s\n",
             progress, model.clock.iteration, model.clock.time / day,
-            umax, vmax, wmax, CFL, Δt_wizard.Δt, prettytime(walltime / Ni))
+            umax, vmax, wmax, CFL, νmax, κmax, νCFL, κCFL,
+            wizard.Δt, prettytime(walltime / Ni))
 end
