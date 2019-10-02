@@ -40,8 +40,8 @@ def plot_contourf3d_from_jld2(slice_filepath, profile_filepath, png_filepath, fi
     x, y, z = linspace(0, Lx, Nx), linspace(0, Ly, Ny), linspace(0, -Lz, Nz)
 
     xy_slice = sfile["timeseries/" + field + "_xy_slice/" + i][()][1:Nx+1, 1:Ny+1]
-    xz_slice = np.fliplr(sfile["timeseries/" + field + "_xz_slice/" + i][()][1:Nx+1, 1:Nz+1])
-    yz_slice = np.fliplr(sfile["timeseries/" + field + "_yz_slice/" + i][()][1:Ny+1, 1:Nz+1])
+    xz_slice = sfile["timeseries/" + field + "_xz_slice/" + i][()][1:Nx+1, 1:Nz+1]
+    yz_slice = sfile["timeseries/" + field + "_yz_slice/" + i][()][1:Ny+1, 1:Nz+1]
 
     T = pfile["timeseries/T/" + i][()][1:Nz+1, 0, 0]
 
