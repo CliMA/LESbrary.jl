@@ -156,13 +156,13 @@ Tp = HorizontalAverage(model, model.tracers.T;          return_type=Array)
 wT = HorizontalAverage(model, [model.velocities.w, model.tracers.T]; return_type=Array)
 
 profiles = Dict(
-    :u => Up(model),
-    :v => Vp(model),
-    :w => Wp(model),
-    :T => Tp(model),
-   :nu => νp(model),
-:kappa => κp(model),
-   :wT => wT(model))
+    :u => model -> Up(model),
+    :v => model -> Vp(model),
+    :w => model -> Wp(model),
+    :T => model -> Tp(model),
+   :nu => model -> νp(model),
+:kappa => model -> κp(model),
+   :wT => model -> wT(model))
 
 profile_writer = JLD2OutputWriter(model, profiles; dir=base_dir, prefix=prefix * "_profiles",
                                   init=init_save_parameters_and_bcs,
