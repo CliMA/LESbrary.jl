@@ -92,6 +92,8 @@ end_time = days * day
 ubcs = HorizontallyPeriodicBCs(   top = BoundaryCondition(Flux, Fu))
 Tbcs = HorizontallyPeriodicBCs(   top = BoundaryCondition(Flux, Fθ),
                                bottom = BoundaryCondition(Gradient, ∂T∂z))
+Sbcs = HorizontallyPeriodicBCs(   top = BoundaryCondition(Gradient, 0),
+                               bottom = BoundaryCondition(Gradient, ∂T∂z))
 
 model = Model(float_type = FT,
             architecture = arch,
@@ -99,17 +101,17 @@ model = Model(float_type = FT,
                 coriolis = FPlane(FT; f=1e-4),
                 buoyancy = SeawaterBuoyancy(FT; equation_of_state=LinearEquationOfState(β=0)),
                  closure = AnisotropicMinimumDissipation(FT),
-     boundary_conditions = BoundaryConditions(u=ubcs, T=Tbcs))
+     boundary_conditions = BoundaryConditions(u=ubcs, T=Tbcs, S=Sbcs))
 
 # Set initial condition. Initial velocity and salinity fluctuations needed for AMD.
 ε(μ) = μ * randn() # noise
 T₀(x, y, z) = 20 + ∂T∂z * z + ε(1e-10) * exp(z/25)
+S₀(x, y, z) = T₀(x, y, z)
 
 # Noise is needed so that AMD does not blow up due to dividing by ∇u or ∇S.
 u₀(x, y, z) = ε(1e-10) * exp(z/25)
 v₀(x, y, z) = ε(1e-10) * exp(z/25)
 w₀(x, y, z) = ε(1e-10) * exp(z/25)
-S₀(x, y, z) = ε(1e-10) * exp(z/25)
 
 set_ic!(model, u=u₀, v=v₀, w=w₀, T=T₀, S=S₀)
 
@@ -131,7 +133,9 @@ fields = Dict(
     :v => model -> Array(model.velocities.v.data.parent),
     :w => model -> Array(model.velocities.w.data.parent),
     :T => model -> Array(model.tracers.T.data.parent),
+    :S => model -> Array(model.tracers.S.data.parent),
     :kappaT => model -> Array(model.diffusivities.κₑ.T.data.parent),
+    :kappaS => model -> Array(model.diffusivities.κₑ.S.data.parent),
     :nu => model -> Array(model.diffusivities.νₑ.data.parent))
 
 field_writer = JLD2OutputWriter(model, fields; dir=base_dir, prefix=prefix * "_fields",
@@ -148,8 +152,11 @@ Up = HorizontalAverage(model, model.velocities.u;       return_type=Array)
 Vp = HorizontalAverage(model, model.velocities.v;       return_type=Array)
 Wp = HorizontalAverage(model, model.velocities.w;       return_type=Array)
 Tp = HorizontalAverage(model, model.tracers.T;          return_type=Array)
+Sp = HorizontalAverage(model, model.tracers.S;          return_type=Array)
 νp = HorizontalAverage(model, model.diffusivities.νₑ;   return_type=Array)
-κp = HorizontalAverage(model, model.diffusivities.κₑ.T; return_type=Array)
+
+κTp = HorizontalAverage(model, model.diffusivities.κₑ.T; return_type=Array)
+κSp = HorizontalAverage(model, model.diffusivities.κₑ.S; return_type=Array)
 
 uu = HorizontalAverage(model, [model.velocities.u, model.velocities.u]; return_type=Array)
 vv = HorizontalAverage(model, [model.velocities.v, model.velocities.v]; return_type=Array)
@@ -158,6 +165,7 @@ uv = HorizontalAverage(model, [model.velocities.u, model.velocities.v]; return_t
 uw = HorizontalAverage(model, [model.velocities.u, model.velocities.w]; return_type=Array)
 vw = HorizontalAverage(model, [model.velocities.v, model.velocities.w]; return_type=Array)
 wT = HorizontalAverage(model, [model.velocities.w, model.tracers.T];    return_type=Array)
+wS = HorizontalAverage(model, [model.velocities.w, model.tracers.S];    return_type=Array)
 
 function flux!(grid, K0, K, T, tmp)
     @loop for k in (1:grid.Nz; (blockIdx().z - 1) * blockDim().z + threadIdx().z)
@@ -212,18 +220,22 @@ function K∂zT(model::Model, havg, K₀, K, T)
 end
 
 profiles = Dict(
-    :u => model -> Up(model),
-    :v => model -> Vp(model),
-    :w => model -> Wp(model),
-    :T => model -> Tp(model),
-   :nu => model -> νp(model),
-:kappa => model -> κp(model),
-   :uu => model -> uu(model),
-   :vv => model -> vv(model),
-   :ww => model -> ww(model),
-   :uv => model -> uv(model),
-   :uw => model -> uw(model),
-   :vw => model -> vw(model),
+     :u => model -> Up(model),
+     :v => model -> Vp(model),
+     :w => model -> Wp(model),
+     :T => model -> Tp(model),
+     :S => model -> Sp(model),
+    :nu => model -> νp(model),
+:kappaT => model -> κTp(model),
+:kappaS => model -> κSp(model),
+    :uu => model -> uu(model),
+    :vv => model -> vv(model),
+    :ww => model -> ww(model),
+    :uv => model -> uv(model),
+    :uw => model -> uw(model),
+    :vw => model -> vw(model),
+    :wT => model -> wT(model),
+    :wS => model -> wS(model),
 
    :nu_dudz => model -> K∂zT(model, Up, model.diffusivities.νₑ, model.velocities.u),
    :nu_dvdz => model -> K∂zT(model, Up, model.diffusivities.νₑ, model.velocities.v),
@@ -232,8 +244,10 @@ profiles = Dict(
 :nuSGS_dvdz => model -> K∂zT(model, Up, model.closure.ν, model.diffusivities.νₑ, model.velocities.v),
 :nuSGS_dwdz => model -> K∂zT(model, Up, model.closure.ν, model.diffusivities.νₑ, model.velocities.w),
 
-   :kappa_dTdz => model -> K∂zT(model, Up, model.diffusivities.κₑ.T, model.tracers.T),
-:kappaSGS_dTdz => model -> K∂zT(model, Up, model.closure.κ, model.diffusivities.κₑ.T, model.tracers.T))
+   :kappaT_dTdz => model -> K∂zT(model, Up, model.diffusivities.κₑ.T, model.tracers.T),
+:kappaTSGS_dTdz => model -> K∂zT(model, Up, model.closure.κ, model.diffusivities.κₑ.T, model.tracers.T),
+   :kappaS_dSdz => model -> K∂zT(model, Up, model.diffusivities.κₑ.S, model.tracers.S),
+:kappaSSGS_dSdz => model -> K∂zT(model, Up, model.closure.κ, model.diffusivities.κₑ.S, model.tracers.S))
 
 profile_writer = JLD2OutputWriter(model, profiles; dir=base_dir, prefix=prefix * "_profiles",
                                   init=init_save_parameters_and_bcs,
