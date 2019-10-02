@@ -144,7 +144,7 @@ movie_slices = Dict(
 
 slice_writer = JLD2OutputWriter(model, movie_slices; dir=base_dir, prefix=prefix * "_slices",
                                 init=init_save_parameters_and_bcs,
-                                max_filesize=10GiB, interval=Δtₛ, force=true, verbose=false)
+                                max_filesize=10GiB, interval=Δtₛ, force=true, verbose=true)
 push!(model.output_writers, slice_writer)
 
 Up = HorizontalAverage(model, model.velocities.u;       return_type=Array)
