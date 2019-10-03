@@ -141,8 +141,8 @@ end
 
 function wT_yz_slice(w, T, grid; i=1)
     Nz, Hz = grid.Nz, grid.Hz
-    w_xz_slice = @views @. 0.5 * (w.data.parent[i, :, 1+Hz:Nz+Hz] + w.data.parent[i, :, 1+Hz+1:Nz+Hz+1])
-    T_xz_slice = @views T.data.parent[i, :, :]
+    w_yz_slice = @views @. 0.5 * (w.data.parent[i, :, 1+Hz:Nz+Hz] + w.data.parent[i, :, 1+Hz+1:Nz+Hz+1])
+    T_yz_slice = @views T.data.parent[i, :, :]
     return Array(w_yz_slice .* T_yz_slice)
 end
 
