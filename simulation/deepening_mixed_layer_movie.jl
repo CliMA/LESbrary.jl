@@ -2,7 +2,7 @@ using Statistics, Printf
 using ArgParse
 
 using Oceananigans
-using Oceananigans: fill_halo_regions!, zero_halo_regions!
+using Oceananigans: cell_advection_timescale
 
 s = ArgParseSettings(description="Run simulations of a stratified fluid forced by surface heat fluxes and wind" *
                      "stresses, simulating an oceanic boundary layer that develops a deepening mixed layer.")
