@@ -127,7 +127,7 @@ xz_slice(field; j=1) = Array(field.data.parent[:, j, :])
 yz_slice(field; i=1) = Array(field.data.parent[i, :, :])
 
 function wT_xy_slice(w, T; k=1)
-    w_xy_slice = @views @. 0.5 * (w.data.parent[:, :, k] + w.data.parent[:, :, k+1])
+    w_xy_slice = @views @. 0.5 * (w.data.parent[:, :, 1+Hz] + w.data.parent[:, :, 1+Hz+1])
     T_xy_slice = @views T.data.parent[:, :, k]
     return Array(w_xy_slice .* T_xy_slice)
 end
@@ -159,9 +159,9 @@ movie_slices = Dict(
     :T_xy_slice => model -> xy_slice(model.tracers.T),
     :T_xz_slice => model -> xz_slice(model.tracers.T),
     :T_yz_slice => model -> yz_slice(model.tracers.T),
-   :wT_xy_Slice => model -> wT_xy_slice(model.velocities.w, model.tracers.T),
-   :wT_xz_Slice => model -> wT_xz_slice(model.velocities.w, model.tracers.T, model.grid),
-   :wT_yz_Slice => model -> wT_yz_slice(model.velocities.w, model.tracers.T, model.grid)
+   :wT_xy_slice => model -> wT_xy_slice(model.velocities.w, model.tracers.T),
+   :wT_xz_slice => model -> wT_xz_slice(model.velocities.w, model.tracers.T, model.grid),
+   :wT_yz_slice => model -> wT_yz_slice(model.velocities.w, model.tracers.T, model.grid)
 )
 
 Δtₛ = 5second  # Time interval for saving slices and profiles.
