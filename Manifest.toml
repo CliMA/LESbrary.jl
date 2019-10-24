@@ -230,7 +230,9 @@ version = "0.6.0"
 
 [[Oceananigans]]
 deps = ["Adapt", "CUDAapi", "CUDAdrv", "CUDAnative", "CuArrays", "Distributed", "FFTW", "GPUifyLoops", "JLD2", "LinearAlgebra", "NCDatasets", "OffsetArrays", "OrderedCollections", "Printf", "Random", "StaticArrays", "Statistics", "TimerOutputs"]
-git-tree-sha1 = "21d08d4286cddd1e24584d841fa96e0e93e31c6e"
+git-tree-sha1 = "3cf133680f93950157cdbc923c924590e1f7ca82"
+repo-rev = "glw/beaufort-gyre-example"
+repo-url = "https://github.com/climate-machine/Oceananigans.jl.git"
 uuid = "9e8cae18-63c1-5223-a75c-80ca9d6e9a09"
 version = "0.14.0"
 
