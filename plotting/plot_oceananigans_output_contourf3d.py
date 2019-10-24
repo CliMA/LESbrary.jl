@@ -153,7 +153,7 @@ if __name__ == "__main__":
 
     (
         ffmpeg
-        .input("convecting_wind_stress_%05d.png", framerate=30)
+        .input("convecting_wind_stress_%05d.png", framerate=60)
         .output("convecting_wind_stress.mp4", crf=15, pix_fmt='yuv420p')
         .overwrite_output()
         .run()
