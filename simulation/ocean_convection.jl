@@ -3,7 +3,7 @@ using Statistics, Printf
 using Oceananigans
 using Oceananigans.AbstractOperations
 
-using Oceananigans: Cell, Face
+using Oceananigans: Cell, Face, cell_advection_timescale
 
 # Float type and architecture
 FT = Float64
@@ -51,7 +51,7 @@ Fu_str = "τx(x, y, t) / ρ₀"
 Fθ_str = "Q(x, y, t) / (ρ₀ * cₚ)"
 
 u_top_bc = FunctionBoundaryCondition(Flux, :z, Face, Cell, Fu)
-θ_top_bc = FunctionBoudnaryCondition(Flux, :z, Cell, Cell, Fθ)
+θ_top_bc = FunctionBoundaryCondition(Flux, :z, Cell, Cell, Fθ)
 
 # Define boundary conditions
 ubcs = HorizontallyPeriodicBCs(   top = u_top_bc)
@@ -136,14 +136,14 @@ w = model.velocities.w
 T = model.tracers.T
 S = model.tracers.S
 
-uu = HorizontalAverage(u*u; return_type=Array)
-vv = HorizontalAverage(v*v; return_type=Array)
-ww = HorizontalAverage(w*w; return_type=Array)
-uv = HorizontalAverage(u*v; return_type=Array)
-uw = HorizontalAverage(u*w; return_type=Array)
-vw = HorizontalAverage(v*w; return_type=Array)
-wT = HorizontalAverage(w*T; return_type=Array)
-wS = HorizontalAverage(w*S; return_type=Array)
+uu = HorizontalAverage(u*u, model; return_type=Array)
+vv = HorizontalAverage(v*v, model; return_type=Array)
+ww = HorizontalAverage(w*w, model; return_type=Array)
+uv = HorizontalAverage(u*v, model; return_type=Array)
+uw = HorizontalAverage(u*w, model; return_type=Array)
+vw = HorizontalAverage(v*w, model; return_type=Array)
+wT = HorizontalAverage(w*T, model; return_type=Array)
+wS = HorizontalAverage(w*S, model; return_type=Array)
 
 # Create output writer that writes vertical profiles to JLD2 output files.
 profiles = Dict(
