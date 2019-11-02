@@ -28,10 +28,10 @@ uuid = "9e28174c-4ba2-5203-b857-d8d62c4213ee"
 version = "0.8.10"
 
 [[BinaryProvider]]
-deps = ["Libdl", "Logging", "SHA"]
-git-tree-sha1 = "c7361ce8a2129f20b0e05a89f7070820cfed6648"
+deps = ["Libdl", "SHA"]
+git-tree-sha1 = "29995a7b317bbd06be147e1974a3541ce2502dca"
 uuid = "b99e7846-7c00-51b0-8f62-c81ae34c0232"
-version = "0.5.6"
+version = "0.5.7"
 
 [[CEnum]]
 git-tree-sha1 = "62847acab40e6855a9b5905ccb99c2b5cf6b3ebb"
@@ -46,9 +46,9 @@ version = "0.0.3"
 
 [[CSTParser]]
 deps = ["Tokenize"]
-git-tree-sha1 = "c69698c3d4a7255bc1b4bc2afc09f59db910243b"
+git-tree-sha1 = "99dda94f5af21a4565dc2b97edf6a95485f116c3"
 uuid = "00ebfdb7-1f24-5e51-bd34-a7502290713f"
-version = "0.6.2"
+version = "1.0.0"
 
 [[CUDAapi]]
 deps = ["Libdl", "Logging"]
@@ -116,9 +116,9 @@ version = "1.1.0"
 
 [[DataStructures]]
 deps = ["InteractiveUtils", "OrderedCollections"]
-git-tree-sha1 = "2103e504f427e54ffa19af9ada225733a21f951f"
+git-tree-sha1 = "1fe8fad5fc84686dcbc674aa255bc867a64f8132"
 uuid = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
-version = "0.17.3"
+version = "0.17.5"
 
 [[Dates]]
 deps = ["Printf"]
@@ -146,15 +146,15 @@ version = "1.0.7"
 
 [[FillArrays]]
 deps = ["LinearAlgebra", "Random", "SparseArrays"]
-git-tree-sha1 = "8fba6ddaf66b45dec830233cea0aae43eb1261ad"
+git-tree-sha1 = "de38b0253ade98340fabaf220f368f6144541938"
 uuid = "1a297f60-69ca-5386-bcde-b61e274b549b"
-version = "0.6.4"
+version = "0.7.4"
 
 [[GPUArrays]]
-deps = ["Adapt", "FFTW", "FillArrays", "LinearAlgebra", "Printf", "Random", "Serialization", "StaticArrays", "Test"]
-git-tree-sha1 = "77e27264276fe97a7e7fb928bf8999a145abc018"
+deps = ["Adapt", "FFTW", "FillArrays", "LinearAlgebra", "Printf", "Random", "Serialization", "Test"]
+git-tree-sha1 = "8d74ced24448c52b539a23d107bd2424ee139c0f"
 uuid = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
-version = "1.0.3"
+version = "1.0.4"
 
 [[GPUifyLoops]]
 deps = ["Cassette", "Requires", "StaticArrays"]
@@ -230,11 +230,9 @@ version = "0.6.0"
 
 [[Oceananigans]]
 deps = ["Adapt", "CUDAapi", "CUDAdrv", "CUDAnative", "CuArrays", "Distributed", "FFTW", "GPUifyLoops", "JLD2", "LinearAlgebra", "NCDatasets", "OffsetArrays", "OrderedCollections", "Printf", "Random", "StaticArrays", "Statistics", "TimerOutputs"]
-git-tree-sha1 = "3cf133680f93950157cdbc923c924590e1f7ca82"
-repo-rev = "glw/beaufort-gyre-example"
-repo-url = "https://github.com/climate-machine/Oceananigans.jl.git"
+git-tree-sha1 = "645d2a748f170437fb9b2d0549763910d71afdbc"
 uuid = "9e8cae18-63c1-5223-a75c-80ca9d6e9a09"
-version = "0.14.0"
+version = "0.15.0"
 
 [[OffsetArrays]]
 git-tree-sha1 = "1af2f79c7eaac3e019a0de41ef63335ff26a0a57"
