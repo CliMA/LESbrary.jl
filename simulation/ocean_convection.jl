@@ -63,7 +63,7 @@ Sbcs = HorizontallyPeriodicBCs(   top = BoundaryCondition(Gradient, 0),
 # Create model
 model = Model(float_type = FT,
             architecture = arch,
-	                grid = RegularCartesianGrid(FT; size=(Nx, Ny, Nz), length=(Lx, Ly, Lz)),
+                    grid = RegularCartesianGrid(FT; size=(Nx, Ny, Nz), length=(Lx, Ly, Lz)),
                 coriolis = FPlane(FT; f=f₀),
                 buoyancy = SeawaterBuoyancy(FT; equation_of_state=LinearEquationOfState(β=0)),
                  closure = AnisotropicMinimumDissipation(FT),
@@ -129,6 +129,7 @@ push!(model.diagnostics, NaNChecker(model; frequency=1000, fields=Dict(:w => mod
  νp = HorizontalAverage(model.diffusivities.νₑ;   return_type=Array)
 κTp = HorizontalAverage(model.diffusivities.κₑ.T; return_type=Array)
 κSp = HorizontalAverage(model.diffusivities.κₑ.S; return_type=Array)
+dTp = HorizontalAverage(model.timestepper.Gⁿ.T;   return_type=Array)
 
 u = model.velocities.u
 v = model.velocities.v
@@ -155,6 +156,7 @@ profiles = Dict(
     :nu => model -> νp(model),
 :kappaT => model -> κTp(model),
 :kappaS => model -> κSp(model),
+  :dTdt => model -> dTp(model),
     :uu => model -> uu(model),
     :vv => model -> vv(model),
     :ww => model -> ww(model),
