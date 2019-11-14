@@ -1,6 +1,8 @@
 using Statistics, Printf
 
 using Oceananigans
+using Oceananigans.OutputWriters
+using Oceananigans.Diagnostics
 using Oceananigans.AbstractOperations
 
 using Oceananigans: Cell, Face, cell_advection_timescale
@@ -50,12 +52,12 @@ Q_str = "-100"
 Fu_str = "τx(x, y, t) / ρ₀"
 Fθ_str = "Q(x, y, t) / (ρ₀ * cₚ)"
 
-u_top_bc = FunctionBoundaryCondition(Flux, :z, Face, Cell, Fu)
-θ_top_bc = FunctionBoundaryCondition(Flux, :z, Cell, Cell, Fθ)
+u_top_bc = BoundaryFunction{:z, Face, Cell}(Fu)
+θ_top_bc = BoundaryFunction{:z, Cell, Cell}(Fθ)
 
 # Define boundary conditions
-ubcs = HorizontallyPeriodicBCs(   top = u_top_bc)
-θbcs = HorizontallyPeriodicBCs(   top = θ_top_bc,
+ubcs = HorizontallyPeriodicBCs(   top = BoundaryCondition(Flux, u_top_bc))
+θbcs = HorizontallyPeriodicBCs(   top = BoundaryCondition(Flux, θ_top_bc),
                                bottom = BoundaryCondition(Gradient, ∂θ∂z))
 Sbcs = HorizontallyPeriodicBCs(   top = BoundaryCondition(Gradient, 0),
                                bottom = BoundaryCondition(Gradient, ∂θ∂z))
