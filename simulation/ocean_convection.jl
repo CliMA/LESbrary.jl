@@ -47,7 +47,7 @@ Q_str = "-100"
 
 # Convert heat flux and wind stress to boundary conditions.
 @inline Fu(x, y, t) = τx(x, y, t) / ρ₀
-@inline Fθ(x, y, t) =  Q(x, y, t) / (ρ₀ * cₚ)
+@inline Fθ(x, y, t) = -Q(x, y, t) / (ρ₀ * cₚ)
 
 Fu_str = "τx(x, y, t) / ρ₀"
 Fθ_str = "Q(x, y, t) / (ρ₀ * cₚ)"
