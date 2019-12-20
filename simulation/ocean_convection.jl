@@ -1,6 +1,8 @@
 using Statistics, Printf
 
 using Oceananigans
+using Oceananigans.OutputWriters
+using Oceananigans.Diagnostics
 using Oceananigans.AbstractOperations
 
 using Oceananigans: Cell, Face, cell_advection_timescale
@@ -45,17 +47,17 @@ Q_str = "-100"
 
 # Convert heat flux and wind stress to boundary conditions.
 @inline Fu(x, y, t) = τx(x, y, t) / ρ₀
-@inline Fθ(x, y, t) =  Q(x, y, t) / (ρ₀ * cₚ)
+@inline Fθ(x, y, t) = -Q(x, y, t) / (ρ₀ * cₚ)
 
 Fu_str = "τx(x, y, t) / ρ₀"
 Fθ_str = "Q(x, y, t) / (ρ₀ * cₚ)"
 
-u_top_bc = FunctionBoundaryCondition(Flux, :z, Face, Cell, Fu)
-θ_top_bc = FunctionBoundaryCondition(Flux, :z, Cell, Cell, Fθ)
+u_top_bc = BoundaryFunction{:z, Face, Cell}(Fu)
+θ_top_bc = BoundaryFunction{:z, Cell, Cell}(Fθ)
 
 # Define boundary conditions
-ubcs = HorizontallyPeriodicBCs(   top = u_top_bc)
-θbcs = HorizontallyPeriodicBCs(   top = θ_top_bc,
+ubcs = HorizontallyPeriodicBCs(   top = BoundaryCondition(Flux, u_top_bc))
+θbcs = HorizontallyPeriodicBCs(   top = BoundaryCondition(Flux, θ_top_bc),
                                bottom = BoundaryCondition(Gradient, ∂θ∂z))
 Sbcs = HorizontallyPeriodicBCs(   top = BoundaryCondition(Gradient, 0),
                                bottom = BoundaryCondition(Gradient, ∂θ∂z))
@@ -63,7 +65,7 @@ Sbcs = HorizontallyPeriodicBCs(   top = BoundaryCondition(Gradient, 0),
 # Create model
 model = Model(float_type = FT,
             architecture = arch,
-	                grid = RegularCartesianGrid(FT; size=(Nx, Ny, Nz), length=(Lx, Ly, Lz)),
+                    grid = RegularCartesianGrid(FT; size=(Nx, Ny, Nz), length=(Lx, Ly, Lz)),
                 coriolis = FPlane(FT; f=f₀),
                 buoyancy = SeawaterBuoyancy(FT; equation_of_state=LinearEquationOfState(β=0)),
                  closure = AnisotropicMinimumDissipation(FT),
@@ -129,6 +131,7 @@ push!(model.diagnostics, NaNChecker(model; frequency=1000, fields=Dict(:w => mod
  νp = HorizontalAverage(model.diffusivities.νₑ;   return_type=Array)
 κTp = HorizontalAverage(model.diffusivities.κₑ.T; return_type=Array)
 κSp = HorizontalAverage(model.diffusivities.κₑ.S; return_type=Array)
+dTp = HorizontalAverage(model.timestepper.Gⁿ.T;   return_type=Array)
 
 u = model.velocities.u
 v = model.velocities.v
@@ -155,6 +158,7 @@ profiles = Dict(
     :nu => model -> νp(model),
 :kappaT => model -> κTp(model),
 :kappaS => model -> κSp(model),
+  :dTdt => model -> dTp(model),
     :uu => model -> uu(model),
     :vv => model -> vv(model),
     :ww => model -> ww(model),
