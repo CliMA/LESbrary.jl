@@ -12,10 +12,15 @@ using Oceananigans.Utils
 ##### Parse command line arguments
 #####
 
-s = ArgParseSettings(description="Run simulations of a stratified fluid forced by surface heat fluxes and wind" *
-                     "stresses, simulating an oceanic boundary layer that develops a deepening mixed layer.")
+description =
+"""
+Run simulations of a stratified fluid forced by surface heat fluxes and wind
+stresses, simulating an oceanic boundary layer that develops a deepening mixed layer.
+"""
 
-@add_arg_table s begin
+args = ArgParseSettings(description=description)
+
+@add_arg_table args begin
     "--horizontal-resolution", "-N"
         arg_type=Int
         required=true
@@ -63,7 +68,7 @@ s = ArgParseSettings(description="Run simulations of a stratified fluid forced b
         help="Base directory to save output to."
 end
 
-parsed_args = parse_args(s)
+parsed_args = parse_args(args)
 parse_int(n) = isinteger(n) ? Int(n) : n
 Nh, Nz, L, H, Q, τ, ∂T∂z, days = [parsed_args[k] for k in ["Nh", "Nz", "L", "H", "Q", "τ", "∂T∂z", "days"]]
 Nh, Nz, L, H, Q, τ, ∂T∂z, days = parse_int.([Nh, Nz, L, H, Q, τ, ∂T∂z, days])
@@ -93,7 +98,7 @@ Fθ = -Q / (ρ₀*cₚ)
 
 # Model parameters
 FT = Float64
-arch = CPU()
+arch = GPU()
 Nx, Ny, Nz = Nh, Nh, Nz
 Lx, Ly, Lz = L, L, H
 end_time = days * day
@@ -111,7 +116,7 @@ model = Model(
                coriolis = FPlane(FT, f=1e-4),
                buoyancy = SeawaterBuoyancy(FT),
                 closure = AnisotropicMinimumDissipation(FT),
-    boundary_conditions = BoundaryConditions(u=ubcs, T=Tbcs, S=Sbcs)
+    boundary_conditions = HorizontallyPeriodicSolutionBCs(u=ubcs, T=Tbcs, S=Sbcs)
 )
 
 # Set initial condition.
@@ -119,14 +124,14 @@ model = Model(
 T₀(x, y, z) = 20 + ∂T∂z * z + ε(1e-10) * exp(z/25)
 S₀(x, y, z) = T₀(x, y, z)
 
-set_ic!(model, T=T₀, S=S₀)
+set!(model, T=T₀, S=S₀)
 
 #####
 ##### Set up output writers and diagnostics
 #####
 
 model.diagnostics[:nan_checker] =
-    NaNChecker(model, frequency=1000, fields=Dict(:w => model.velocities.w)))
+    NaNChecker(model, frequency=1000, fields=Dict(:w => model.velocities.w))
 
 function init_save_parameters_and_bcs(file, model)
     file["parameters/density"] = ρ₀
@@ -159,15 +164,15 @@ model.output_writers[:field_writer] =
 
 Δtₚ = 10minute  # Time interval for computing and saving profiles.
 
-Up = HorizontalAverage(model, model.velocities.u;       return_type=Array)
-Vp = HorizontalAverage(model, model.velocities.v;       return_type=Array)
-Wp = HorizontalAverage(model, model.velocities.w;       return_type=Array)
-Tp = HorizontalAverage(model, model.tracers.T;          return_type=Array)
-Sp = HorizontalAverage(model, model.tracers.S;          return_type=Array)
-νp = HorizontalAverage(model, model.diffusivities.νₑ;   return_type=Array)
+Up = HorizontalAverage(model.velocities.u,     return_type=Array)
+Vp = HorizontalAverage(model.velocities.v,     return_type=Array)
+Wp = HorizontalAverage(model.velocities.w,     return_type=Array)
+Tp = HorizontalAverage(model.tracers.T,        return_type=Array)
+Sp = HorizontalAverage(model.tracers.S,        return_type=Array)
+νp = HorizontalAverage(model.diffusivities.νₑ, return_type=Array)
 
-κTp = HorizontalAverage(model, model.diffusivities.κₑ.T; return_type=Array)
-κSp = HorizontalAverage(model, model.diffusivities.κₑ.S; return_type=Array)
+κTp = HorizontalAverage(model.diffusivities.κₑ.T, return_type=Array)
+κSp = HorizontalAverage(model.diffusivities.κₑ.S, return_type=Array)
 
 u = model.velocities.u
 v = model.velocities.v
@@ -175,14 +180,14 @@ w = model.velocities.w
 T = model.tracers.T
 S = model.tracers.S
 
-uu = HorizontalAverage(u*u, model; return_type=Array)
-vv = HorizontalAverage(v*v, model; return_type=Array)
-ww = HorizontalAverage(w*w, model; return_type=Array)
-uv = HorizontalAverage(u*v, model; return_type=Array)
-uw = HorizontalAverage(u*w, model; return_type=Array)
-vw = HorizontalAverage(v*w, model; return_type=Array)
-wT = HorizontalAverage(w*T, model; return_type=Array)
-wS = HorizontalAverage(w*S, model; return_type=Array)
+uu = HorizontalAverage(u*u, model, return_type=Array)
+vv = HorizontalAverage(v*v, model, return_type=Array)
+ww = HorizontalAverage(w*w, model, return_type=Array)
+uv = HorizontalAverage(u*v, model, return_type=Array)
+uw = HorizontalAverage(u*w, model, return_type=Array)
+vw = HorizontalAverage(v*w, model, return_type=Array)
+wT = HorizontalAverage(w*T, model, return_type=Array)
+wS = HorizontalAverage(w*S, model, return_type=Array)
 
 profiles = Dict(
      :u => model -> Up(model),
