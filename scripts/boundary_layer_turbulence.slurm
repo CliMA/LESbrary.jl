@@ -12,9 +12,9 @@
 #SBATCH --mail-type=FAIL
 
 #SBATCH -J "Oceananigans"
-#SBATCH -p general
-#SBATCH -o $HOME/slurm_logs/slurm.%N.%j.out
-#SBATCH -e $HOME/slurm_logs/slurm.%N.%j.err
+#SBATCH -p any
+#SBATCH -o slurm.%N.%j_%x.out
+#SBATCH -e slurm.%N.%j_%x.err
 
 # LOAD MODULES, INSERT CODE, AND RUN YOUR PROGRAMS HERE
 module load openmpi/3.1.4 cuda/10.0

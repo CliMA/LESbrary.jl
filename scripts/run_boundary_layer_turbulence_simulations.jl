@@ -24,5 +24,6 @@ for Q in Qs, τ in τs, ∂T∂z in ∂T∂zs
         write(f, slurm_script)
     end
 
+    @info "sbatch $slurm_script_filename"
     run(`sbatch $slurm_script_filename`)
 end
