@@ -7,3 +7,8 @@ __pycache__/
 # Plots and movies
 *.png
 *.mp4
+
+# Generated scripts and log files
+*.slurm
+*.out
+*.err
