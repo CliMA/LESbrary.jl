@@ -20,4 +20,4 @@
 module load openmpi/3.1.4 cuda/10.0
 
 cd $HOME/LESbrary/
-julia --project simulation/ocean_convection.jl
+julia --project simulation/boundary_layer_turbulence_simple.jl
