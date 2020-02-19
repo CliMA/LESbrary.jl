@@ -30,9 +30,27 @@ ds3.close()
 
 ts = day * (0:days-1)
 zC = ds3.Z.values
+
+ℑτx = interpolate(ts, τx,   Gridded(Linear()))
+ℑτy = interpolate(ts, τy,   Gridded(Linear()))
+ℑQ  = interpolate(ts, Qnet, Gridded(Linear()))
+
 ℑU = interpolate((ts, -z), U, Gridded(Linear()))
 ℑV = interpolate((ts, -z), V, Gridded(Linear()))
 ℑΘ = interpolate((ts, -z), Θ, Gridded(Linear()))
 ℑS = interpolate((ts, -z), S, Gridded(Linear()))
 
+Nx = Ny = Nz = 32
+Lx = Ly = Lz = 100
+topology = (Periodic, Bounded, Bounded)
+grid = RegularCartesianGrid(topology=topology, size=(Nx, Ny, Nz) x=(0, Lx), y=(0, Ly), z=(-Lz, 0))
+
+u_bcs = UVelocityBoundaryConditions
+
+model = IncompressibleModel(
+    architecture = CPU(),
+    float_type = Float64,
+    grid = grid,
+    coriolis = FPlane(latitude=lat)
+)
 
