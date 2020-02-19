@@ -36,6 +36,12 @@ git-tree-sha1 = "bc779df8d73be70e4e05a63727d3a4dfb4c52b1f"
 uuid = "4c555306-a7a7-4459-81d9-ec55ddd5c99a"
 version = "0.1.5"
 
+[[AxisAlgorithms]]
+deps = ["LinearAlgebra", "Random", "SparseArrays", "WoodburyMatrices"]
+git-tree-sha1 = "a4d07a1c313392a77042855df46c5f534076fab9"
+uuid = "13072b0f-2c55-5437-9ae7-d433b7a33950"
+version = "1.0.0"
+
 [[BandedMatrices]]
 deps = ["ArrayLayouts", "FillArrays", "LinearAlgebra", "Random", "SparseArrays"]
 git-tree-sha1 = "03b21fb83f9e0b13f99c407810cd3b6cac293a1d"
@@ -322,6 +328,12 @@ version = "2018.0.3+0"
 deps = ["Markdown"]
 uuid = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
 
+[[Interpolations]]
+deps = ["AxisAlgorithms", "LinearAlgebra", "OffsetArrays", "Random", "Ratios", "SharedArrays", "SparseArrays", "StaticArrays", "WoodburyMatrices"]
+git-tree-sha1 = "c7579b2617b513d8e6eb9f4b91837eefe7080af8"
+uuid = "a98d9a8b-a2ab-59e6-89dd-64a1c18fca59"
+version = "0.12.8"
+
 [[IterativeSolvers]]
 deps = ["LinearAlgebra", "Printf", "Random", "RecipesBase", "SparseArrays", "Test"]
 git-tree-sha1 = "5687f68018b4f14c0da54d402bb23eecaec17f37"
@@ -516,6 +528,12 @@ git-tree-sha1 = "441e6fc35597524ada7f85e13df1f4e10137d16f"
 uuid = "e6cf234a-135c-5ec9-84dd-332b85af5143"
 version = "1.4.0"
 
+[[Ratios]]
+deps = ["Compat"]
+git-tree-sha1 = "cdbbe0f350581296f3a2e3e7a91b214121934407"
+uuid = "c84ed2f1-dad5-54f0-aa8e-dbefe2724439"
+version = "0.3.1"
+
 [[RecipesBase]]
 git-tree-sha1 = "7bdce29bc9b2f5660a6e5e64d64d91ec941f6aa2"
 uuid = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
@@ -699,6 +717,12 @@ deps = ["LightGraphs"]
 git-tree-sha1 = "35060f8047a2b79bdc8e4961bbbd2b7e30e62709"
 uuid = "19fa3120-7c27-5ec5-8db8-b0b0aa330d6f"
 version = "0.1.1"
+
+[[WoodburyMatrices]]
+deps = ["LinearAlgebra", "SparseArrays"]
+git-tree-sha1 = "bbb9f7fd6fbdd9582e77c0b698312c543de5eb71"
+uuid = "efce3f68-66dc-5838-9240-27a6d6f5f9b6"
+version = "0.5.0"
 
 [[ZygoteRules]]
 deps = ["MacroTools"]
