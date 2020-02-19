@@ -12,10 +12,27 @@ sose = pyimport("sose_data")
 ds2 = sose.open_sose_2d_datasets("/home/alir/cnhlab004/bsose_i122/")
 ds3 = sose.open_sose_3d_datasets("/home/alir/cnhlab004/bsose_i122/")
 
-t = sose.get_times(ds2)
+date_times = sose.get_times(ds2)
 
-lat, lon = 190, -55
-τx = sose.get_time_series(ds2, "oceTAUX", lat, lon)
-τy = sose.get_time_series(ds2, "oceTAUY", lat, lon)
+lat, lon, days = 190, -55, 10
 
-ds.close()
+τx   = sose.get_scalar_time_series(ds2, "oceTAUX", lat, lon)
+τy   = sose.get_scalar_time_series(ds2, "oceTAUY", lat, lon)
+Qnet = sose.get_scalar_time_series(ds2, "oceQnet", lat, lon)
+
+U = sose.get_profile_time_series(ds3, "UVEL",  lat, lon, days)
+V = sose.get_profile_time_series(ds3, "VVEL",  lat, lon, days)
+Θ = sose.get_profile_time_series(ds3, "THETA", lat, lon, days)
+S = sose.get_profile_time_series(ds3, "SALT",  lat, lon, days)
+
+ds2.close()
+ds3.close()
+
+ts = day * (0:days-1)
+zC = ds3.Z.values
+ℑU = interpolate((ts, -z), U, Gridded(Linear()))
+ℑV = interpolate((ts, -z), V, Gridded(Linear()))
+ℑΘ = interpolate((ts, -z), Θ, Gridded(Linear()))
+ℑS = interpolate((ts, -z), S, Gridded(Linear()))
+
+
