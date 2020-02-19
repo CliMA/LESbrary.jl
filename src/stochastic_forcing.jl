@@ -3,9 +3,9 @@ using Polynomials
 using Interpolations
 
 """
-    stochastic_wind_forcing(τ::Number; σ, Δt, T)
+    stochastic_forcing(τ::Number; σ, Δt, T)
 
-Generate stochastic wind forcing with mean `τ`, standard deviation `σ`, time step `Δt`,
+Generate stochastic forcing with mean `τ`, standard deviation `σ`, time step `Δt`,
 and length `T`.
 """
 function stochastic_wind_forcing(τ::Number; σ, Δt, T)
@@ -19,15 +19,15 @@ function stochastic_wind_forcing(τ::Number; σ, Δt, T)
 end
 
 """
-    stochastic_wind_forcing(τ::AbstractArray, times; σ, Δt, T)
+    stochastic_forcing(τ::AbstractArray, times; σ, Δt, T)
 
-Generate stochastic wind forcing on top of time series `τ`, standard deviation `σ`, time
+Generate stochastic forcing on top of time series `τ` with standard deviation `σ`, time
 step `Δt`, and length `T`.
 """
 function stochastic_wind_forcing(τ::AbstractArray, times; σ, Δt, T)
     # FIXME: Gotta ensure that mean(τ′) = mean(τ).
     t, τ′ = stochastic_wind_forcing(τ[1], σ=σ, Δt=Δt, T=T)
-    ℑτ = LinearInterpolation(times, τ, extrapolation_bc=Line())
+    ℑτ = LinearInterpolation(times, τ, extrapolation_bc=Flat())
     @. τ′ = ℑτ(t) + τ′ 
     return t, τ′
 end
