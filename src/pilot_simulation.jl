@@ -69,11 +69,25 @@ grid = RegularCartesianGrid(topology=topology, size=(Nx, Ny, Nz) x=(0, Lx), y=(0
 
 forcings = ModelForcing(u=Fu′, v=Fv′, w=Fw′, T=Fθ′, S=Fs′)
 
+# Physical constants.
+const ρ₀ = 1027.0  # Density of seawater [kg/m³]
+const cₚ = 4000.0  # Specific heat capacity of seawater at constant pressure [J/(kg·K)]
+
+u′_bcs = UVelocityBoundaryConditions(grid, top=FluxBoundaryCondition(τx / ρ₀))
+v′_bcs = UVelocityBoundaryConditions(grid, top=FluxBoundaryCondition(τy / ρ₀))
+θ′_bcs = TracerBoundaryConditions(grid, top=FluxBoundaryCondition(Qnet / ρ / cₚ))
+s′_bcs = TracerBoundaryConditions(grid, top=FluxBoundaryConditions(surf_S_flux))  # FIXME???
+
+arch = CPU()
+FT = Float64
+
 model = IncompressibleModel(
-    architecture = CPU(),
-    float_type = Float64,
+    architecture = arch,
+    float_type = FT,
     grid = grid,
+    tracrs = (:T, :S),
     coriolis = FPlane(latitude=lat),
+    boundary_conditions = (u=u′_bcs, v=v′_bcs, T=θ′_bcs, S=s′_bcs),
     forcing = forcings
 )
 
