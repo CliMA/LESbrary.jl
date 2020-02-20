@@ -1,7 +1,6 @@
 using PyCall
-using Interpolations
 
-using Interpolations: gradient
+using Interpolations: interpolate, gradient, Gridded, Linear
 const ∇ = gradient
 
 using Oceananigans
@@ -20,8 +19,8 @@ sys.path.insert(0, ".")
 
 sose = pyimport("sose_data")
 
-# ds2 = sose.open_sose_2d_datasets("/home/alir/cnhlab004/bsose_i122/")
-# ds3 = sose.open_sose_3d_datasets("/home/alir/cnhlab004/bsose_i122/")
+ds2 = sose.open_sose_2d_datasets("/home/alir/cnhlab004/bsose_i122/")
+ds3 = sose.open_sose_3d_datasets("/home/alir/cnhlab004/bsose_i122/")
 
 date_times = sose.get_times(ds2)
 
@@ -30,10 +29,10 @@ lat, lon, days = 190, -55, 10
 arch = CPU()
 FT = Float64
 
-τx = sose.get_scalar_time_series(ds2, "oceTAUX",  lat, lon, days) |> Array{FT}
-τy = sose.get_scalar_time_series(ds2, "oceTAUY",  lat, lon, days) |> Array{FT}
-Qθ = sose.get_scalar_time_series(ds2, "oceQnet",  lat, lon, days) |> Array{FT}
-Qs = sose.get_scalar_time_series(ds2, "surfSflx", lat, lon, days) |> Array{FT}
+τx = sose.get_scalar_time_series(ds2, "oceTAUX", lat, lon, days) |> Array{FT}
+τy = sose.get_scalar_time_series(ds2, "oceTAUY", lat, lon, days) |> Array{FT}
+Qθ = sose.get_scalar_time_series(ds2, "oceQnet", lat, lon, days) |> Array{FT}
+Qs = sose.get_scalar_time_series(ds2, "SFLUX",   lat, lon, days) |> Array{FT}
 
 U = sose.get_profile_time_series(ds3, "UVEL",  lat, lon, days) |> Array{FT}
 V = sose.get_profile_time_series(ds3, "VVEL",  lat, lon, days) |> Array{FT}
