@@ -45,12 +45,35 @@ Lx = Ly = Lz = 100
 topology = (Periodic, Bounded, Bounded)
 grid = RegularCartesianGrid(topology=topology, size=(Nx, Ny, Nz) x=(0, Lx), y=(0, Ly), z=(-Lz, 0))
 
-u_bcs = UVelocityBoundaryConditions
+# Fu′ = - w′∂z(U) - U∂x(u′) - V∂y(u′)
+# FIXME? Do we need to use the flux form operator ∇·(Uũ′) instead of ũ′·∇U ?
+@inline Fu′(i, j, k, grid, t, ũ′, c′, p) =
+    @inbounds - ũ′.w[i, j, k] * ∂zᵃᵃᶠ(i, j, k, grid, p.U) - p.U[k] * ∂xᶜᵃᵃ(i, j, k, grid, ũ′.u) - p.V[k] * ∂yᵃᶜᵃ(i, j, k, grid, ũ′.u)
+
+# Fv′ = - w′∂z(V) - U∂x(v′) - V∂y(v′)
+@inline Fv′(i, j, k, grid, t, ũ′, c′, p) =
+@inbounds - ũ′.w[i, j, k] * ∂zᵃᵃᶠ(i, j, k, grid, p.V) - p.U[k] * ∂xᶜᵃᵃ(i, j, k, grid, ũ′.v) - p.V[k] * ∂yᵃᶜᵃ(i, j, k, grid, ũ′.v)
+
+# Fw′ = - U∂x(w′) - V∂y(w′)
+@inline Fw′(i, j, k, grid, t, ũ′, c′, p) =
+    @inbounds - p.U[k] * ∂xᶜᵃᵃ(i, j, k, grid, ũ′.u) - p.V[k] * ∂yᵃᶜᵃ(i, j, k, grid, ũ′.v)
+
+# Fθ′ = - ∂t(Θ) - U∂x(θ′) - V∂y(θ′) - w′∂z(Θ)
+# FIXME? Do we need to include the ∂t(Θ) terms?
+@inline Fθ′(i, j, k, grid, t, ũ′, c′, p) =
+    @inbounds - p.U[k] * ∂xᶠᵃᵃ(i, j, k, grid, c′.T) - p.V[k] * ∂yᵃᶜᵃ(i, j, k, grid, ũ′.v) - ũ′.w[i, j, k] * ∂zᵃᵃᶠ(i, j, k, grid, p.Θ)
+
+# Fs′ = - ∂t(S) - U∂x(s′) - V∂y(s′) - w′∂z(S)
+@inline Fs′(i, j, k, grid, t, ũ′, c′, p) =
+    @inbounds - p.U[k] * ∂xᶠᵃᵃ(i, j, k, grid, c′.S) - p.V[k] * ∂yᵃᶜᵃ(i, j, k, grid, ũ′.v) - ũ′.w[i, j, k] * ∂zᵃᵃᶠ(i, j, k, grid, p.S)
+
+forcings = ModelForcing(u=Fu′, v=Fv′, w=Fw′, T=Fθ′, S=Fs′)
 
 model = IncompressibleModel(
     architecture = CPU(),
     float_type = Float64,
     grid = grid,
-    coriolis = FPlane(latitude=lat)
+    coriolis = FPlane(latitude=lat),
+    forcing = forcings
 )
 
