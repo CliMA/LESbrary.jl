@@ -14,6 +14,10 @@ import sys
 sys.path.insert(0, ".")
 """
 
+#####
+##### Load large-scale (base state) solution from SOSE
+#####
+
 sose = pyimport("sose_data")
 
 # ds2 = sose.open_sose_2d_datasets("/home/alir/cnhlab004/bsose_i122/")
@@ -39,6 +43,10 @@ S = sose.get_profile_time_series(ds3, "SALT",  lat, lon, days) |> Array{FT}
 ds2.close()
 ds3.close()
 
+#####
+##### Create linear interpolations for base state solution
+#####
+
 ts = day * (0:days-1) |> collect
 zC = ds3.Z.values
 
@@ -59,10 +67,20 @@ S = reverse(S, dims=2)
 ℑΘ = interpolate((ts, zC), Θ, Gridded(Linear()))
 ℑS = interpolate((ts, zC), S, Gridded(Linear()))
 
+#####
+##### Set up the grid
+#####
+
 Nx = Ny = Nz = 32
 Lx = Ly = Lz = 100
 topology = (Periodic, Bounded, Bounded)
 grid = RegularCartesianGrid(topology=topology, size=(Nx, Ny, Nz) x=(0, Lx), y=(0, Ly), z=(-Lz, 0))
+
+#####
+##### Set up forcing forcings to
+#####   1. include mean flow interactions in the momentum equation, and
+#####   2. weakly relax tracer fields to the base state.
+#####
 
 # Fu′ = - w′∂z(U) - U∂x(u′) - V∂y(u′)
 # FIXME? Do we need to use the flux form operator ∇·(Uũ′) instead of ũ′·∇U ?
@@ -96,6 +114,12 @@ week = 7day
 
 forcings = ModelForcing(u=Fu′, v=Fv′, w=Fw′, T=Fθ′, S=Fs′)
 
+#####
+##### Set up boundary conditions to
+#####   1. impose wind stresses at the ocean surface, and
+#####   2. impose heat and salt fluxes at the ocean surface.
+#####
+
 # Physical constants.
 const ρ₀ = 1027.0  # Density of seawater [kg/m³]
 const cₚ = 4000.0  # Specific heat capacity of seawater at constant pressure [J/(kg·K)]
@@ -109,9 +133,6 @@ u′_bcs = UVelocityBoundaryConditions(grid, top=FluxBoundaryCondition(wind_stre
 v′_bcs = UVelocityBoundaryConditions(grid, top=FluxBoundaryCondition(wind_stress_y))
 θ′_bcs =    TracerBoundaryConditions(grid, top=FluxBoundaryCondition(heat_flux))
 s′_bcs =    TracerBoundaryConditions(grid, top=FluxBoundaryConditions(salt_flux))
-
-arch = CPU()
-FT = Float64
 
 model = IncompressibleModel(
     architecture = arch,
