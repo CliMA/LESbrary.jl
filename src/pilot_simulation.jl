@@ -72,8 +72,8 @@ S = reverse(S, dims=2)
 
 Nx = Ny = Nz = 32
 Lx = Ly = Lz = 100
-topology = (Periodic, Bounded, Bounded)
-grid = RegularCartesianGrid(topology=topology, size=(Nx, Ny, Nz) x=(0, Lx), y=(0, Ly), z=(-Lz, 0))
+topology = (Periodic, Periodic, Bounded)
+grid = RegularCartesianGrid(topology=topology, size=(Nx, Ny, Nz), x=(0, Lx), y=(0, Ly), z=(-Lz, 0))
 
 #####
 ##### Set up forcing forcings to
@@ -137,7 +137,7 @@ model = IncompressibleModel(
     architecture = arch,
     float_type = FT,
     grid = grid,
-    tracrs = (:T, :S),
+    tracers = (:T, :S),
     coriolis = FPlane(latitude=lat),
     boundary_conditions = (u=u′_bcs, v=v′_bcs, T=θ′_bcs, S=s′_bcs),
     forcing = forcings,
