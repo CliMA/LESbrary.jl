@@ -38,15 +38,15 @@ def get_times(ds):
     ts = [datetime.utcfromtimestamp((dt - np.datetime64("1970-01-01T00:00:00Z")) / np.timedelta64(1, "s")) for dt in ts]
     return ts
 
-def get_scalar_time_series(ds, var, lat, lon):
+def get_scalar_time_series(ds, var, lat, lon, days):
     logging.info(f"Getting time series of {var} at (lat={lat}°N, lon={lon}°E)...")
     with ProgressBar():
         if var in ["UVEL", "oceTAUX"]:
-            time_series = ds[var].sel(XG=lon, YC=lat, method="nearest").values
+            time_series = ds[var].isel(time=slice(0, days)).sel(XG=lon, YC=lat, method="nearest").values
         elif var in ["VVEL", "oceTAUY"]:
-            time_series = ds[var].sel(XC=lon, YG=lat, method="nearest").values
+            time_series = ds[var].isel(time=slice(0, days)).sel(XC=lon, YG=lat, method="nearest").values
         else:
-            time_series = ds[var].sel(XC=lon, YC=lat, method="nearest").values
+            time_series = ds[var].isel(time=slice(0, days)).sel(XC=lon, YC=lat, method="nearest").values
     return time_series
 
 def get_profile_time_series(ds, var, lat, lon, days):
