@@ -131,7 +131,7 @@ const cₚ = 4000.0  # Specific heat capacity of seawater at constant pressure [
 u′_bcs = UVelocityBoundaryConditions(grid, top=FluxBoundaryCondition(wind_stress_x))
 v′_bcs = UVelocityBoundaryConditions(grid, top=FluxBoundaryCondition(wind_stress_y))
 θ′_bcs =    TracerBoundaryConditions(grid, top=FluxBoundaryCondition(heat_flux))
-s′_bcs =    TracerBoundaryConditions(grid, top=FluxBoundaryConditions(salt_flux))
+s′_bcs =    TracerBoundaryConditions(grid, top=FluxBoundaryCondition(salt_flux))
 
 model = IncompressibleModel(
     architecture = arch,
