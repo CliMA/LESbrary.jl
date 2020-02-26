@@ -1,9 +1,13 @@
+import Dates
 using PyCall
 
 using Interpolations: interpolate, gradient, Gridded, Linear
 const ∇ = gradient
 
 using Oceananigans
+using Oceananigans.Operators
+using Oceananigans.Diagnostics
+using Oceananigans.OutputWriters
 using Oceananigans.Utils
 
 # Needed to import local modules
@@ -71,9 +75,10 @@ S = reverse(S, dims=2)
 #####
 
 Nx = Ny = Nz = 32
-Lx = Ly = Lz = 100
+Lx = Ly = 500.0
+Lz = 2Lx
 topology = (Periodic, Periodic, Bounded)
-grid = RegularCartesianGrid(topology=topology, size=(Nx, Ny, Nz), x=(0, Lx), y=(0, Ly), z=(-Lz, 0))
+grid = RegularCartesianGrid(topology=topology, size=(Nx, Ny, Nz), x=(0.0, Lx), y=(0.0, Ly), z=(-Lz, 0.0))
 
 #####
 ##### Set up forcing forcings to
@@ -123,15 +128,19 @@ forcings = ModelForcing(u=Fu′, v=Fv′, w=Fw′, T=Fθ′, S=Fs′)
 const ρ₀ = 1027.0  # Density of seawater [kg/m³]
 const cₚ = 4000.0  # Specific heat capacity of seawater at constant pressure [J/(kg·K)]
 
-@inline wind_stress_x(i, j, grid, t, ũ′, c′, p) = p.ℑτx(t) / ρ₀
-@inline wind_stress_y(i, j, grid, t, ũ′, c′, p) = p.ℑτy(t) / ρ₀
-@inline     heat_flux(i, j, grid, t, ũ′, c′, p) = p.ℑQθ(t) / ρ₀ / cₚ
-@inline     salt_flux(i, j, grid, t, ũ′, c′, p) = p.ℑQs(t)  # FIXME?
+@inline wind_stress_x(i, j, grid, t, I, ũ′, c′, p) = p.ℑτx(t) / ρ₀
+@inline wind_stress_y(i, j, grid, t, I, ũ′, c′, p) = p.ℑτy(t) / ρ₀
+@inline     heat_flux(i, j, grid, t, I, ũ′, c′, p) = p.ℑQθ(t) / ρ₀ / cₚ
+@inline     salt_flux(i, j, grid, t, I, ũ′, c′, p) = p.ℑQs(t)  # FIXME?
 
 u′_bcs = UVelocityBoundaryConditions(grid, top=FluxBoundaryCondition(wind_stress_x))
 v′_bcs = UVelocityBoundaryConditions(grid, top=FluxBoundaryCondition(wind_stress_y))
 θ′_bcs =    TracerBoundaryConditions(grid, top=FluxBoundaryCondition(heat_flux))
 s′_bcs =    TracerBoundaryConditions(grid, top=FluxBoundaryCondition(salt_flux))
+
+#####
+##### Model setup
+#####
 
 model = IncompressibleModel(
     architecture = arch,
@@ -143,3 +152,112 @@ model = IncompressibleModel(
     forcing = forcings,
     parameters = (ℑτx=ℑτx, ℑτy=ℑτy, ℑQθ=ℑQθ, ℑQs=ℑQs, ℑU=ℑU, ℑV=ℑV, ℑΘ=ℑΘ, ℑS=ℑS, μ=μ)
 )
+
+#####
+##### Setting up diagnostics
+#####
+
+nan_checker = NaNChecker(model, frequency=1000, fields=Dict(:w => model.velocities.w))
+
+Δtₚ = 10minute  # Time interval for computing and saving profiles.
+
+Up = HorizontalAverage(model.velocities.u,     return_type=Array)
+Vp = HorizontalAverage(model.velocities.v,     return_type=Array)
+Wp = HorizontalAverage(model.velocities.w,     return_type=Array)
+Tp = HorizontalAverage(model.tracers.T,        return_type=Array)
+Sp = HorizontalAverage(model.tracers.S,        return_type=Array)
+νp = HorizontalAverage(model.diffusivities.νₑ, return_type=Array)
+
+κTp = HorizontalAverage(model.diffusivities.κₑ.T, return_type=Array)
+κSp = HorizontalAverage(model.diffusivities.κₑ.S, return_type=Array)
+
+u, v, w = model.velocities
+T, S = model.tracers
+
+uu = HorizontalAverage(u*u, model, return_type=Array)
+vv = HorizontalAverage(v*v, model, return_type=Array)
+ww = HorizontalAverage(w*w, model, return_type=Array)
+uv = HorizontalAverage(u*v, model, return_type=Array)
+uw = HorizontalAverage(u*w, model, return_type=Array)
+vw = HorizontalAverage(v*w, model, return_type=Array)
+wT = HorizontalAverage(w*T, model, return_type=Array)
+wS = HorizontalAverage(w*S, model, return_type=Array)
+
+#####
+##### Setting up output writers
+#####
+
+filename_prefix = "lesbrary_lat$(lat)_lon$(lon)_days$(days)"
+
+global_attributes = Dict(
+    "creator" => "CliMA Ocean LESbrary project",
+    "creation time" => Dates.now(),
+    "lat" => lat, "lon" => lon
+)
+
+output_attributes = Dict(
+    "ν"  => Dict("longname" => "Eddy viscosity", "units" => "m²/s"),
+    "κT" => Dict("longname" => "Eddy diffusivity of conservative temperature", "units" => "m²/s"),
+    "κS" => Dict("longname" => "Eddy diffusivity of absolute salinity", "units" => "m²/s"),
+    "uu" => Dict("longname" => "Velocity covariance between u and u", "units" => "m²/s²"),
+    "vv" => Dict("longname" => "Velocity covariance between v and v", "units" => "m²/s²"),
+    "ww" => Dict("longname" => "Velocity covariance between w and w", "units" => "m²/s²"),
+    "uv" => Dict("longname" => "Velocity covariance between u and v", "units" => "m²/s²"),
+    "uw" => Dict("longname" => "Velocity covariance between u and w", "units" => "m²/s²"),
+    "vw" => Dict("longname" => "Velocity covariance between v and w", "units" => "m²/s²"),
+    "wT" => Dict("longname" => "Vertical turbulent heat flux", "units" => "K*m/s"),
+    "wS" => Dict("longname" => "Vertical turbulent salinity flux", "units" => "g/kg*m/s")
+)
+
+fields = Dict(
+    "u"  => model.velocities.u,
+    "v"  => model.velocities.v,
+    "w"  => model.velocities.w,
+    "T"  => model.tracers.T,
+    "S"  => model.tracers.S,
+    "ν"  => model.diffusivities.νₑ,
+    "κT" => model.diffusivities.κₑ.T,
+    "κS" => model.diffusivities.κₑ.S
+)
+
+field_output_writer =
+    NetCDFOutputWriter(model, fields, filename=filename_prefix * "_fields.nc", interval=6hour,
+                      global_attributes=global_attributes, output_attributes=output_attributes)
+
+function horizontal_average_interior(model, H)
+    Nz, Hz = model.grid.Nz, model.grid.Hz
+    _horizontal_average_interior(model) = H(model)[Hz:end-Hz]
+    return _horizontal_average_interior
+end
+
+profiles = Dict(
+    "u" => Up, "v" => Vp, "w" => Wp,
+    "T" => Tp, "S" => Sp,
+    "ν" => νp, "κT" => κTp, "κS" => κSp,
+    "uu" => uu, "vv" => vv, "ww" => ww,
+    "uv" => uv, "uw" => uw, "vw" => vw,
+    "wT" => wT, "wS" => wS
+)
+
+profile_dims = Dict(k => "zC" for k in keys(profiles))
+profile_dims["ww"] = "zF"
+
+profile_output_writer =
+    NetCDFOutputWriter(model, profiles, filename=filename_prefix * "_profiles.nc", interval=6hour,
+                      global_attributes=global_attributes, output_attributes=output_attributes,
+                      dimensions=profile_dims)
+
+large_scale_outputs = Dict(
+    "τx" => model -> ℑτx.(model.clock.time),
+    "τy" => model -> ℑτy.(model.clock.time),
+    "QT" => model -> ℑQθ.(model.clock.time),
+    "QS" => model -> ℑQs.(model.clock.time),
+    "u" => model -> ℑU.(model.clock.time, model.grid.zC),
+    "v" => model -> ℑV.(model.clock.time, model.grid.zC),
+    "T" => model -> ℑΘ.(model.clock.time, model.grid.zC),
+    "S" => model -> ℑS.(model.clock.time, model.grid.zC)
+)
+
+simulation = Simulation(model, Δt=..., stop_time=days*day)
+
+simulation.output_writers[:fields] = field_output_writer
