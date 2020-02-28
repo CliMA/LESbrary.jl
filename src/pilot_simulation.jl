@@ -1,4 +1,5 @@
 import Dates
+using Printf
 using PyCall
 
 using Interpolations: interpolate, gradient, Gridded, Linear
@@ -235,26 +236,26 @@ field_output_writer =
 #####
 
 profiles = Dict(
-    "u"  => model ->  Up(model)[model.grid.Hz:end-model.grid.Hz],
-    "v"  => model ->  Vp(model)[model.grid.Hz:end-model.grid.Hz],
-    "w"  => model ->  Wp(model)[model.grid.Hz:end-model.grid.Hz],
-    "T"  => model ->  Tp(model)[model.grid.Hz:end-model.grid.Hz],
-    "S"  => model ->  Sp(model)[model.grid.Hz:end-model.grid.Hz],
-    "ν"  => model ->  νp(model)[model.grid.Hz:end-model.grid.Hz],
-    "κT" => model -> κTp(model)[model.grid.Hz:end-model.grid.Hz],
-    "κS" => model -> κSp(model)[model.grid.Hz:end-model.grid.Hz],
-    "uu" => model ->  uu(model)[model.grid.Hz:end-model.grid.Hz],
-    "vv" => model ->  vv(model)[model.grid.Hz:end-model.grid.Hz],
-    "ww" => model ->  ww(model)[model.grid.Hz:end-model.grid.Hz],
-    "uv" => model ->  uv(model)[model.grid.Hz:end-model.grid.Hz],
-    "uw" => model ->  uw(model)[model.grid.Hz:end-model.grid.Hz],
-    "vw" => model ->  vw(model)[model.grid.Hz:end-model.grid.Hz],
-    "wT" => model ->  wT(model)[model.grid.Hz:end-model.grid.Hz],
-    "wS" => model ->  wS(model)[model.grid.Hz:end-model.grid.Hz]
+    "u"  => model ->  Up(model)[1+model.grid.Hz:end-model.grid.Hz],
+    "v"  => model ->  Vp(model)[1+model.grid.Hz:end-model.grid.Hz],
+    "w"  => model ->  Wp(model)[1+model.grid.Hz:end-model.grid.Hz],
+    "T"  => model ->  Tp(model)[1+model.grid.Hz:end-model.grid.Hz],
+    "S"  => model ->  Sp(model)[1+model.grid.Hz:end-model.grid.Hz],
+    "ν"  => model ->  νp(model)[1+model.grid.Hz:end-model.grid.Hz],
+    "κT" => model -> κTp(model)[1+model.grid.Hz:end-model.grid.Hz],
+    "κS" => model -> κSp(model)[1+model.grid.Hz:end-model.grid.Hz],
+    "uu" => model ->  uu(model)[1+model.grid.Hz:end-model.grid.Hz],
+    "vv" => model ->  vv(model)[1+model.grid.Hz:end-model.grid.Hz],
+    "ww" => model ->  ww(model)[1+model.grid.Hz:end-model.grid.Hz],
+    "uv" => model ->  uv(model)[1+model.grid.Hz:end-model.grid.Hz],
+    "uw" => model ->  uw(model)[1+model.grid.Hz:end-model.grid.Hz],
+    "vw" => model ->  vw(model)[1+model.grid.Hz:end-model.grid.Hz],
+    "wT" => model ->  wT(model)[1+model.grid.Hz:end-model.grid.Hz],
+    "wS" => model ->  wS(model)[1+model.grid.Hz:end-model.grid.Hz]
 )
 
 profile_dims = Dict(k => ("zC",) for k in keys(profiles))
-profile_dims["ww"] = ("zF",)
+profile_dims["w"] = ("zF",)
 
 profile_output_writer =
     NetCDFOutputWriter(model, profiles, filename=filename_prefix * "_profiles.nc", interval=10minute,
@@ -291,6 +292,8 @@ large_scale_output_writer =
 ##### Set up and run simulation
 #####
 
+wizard = TimeStepWizard(cfl=0.2, Δt=1.0, max_change=1.2, max_Δt=10.0)
+
 # CFL utilities for reporting stability criterions.
 cfl = AdvectiveCFL(wizard)
 dcfl = DiffusiveCFL(wizard)
@@ -315,8 +318,6 @@ function print_progress(simulation)
     @printf("[%06.2f%%] i: %d, t: %.3f days, umax: (%.2e, %.2e, %.2e) m/s, CFL: %.2e, νκmax: (%.2e, %.2e), νκCFL: %.2e, next Δt: %.2e s\n",
             progress, i, t / day, umax, vmax, wmax, cfl(model), νmax, κmax, dcfl(model), simulation.Δt.Δt)
 end
-
-wizard = TimeStepWizard(cfl=0.2, Δt=1.0, max_change=1.2, max_Δt=10.0)
 
 simulation = Simulation(model, Δt=wizard, stop_time=600, progress_frequency=20, progress=print_progress)
 
