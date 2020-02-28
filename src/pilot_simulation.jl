@@ -77,7 +77,7 @@ S = reverse(S, dims=2)
 
 Nx = Ny = 32
 Nz = 2Nx
-Lx = Ly = 500.0
+Lx = Ly = 1000.0
 Lz = 2Lx
 topology = (Periodic, Periodic, Bounded)
 grid = RegularCartesianGrid(topology=topology, size=(Nx, Ny, Nz), x=(0.0, Lx), y=(0.0, Ly), z=(-Lz, 0.0))
@@ -132,8 +132,8 @@ const cₚ = 4000.0  # Specific heat capacity of seawater at constant pressure [
 
 @inline wind_stress_x(i, j, grid, t, I, ũ′, c′, p) = p.ℑτx(t) / ρ₀
 @inline wind_stress_y(i, j, grid, t, I, ũ′, c′, p) = p.ℑτy(t) / ρ₀
-@inline     heat_flux(i, j, grid, t, I, ũ′, c′, p) = p.ℑQθ(t) / ρ₀ / cₚ
-@inline     salt_flux(i, j, grid, t, I, ũ′, c′, p) = - p.ℑQs(t) / ρ₀  # Minus sign because a freshwater flux would decrease salinity.
+@inline     heat_flux(i, j, grid, t, I, ũ′, c′, p) = - p.ℑQθ(t) / ρ₀ / cₚ
+@inline     salt_flux(i, j, grid, t, I, ũ′, c′, p) =   p.ℑQs(t) / ρ₀  # Minus sign because a freshwater flux would decrease salinity.
 
 u′_bcs = UVelocityBoundaryConditions(grid, top=FluxBoundaryCondition(wind_stress_x))
 v′_bcs = UVelocityBoundaryConditions(grid, top=FluxBoundaryCondition(wind_stress_y))
@@ -168,7 +168,7 @@ W₀(x, y, z) = ε(1e-10)
 Θ₀(x, y, z) = ℑΘ(0, z)
 S₀(x, y, z) = ℑS(0, z)
 
-Oceananigans.set!(model, u=U₀, v=V₀, T=Θ₀, S=S₀)
+Oceananigans.set!(model, u=U₀, v=V₀, w=W₀, T=Θ₀, S=S₀)
 
 #####
 ##### Setting up diagnostics
@@ -306,7 +306,7 @@ large_scale_output_writer =
 ##### Set up and run simulation
 #####
 
-wizard = TimeStepWizard(cfl=0.2, Δt=1.0, max_change=1.2, max_Δt=10.0)
+wizard = TimeStepWizard(cfl=0.2, Δt=1.0, max_change=1.2, max_Δt=5.0)
 
 # CFL utilities for reporting stability criterions.
 cfl = AdvectiveCFL(wizard)
