@@ -156,9 +156,19 @@ model = IncompressibleModel(
 )
 
 #####
-##### Setting up diagnostics
+##### Initial conditions
 #####
 
+U₀(x, y, z) = ℑU(0, z)
+V₀(x, y, z) = ℑV(0, z)
+Θ₀(x, y, z) = ℑΘ(0, z)
+S₀(x, y, z) = ℑS(0, z)
+
+set!(model, u=U₀, v=V₀, T=Θ₀, S=S₀)
+
+#####
+##### Setting up diagnostics
+#####
 
 Up = HorizontalAverage(model.velocities.u,     return_type=Array)
 Vp = HorizontalAverage(model.velocities.v,     return_type=Array)
