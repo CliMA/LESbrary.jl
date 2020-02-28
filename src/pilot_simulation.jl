@@ -75,7 +75,8 @@ S = reverse(S, dims=2)
 ##### Set up the grid
 #####
 
-Nx = Ny = Nz = 32
+Nx = Ny = 32
+Nz = 2Nx
 Lx = Ly = 500.0
 Lz = 2Lx
 topology = (Periodic, Periodic, Bounded)
@@ -164,7 +165,7 @@ V₀(x, y, z) = ℑV(0, z)
 Θ₀(x, y, z) = ℑΘ(0, z)
 S₀(x, y, z) = ℑS(0, z)
 
-set!(model, u=U₀, v=V₀, T=Θ₀, S=S₀)
+Oceananigans.set!(model, u=U₀, v=V₀, T=Θ₀, S=S₀)
 
 #####
 ##### Setting up diagnostics
@@ -329,7 +330,7 @@ function print_progress(simulation)
             progress, i, t / day, umax, vmax, wmax, cfl(model), νmax, κmax, dcfl(model), simulation.Δt.Δt)
 end
 
-simulation = Simulation(model, Δt=wizard, stop_time=600, progress_frequency=20, progress=print_progress)
+simulation = Simulation(model, Δt=wizard, stop_time=1day, progress_frequency=20, progress=print_progress)
 
 simulation.output_writers[:fields] = field_output_writer
 simulation.output_writers[:profiles] = profile_output_writer
