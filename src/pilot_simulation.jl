@@ -149,6 +149,7 @@ model = IncompressibleModel(
     tracers = (:T, :S),
     coriolis = FPlane(latitude=lat),
     boundary_conditions = (u=u′_bcs, v=v′_bcs, T=θ′_bcs, S=s′_bcs),
+    closure = AnisotropicMinimumDissipation(),
     forcing = forcings,
     parameters = (ℑτx=ℑτx, ℑτy=ℑτy, ℑQθ=ℑQθ, ℑQs=ℑQs, ℑU=ℑU, ℑV=ℑV, ℑΘ=ℑΘ, ℑS=ℑS, μ=μ)
 )
@@ -157,17 +158,14 @@ model = IncompressibleModel(
 ##### Setting up diagnostics
 #####
 
-nan_checker = NaNChecker(model, frequency=1000, fields=Dict(:w => model.velocities.w))
-
-Δtₚ = 10minute  # Time interval for computing and saving profiles.
 
 Up = HorizontalAverage(model.velocities.u,     return_type=Array)
 Vp = HorizontalAverage(model.velocities.v,     return_type=Array)
 Wp = HorizontalAverage(model.velocities.w,     return_type=Array)
 Tp = HorizontalAverage(model.tracers.T,        return_type=Array)
 Sp = HorizontalAverage(model.tracers.S,        return_type=Array)
-νp = HorizontalAverage(model.diffusivities.νₑ, return_type=Array)
 
+νp  = HorizontalAverage(model.diffusivities.νₑ,   return_type=Array)
 κTp = HorizontalAverage(model.diffusivities.κₑ.T, return_type=Array)
 κSp = HorizontalAverage(model.diffusivities.κₑ.S, return_type=Array)
 
@@ -191,11 +189,15 @@ filename_prefix = "lesbrary_lat$(lat)_lon$(lon)_days$(days)"
 
 global_attributes = Dict(
     "creator" => "CliMA Ocean LESbrary project",
-    "creation time" => Dates.now(),
+    "creation time" => string(Dates.now()),
     "lat" => lat, "lon" => lon
 )
 
 output_attributes = Dict(
+    "τx" => Dict("longname" => "Wind stress in the x-direction", "units" => "N/m"),
+    "τy" => Dict("longname" => "Wind stress in the y-direction", "units" => "N/m"),
+    "QT" => Dict("longname" => "Net surface heat flux into the ocean (+=down), >0 increases theta", "units" => "W/m²"),
+    "QS" => Dict("longname" => "net surface Fresh-Water flux into the ocean (+=down), >0 decreases salinity", "units" => "kg/m²/s"),
     "ν"  => Dict("longname" => "Eddy viscosity", "units" => "m²/s"),
     "κT" => Dict("longname" => "Eddy diffusivity of conservative temperature", "units" => "m²/s"),
     "κS" => Dict("longname" => "Eddy diffusivity of absolute salinity", "units" => "m²/s"),
@@ -208,6 +210,10 @@ output_attributes = Dict(
     "wT" => Dict("longname" => "Vertical turbulent heat flux", "units" => "K*m/s"),
     "wS" => Dict("longname" => "Vertical turbulent salinity flux", "units" => "g/kg*m/s")
 )
+
+#####
+##### Fields output writer
+#####
 
 fields = Dict(
     "u"  => model.velocities.u,
@@ -224,40 +230,99 @@ field_output_writer =
     NetCDFOutputWriter(model, fields, filename=filename_prefix * "_fields.nc", interval=6hour,
                       global_attributes=global_attributes, output_attributes=output_attributes)
 
-function horizontal_average_interior(model, H)
-    Nz, Hz = model.grid.Nz, model.grid.Hz
-    _horizontal_average_interior(model) = H(model)[Hz:end-Hz]
-    return _horizontal_average_interior
-end
+#####
+##### Horizontal averages output writer
+#####
 
 profiles = Dict(
-    "u" => Up, "v" => Vp, "w" => Wp,
-    "T" => Tp, "S" => Sp,
-    "ν" => νp, "κT" => κTp, "κS" => κSp,
-    "uu" => uu, "vv" => vv, "ww" => ww,
-    "uv" => uv, "uw" => uw, "vw" => vw,
-    "wT" => wT, "wS" => wS
+    "u"  => model ->  Up(model)[model.grid.Hz:end-model.grid.Hz],
+    "v"  => model ->  Vp(model)[model.grid.Hz:end-model.grid.Hz],
+    "w"  => model ->  Wp(model)[model.grid.Hz:end-model.grid.Hz],
+    "T"  => model ->  Tp(model)[model.grid.Hz:end-model.grid.Hz],
+    "S"  => model ->  Sp(model)[model.grid.Hz:end-model.grid.Hz],
+    "ν"  => model ->  νp(model)[model.grid.Hz:end-model.grid.Hz],
+    "κT" => model -> κTp(model)[model.grid.Hz:end-model.grid.Hz],
+    "κS" => model -> κSp(model)[model.grid.Hz:end-model.grid.Hz],
+    "uu" => model ->  uu(model)[model.grid.Hz:end-model.grid.Hz],
+    "vv" => model ->  vv(model)[model.grid.Hz:end-model.grid.Hz],
+    "ww" => model ->  ww(model)[model.grid.Hz:end-model.grid.Hz],
+    "uv" => model ->  uv(model)[model.grid.Hz:end-model.grid.Hz],
+    "uw" => model ->  uw(model)[model.grid.Hz:end-model.grid.Hz],
+    "vw" => model ->  vw(model)[model.grid.Hz:end-model.grid.Hz],
+    "wT" => model ->  wT(model)[model.grid.Hz:end-model.grid.Hz],
+    "wS" => model ->  wS(model)[model.grid.Hz:end-model.grid.Hz]
 )
 
-profile_dims = Dict(k => "zC" for k in keys(profiles))
-profile_dims["ww"] = "zF"
+profile_dims = Dict(k => ("zC",) for k in keys(profiles))
+profile_dims["ww"] = ("zF",)
 
 profile_output_writer =
-    NetCDFOutputWriter(model, profiles, filename=filename_prefix * "_profiles.nc", interval=6hour,
+    NetCDFOutputWriter(model, profiles, filename=filename_prefix * "_profiles.nc", interval=10minute,
                       global_attributes=global_attributes, output_attributes=output_attributes,
                       dimensions=profile_dims)
+
+#####
+##### Large scale solution output writer
+#####
 
 large_scale_outputs = Dict(
     "τx" => model -> ℑτx.(model.clock.time),
     "τy" => model -> ℑτy.(model.clock.time),
     "QT" => model -> ℑQθ.(model.clock.time),
     "QS" => model -> ℑQs.(model.clock.time),
-    "u" => model -> ℑU.(model.clock.time, model.grid.zC),
-    "v" => model -> ℑV.(model.clock.time, model.grid.zC),
-    "T" => model -> ℑΘ.(model.clock.time, model.grid.zC),
-    "S" => model -> ℑS.(model.clock.time, model.grid.zC)
+     "u" => model ->  ℑU.(model.clock.time, model.grid.zC),
+     "v" => model ->  ℑV.(model.clock.time, model.grid.zC),
+     "T" => model ->  ℑΘ.(model.clock.time, model.grid.zC),
+     "S" => model ->  ℑS.(model.clock.time, model.grid.zC)
 )
 
-simulation = Simulation(model, Δt=..., stop_time=days*day)
+large_scale_dims = Dict(
+    "τx" => (), "τy" => (), "QT" => (), "QS" => (),
+    "u" => ("zC",), "v" => ("zC",), "T" => ("zC",), "S" => ("zC",)
+)
+
+
+large_scale_output_writer =
+    NetCDFOutputWriter(model, large_scale_outputs, filename=filename_prefix * "_large_scale.nc", interval=10minute,
+                      global_attributes=global_attributes, output_attributes=output_attributes,
+                      dimensions=large_scale_dims)
+
+#####
+##### Set up and run simulation
+#####
+
+# CFL utilities for reporting stability criterions.
+cfl = AdvectiveCFL(wizard)
+dcfl = DiffusiveCFL(wizard)
+
+function print_progress(simulation)
+    model = simulation.model
+    
+    # Calculate simulation progress in %.
+    progress = 100 * (model.clock.time / simulation.stop_time)
+
+    # Find maximum velocities.
+    umax = maximum(abs, model.velocities.u.data.parent)
+    vmax = maximum(abs, model.velocities.v.data.parent)
+    wmax = maximum(abs, model.velocities.w.data.parent)
+
+    # Find maximum ν and κ.
+    νmax = maximum(model.diffusivities.νₑ.data.parent)
+    κmax = maximum(model.diffusivities.κₑ.T.data.parent)
+
+    # Print progress statement.
+    i, t = model.clock.iteration, model.clock.time
+    @printf("[%06.2f%%] i: %d, t: %.3f days, umax: (%.2e, %.2e, %.2e) m/s, CFL: %.2e, νκmax: (%.2e, %.2e), νκCFL: %.2e, next Δt: %.2e s\n",
+            progress, i, t / day, umax, vmax, wmax, cfl(model), νmax, κmax, dcfl(model), simulation.Δt.Δt)
+end
+
+wizard = TimeStepWizard(cfl=0.2, Δt=1.0, max_change=1.2, max_Δt=10.0)
+
+simulation = Simulation(model, Δt=wizard, stop_time=600, progress_frequency=20, progress=print_progress)
 
 simulation.output_writers[:fields] = field_output_writer
+simulation.output_writers[:profiles] = profile_output_writer
+simulation.output_writers[:large_scale] = large_scale_output_writer
+
+run!(simulation)
+
