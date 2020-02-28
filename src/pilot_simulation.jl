@@ -34,10 +34,10 @@ lat, lon, days = 190, -55, 10
 arch = CPU()
 FT = Float64
 
-τx = sose.get_scalar_time_series(ds2, "oceTAUX", lat, lon, days) |> Array{FT}
-τy = sose.get_scalar_time_series(ds2, "oceTAUY", lat, lon, days) |> Array{FT}
-Qθ = sose.get_scalar_time_series(ds2, "oceQnet", lat, lon, days) |> Array{FT}
-Qs = sose.get_scalar_time_series(ds2, "SFLUX",   lat, lon, days) |> Array{FT}
+τx = sose.get_scalar_time_series(ds2, "oceTAUX",  lat, lon, days) |> Array{FT}
+τy = sose.get_scalar_time_series(ds2, "oceTAUY",  lat, lon, days) |> Array{FT}
+Qθ = sose.get_scalar_time_series(ds2, "oceQnet",  lat, lon, days) |> Array{FT}
+Qs = sose.get_scalar_time_series(ds2, "oceFWflx", lat, lon, days) |> Array{FT}
 
 U = sose.get_profile_time_series(ds3, "UVEL",  lat, lon, days) |> Array{FT}
 V = sose.get_profile_time_series(ds3, "VVEL",  lat, lon, days) |> Array{FT}
@@ -132,7 +132,7 @@ const cₚ = 4000.0  # Specific heat capacity of seawater at constant pressure [
 @inline wind_stress_x(i, j, grid, t, I, ũ′, c′, p) = p.ℑτx(t) / ρ₀
 @inline wind_stress_y(i, j, grid, t, I, ũ′, c′, p) = p.ℑτy(t) / ρ₀
 @inline     heat_flux(i, j, grid, t, I, ũ′, c′, p) = p.ℑQθ(t) / ρ₀ / cₚ
-@inline     salt_flux(i, j, grid, t, I, ũ′, c′, p) = p.ℑQs(t)  # FIXME?
+@inline     salt_flux(i, j, grid, t, I, ũ′, c′, p) = - p.ℑQs(t) / ρ₀  # Minus sign because a freshwater flux would decrease salinity.
 
 u′_bcs = UVelocityBoundaryConditions(grid, top=FluxBoundaryCondition(wind_stress_x))
 v′_bcs = UVelocityBoundaryConditions(grid, top=FluxBoundaryCondition(wind_stress_y))
@@ -198,7 +198,7 @@ output_attributes = Dict(
     "τx" => Dict("longname" => "Wind stress in the x-direction", "units" => "N/m"),
     "τy" => Dict("longname" => "Wind stress in the y-direction", "units" => "N/m"),
     "QT" => Dict("longname" => "Net surface heat flux into the ocean (+=down), >0 increases theta", "units" => "W/m²"),
-    "QS" => Dict("longname" => "net surface Fresh-Water flux into the ocean (+=down), >0 decreases salinity", "units" => "kg/m²/s"),
+    "QS" => Dict("longname" => "net surface freshwater flux into the ocean (+=down), >0 decreases salinity", "units" => "kg/m²/s"),
     "ν"  => Dict("longname" => "Eddy viscosity", "units" => "m²/s"),
     "κT" => Dict("longname" => "Eddy diffusivity of conservative temperature", "units" => "m²/s"),
     "κS" => Dict("longname" => "Eddy diffusivity of absolute salinity", "units" => "m²/s"),
