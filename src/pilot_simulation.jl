@@ -24,8 +24,8 @@ sys.path.insert(0, ".")
 
 sose = pyimport("sose_data")
 
-ds2 = sose.open_sose_2d_datasets("/home/alir/cnhlab004/bsose_i122/")
-ds3 = sose.open_sose_3d_datasets("/home/alir/cnhlab004/bsose_i122/")
+# ds2 = sose.open_sose_2d_datasets("/home/alir/cnhlab004/bsose_i122/")
+# ds3 = sose.open_sose_3d_datasets("/home/alir/cnhlab004/bsose_i122/")
 
 date_times = sose.get_times(ds2)
 
@@ -160,8 +160,11 @@ model = IncompressibleModel(
 ##### Initial conditions
 #####
 
+ε(μ) = μ * randn() # noise
+
 U₀(x, y, z) = ℑU(0, z)
 V₀(x, y, z) = ℑV(0, z)
+W₀(x, y, z) = ε(1e-10)
 Θ₀(x, y, z) = ℑΘ(0, z)
 S₀(x, y, z) = ℑS(0, z)
 
