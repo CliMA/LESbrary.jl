@@ -346,6 +346,8 @@ end
 simulation = Simulation(model, Δt=wizard, stop_time=1day, progress_frequency=20, progress=print_progress)
 
 simulation.output_writers[:fields] = field_output_writer
+simulation.output_writers[:surface] = surface_output_writer
+simulation.output_writers[:slice] = field_output_writer
 simulation.output_writers[:profiles] = profile_output_writer
 simulation.output_writers[:large_scale] = large_scale_output_writer
 
