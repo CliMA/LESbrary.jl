@@ -30,7 +30,7 @@ def make_movie(filename_pattern, movie_filename, fps=15):
 
 def plot_forcing(ds, filename="forcing_time_series.png"):
     fig, axes = plt.subplots(nrows=3, figsize=(16, 9), dpi=300)
-    lat, lon = ds.attrs["lat"], dsl.attrs["lon"]
+    lat, lon = ds.attrs["lat"], ds.attrs["lon"]
     fig.suptitle(f"Forcing at {lat}°N, {lon}°E")
 
     ds.τx.plot(ax=axes[0])
@@ -46,7 +46,7 @@ def plot_slices(ds):
         fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(16, 9), dpi=300)
 
         t = ds.time.values[n] / 86400
-        lat, lon = ds.attrs["lat"], dsl.attrs["lon"]
+        lat, lon = ds.attrs["lat"], ds.attrs["lon"]
         fig.suptitle(f"Slices at {lat}°N, {lon}°E, t = {t:.3f} days", fontsize=16)
 
         u = ds.u.isel(time=n).squeeze()
@@ -58,14 +58,44 @@ def plot_slices(ds):
         axes[0, 1].set_title("")
 
         T = ds.T.isel(time=n).squeeze()
-        T.plot.pcolormesh(ax=axes[1, 0], vmin=15, vmax=20, cmap=cmocean.cm.thermal, extend="both")
+        T.plot.pcolormesh(ax=axes[1, 0], cmap=cmocean.cm.thermal, extend="both")
         axes[1, 0].set_title("")
 
         S = ds.S.isel(time=n).squeeze()
-        S.plot.pcolormesh(ax=axes[1, 1], vmin=33.8, vmax=34.8, cmap=cmocean.cm.haline, extend="both")
+        S.plot.pcolormesh(ax=axes[1, 1], cmap=cmocean.cm.haline, extend="both")
         axes[1, 1].set_title("")
 
         png_filename = f"slice_{n:05d}.png"
+        logging.info(f"Saving: {png_filename}...")
+        plt.savefig(png_filename)
+
+        plt.close("all")
+
+def plot_surfaces(ds):
+    for n in range(0, ds.time.size, 1):
+        fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(16, 9), dpi=300)
+
+        t = ds.time.values[n] / 86400
+        lat, lon = ds.attrs["lat"], ds.attrs["lon"]
+        fig.suptitle(f"Surface at {lat}°N, {lon}°E, t = {t:.3f} days", fontsize=16)
+
+        u = ds.u.isel(time=n).squeeze()
+        u.plot.pcolormesh(ax=axes[0, 0], vmin=-0.5, vmax=0.5, cmap=cmocean.cm.balance, extend="both")
+        axes[0, 0].set_title("")
+
+        w = ds.w.isel(time=n).squeeze()
+        w.plot.pcolormesh(ax=axes[0, 1], vmin=-0.5, vmax=0.5, cmap=cmocean.cm.balance, extend="both")
+        axes[0, 1].set_title("")
+
+        T = ds.T.isel(time=n).squeeze()
+        T.plot.pcolormesh(ax=axes[1, 0], cmap=cmocean.cm.thermal, extend="both")
+        axes[1, 0].set_title("")
+
+        S = ds.S.isel(time=n).squeeze()
+        S.plot.pcolormesh(ax=axes[1, 1], cmap=cmocean.cm.haline, extend="both")
+        axes[1, 1].set_title("")
+
+        png_filename = f"surface_{n:05d}.png"
         logging.info(f"Saving: {png_filename}...")
         plt.savefig(png_filename)
 
@@ -81,6 +111,8 @@ def make_lesbrary_plots(lat, lon, days):
     plot_forcing(dsl)
     plot_slices(dsx)
     make_movie("slice_%05d.png", "slice.mp4")
+    plot_surfaces(dss)
+    make_movie("surface_%05d.png", "surface.mp4")
 
 make_lesbrary_plots(-60, 275, 10)
 
