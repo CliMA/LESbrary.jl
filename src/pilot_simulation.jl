@@ -24,8 +24,8 @@ sys.path.insert(0, ".")
 
 sose = pyimport("sose_data")
 
-# ds2 = sose.open_sose_2d_datasets("/home/alir/cnhlab004/bsose_i122/")
-# ds3 = sose.open_sose_3d_datasets("/home/alir/cnhlab004/bsose_i122/")
+ds2 = sose.open_sose_2d_datasets("/home/alir/cnhlab004/bsose_i122/")
+ds3 = sose.open_sose_3d_datasets("/home/alir/cnhlab004/bsose_i122/")
 
 date_times = sose.get_times(ds2)
 
@@ -77,7 +77,7 @@ S = reverse(S, dims=2)
 
 Nx = Ny = 32
 Nz = 2Nx
-Lx = Ly = 1000.0
+Lx = Ly = 200.0
 Lz = 2Lx
 topology = (Periodic, Periodic, Bounded)
 grid = RegularCartesianGrid(topology=topology, size=(Nx, Ny, Nz), x=(0.0, Lx), y=(0.0, Ly), z=(-Lz, 0.0))
@@ -227,7 +227,7 @@ output_attributes = Dict(
 )
 
 #####
-##### Fields output writer
+##### Fields and slices output writers
 #####
 
 fields = Dict(
@@ -244,6 +244,16 @@ fields = Dict(
 field_output_writer =
     NetCDFOutputWriter(model, fields, filename=filename_prefix * "_fields.nc", interval=6hour,
                       global_attributes=global_attributes, output_attributes=output_attributes)
+
+surface_output_writer =
+    NetCDFOutputWriter(model, fields, filename=filename_prefix * "_surface.nc", interval=10minute,
+                      global_attributes=global_attributes, output_attributes=output_attributes,
+                      zC=Nz, zF=Nz)
+
+slice_output_writer =
+    NetCDFOutputWriter(model, fields, filename=filename_prefix * "_slice.nc", interval=6hour,
+                      global_attributes=global_attributes, output_attributes=output_attributes,
+                      xC=1, xF=1)
 
 #####
 ##### Horizontal averages output writer
@@ -306,7 +316,7 @@ large_scale_output_writer =
 ##### Set up and run simulation
 #####
 
-wizard = TimeStepWizard(cfl=0.2, Δt=1.0, max_change=1.2, max_Δt=5.0)
+wizard = TimeStepWizard(cfl=0.1, Δt=1.0, max_change=1.2, max_Δt=5.0)
 
 # CFL utilities for reporting stability criterions.
 cfl = AdvectiveCFL(wizard)
