@@ -29,7 +29,7 @@ ds3 = sose.open_sose_3d_datasets("/home/alir/cnhlab004/bsose_i122/")
 
 date_times = sose.get_times(ds2)
 
-lat, lon, days = 190, -55, 10
+lat, lon, days = -60, 275, 10
 
 arch = CPU()
 FT = Float64
