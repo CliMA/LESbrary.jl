@@ -24,8 +24,11 @@ sys.path.insert(0, ".")
 
 sose = pyimport("sose_data")
 
-ds2 = sose.open_sose_2d_datasets("/home/alir/cnhlab004/bsose_i122/")
-ds3 = sose.open_sose_3d_datasets("/home/alir/cnhlab004/bsose_i122/")
+# Don't have to wait minutes to load 3D data if we already did so.
+if (!@isdefined ds2) && (!@isdefined ds3)
+    ds2 = sose.open_sose_2d_datasets("/home/alir/cnhlab004/bsose_i122/")
+    ds3 = sose.open_sose_3d_datasets("/home/alir/cnhlab004/bsose_i122/")
+end
 
 date_times = sose.get_times(ds2)
 
@@ -251,7 +254,7 @@ surface_output_writer =
                       zC=Nz, zF=Nz)
 
 slice_output_writer =
-    NetCDFOutputWriter(model, fields, filename=filename_prefix * "_slice.nc", interval=6hour,
+    NetCDFOutputWriter(model, fields, filename=filename_prefix * "_slice.nc", interval=10minute,
                       global_attributes=global_attributes, output_attributes=output_attributes,
                       xC=1, xF=1)
 
@@ -390,7 +393,7 @@ function print_progress(simulation)
             progress, i, t / day, umax, vmax, wmax, cfl(model), νmax, κmax, dcfl(model), simulation.Δt.Δt)
 end
 
-simulation = Simulation(model, Δt=wizard, stop_time=1day, progress_frequency=20, progress=print_progress)
+simulation = Simulation(model, Δt=wizard, stop_time=1hour, progress_frequency=20, progress=print_progress)
 
 simulation.output_writers[:fields] = field_output_writer
 simulation.output_writers[:surface] = surface_output_writer
