@@ -393,7 +393,7 @@ function print_progress(simulation)
             progress, i, prettytime(t), umax, vmax, wmax, cfl(model), νmax, κmax, dcfl(model), simulation.Δt.Δt)
 end
 
-simulation = Simulation(model, Δt=wizard, stop_time=2hour, progress_frequency=20, progress=print_progress)
+simulation = Simulation(model, Δt=wizard, progress_frequency=20, progress=print_progress)
 
 simulation.output_writers[:fields] = field_output_writer
 simulation.output_writers[:surface] = surface_output_writer
@@ -401,5 +401,17 @@ simulation.output_writers[:slice] = slice_output_writer
 simulation.output_writers[:profiles] = profile_output_writer
 simulation.output_writers[:large_scale] = large_scale_output_writer
 
+wizard.cfl = 0.1
+wizard.max_Δt = 5.0
+simulation.stop_time = 1hour
 run!(simulation)
 
+wizard.cfl = 0.05
+wizard.max_Δt = 1.0
+simulation.stop_time += 1hour
+run!(simulation)
+
+wizard.cfl = 0.1
+wizard.max_Δt = 5.0
+simulation.stop_time += 2hour
+run!(simulation)
