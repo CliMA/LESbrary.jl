@@ -41,42 +41,46 @@ def plot_forcing(ds, filename="forcing_time_series.png"):
     logging.info(f"Saving: {filename}...")
     plt.savefig(filename)
 
-def plot_fields(ds):
-    Nt = ds.time.size
-
-    for n in range(0, Nt, 1):
+def plot_slices(ds):
+    for n in range(0, ds.time.size, 1):
         fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(16, 9), dpi=300)
 
         t = ds.time.values[n] / 86400
-        fig.suptitle(f"t = {t:.3f} days", fontsize=16)
+        lat, lon = ds.attrs["lat"], dsl.attrs["lon"]
+        fig.suptitle(f"Slices at {lat}°N, {lon}°E, t = {t:.3f} days", fontsize=16)
 
-        u = ds.u.isel(time=n, xF=0).squeeze()
+        u = ds.u.isel(time=n).squeeze()
         u.plot.pcolormesh(ax=axes[0, 0], vmin=-0.5, vmax=0.5, cmap=cmocean.cm.balance, extend="both")
         axes[0, 0].set_title("")
 
-        w = ds.w.isel(time=n, xC=0).squeeze()
+        w = ds.w.isel(time=n).squeeze()
         w.plot.pcolormesh(ax=axes[0, 1], vmin=-0.5, vmax=0.5, cmap=cmocean.cm.balance, extend="both")
         axes[0, 1].set_title("")
 
-        T = ds.T.isel(time=n, xC=0).squeeze()
+        T = ds.T.isel(time=n).squeeze()
         T.plot.pcolormesh(ax=axes[1, 0], vmin=15, vmax=20, cmap=cmocean.cm.thermal, extend="both")
         axes[1, 0].set_title("")
 
-        S = ds.S.isel(time=n, xC=0).squeeze()
-        S.plot.pcolormesh(ax=axes[1, 1], vmin=0, vmax=1, levels=21, cmap=cmocean.cm.haline)
+        S = ds.S.isel(time=n).squeeze()
+        S.plot.pcolormesh(ax=axes[1, 1], vmin=33.8, vmax=34.8, cmap=cmocean.cm.haline, extend="both")
         axes[1, 1].set_title("")
 
-        png_filename = f"yz_slice_{n:05d}.png"
+        png_filename = f"slice_{n:05d}.png"
         logging.info(f"Saving: {png_filename}...")
         plt.savefig(png_filename)
 
         plt.close("all")
 
-dsf = xr.open_dataset("lesbrary_lat-60_lon275_days10_fields.nc")
-dsp = xr.open_dataset("lesbrary_lat-60_lon275_days10_profiles.nc")
-dsl = xr.open_dataset("lesbrary_lat-60_lon275_days10_large_scale.nc")
+def make_lesbrary_plots(lat, lon, days):
+    dsf = xr.open_dataset(f"lesbrary_lat{lat}_lon{lon}_days{days}_fields.nc")
+    dss = xr.open_dataset(f"lesbrary_lat{lat}_lon{lon}_days{days}_surface.nc")
+    dsx = xr.open_dataset(f"lesbrary_lat{lat}_lon{lon}_days{days}_slice.nc")
+    dsp = xr.open_dataset(f"lesbrary_lat{lat}_lon{lon}_days{days}_profiles.nc")
+    dsl = xr.open_dataset(f"lesbrary_lat{lat}_lon{lon}_days{days}_large_scale.nc")
 
-plot_forcing(dsl)
-#plot_fields(dsf)
-#make_movie("yz_slice_%05d.png", "yz_slice.mp4")
+    plot_forcing(dsl)
+    plot_slices(dsx)
+    make_movie("slice_%05d.png", "slice.mp4")
+
+make_lesbrary_plots(-60, 275, 10)
 

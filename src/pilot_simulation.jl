@@ -389,15 +389,15 @@ function print_progress(simulation)
 
     # Print progress statement.
     i, t = model.clock.iteration, model.clock.time
-    @printf("[%06.2f%%] i: %d, t: %.3f days, umax: (%.2e, %.2e, %.2e) m/s, CFL: %.2e, νκmax: (%.2e, %.2e), νκCFL: %.2e, next Δt: %.2e s\n",
-            progress, i, t / day, umax, vmax, wmax, cfl(model), νmax, κmax, dcfl(model), simulation.Δt.Δt)
+    @printf("[%06.2f%%] i: %d, t: %s, umax: (%.2e, %.2e, %.2e) m/s, CFL: %.2e, νκmax: (%.2e, %.2e), νκCFL: %.2e, next Δt: %.2e s\n",
+            progress, i, prettytime(t), umax, vmax, wmax, cfl(model), νmax, κmax, dcfl(model), simulation.Δt.Δt)
 end
 
-simulation = Simulation(model, Δt=wizard, stop_time=1hour, progress_frequency=20, progress=print_progress)
+simulation = Simulation(model, Δt=wizard, stop_time=2hour, progress_frequency=20, progress=print_progress)
 
 simulation.output_writers[:fields] = field_output_writer
 simulation.output_writers[:surface] = surface_output_writer
-simulation.output_writers[:slice] = field_output_writer
+simulation.output_writers[:slice] = slice_output_writer
 simulation.output_writers[:profiles] = profile_output_writer
 simulation.output_writers[:large_scale] = large_scale_output_writer
 
