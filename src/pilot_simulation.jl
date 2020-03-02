@@ -77,7 +77,7 @@ S = reverse(S, dims=2)
 
 Nx = Ny = 32
 Nz = 2Nx
-Lx = Ly = 200.0
+Lx = Ly = 1000.0
 Lz = 2Lx
 topology = (Periodic, Periodic, Bounded)
 grid = RegularCartesianGrid(topology=topology, size=(Nx, Ny, Nz), x=(0.0, Lx), y=(0.0, Ly), z=(-Lz, 0.0))
@@ -311,6 +311,53 @@ large_scale_output_writer =
     NetCDFOutputWriter(model, large_scale_outputs, filename=filename_prefix * "_large_scale.nc", interval=10minute,
                       global_attributes=global_attributes, output_attributes=output_attributes,
                       dimensions=large_scale_dims)
+
+#####
+##### Banner!
+#####
+
+wave = raw"""
+           _.====.._
+         ,:._       ~-_
+             `\        ~-_
+               |          `.
+             ,/             ~-_
+    -..__..-''                 ~~--..__...----... LESbrary.jl ...
+"""
+
+fish = raw"""
+                 o                     o
+                 o                    o
+                o                     o
+               o   .''''.             o   .''''.
+                o /O)    './|          o /O)    './|
+                  > ) \| .'\|            > ) \| .'\|
+                   `....`                 `....`
+                     ` `                    ` `
+
+       o                      o                    o
+      o                      o                     o
+      o   .''''.            o   .''''.              o  .''''.
+       o /O)    './|         o /O)    './|          o /O)    './|
+         > ) \| .'\|           > ) \| .'\|            > ) \| .'\|
+          `....`                `....`                 `....`
+            ` `                   ` `                    ` `
+"""
+
+@printf("""%s
+           N : %d, %d, %d
+           L : %.3g, %.3g, %.3g [m]
+           Δ : %.3g, %.3g, %.3g [m]
+        φ, λ : %.2f, %.2f [latitude, longitude]
+           f : %.3e [s⁻¹]
+        days : %d
+        %s""",
+        wave,
+        grid.Nx, grid.Ny, grid.Nz,
+        grid.Lx, grid.Ly, grid.Lz,
+        grid.Δx, grid.Δy, grid.Δz,
+        lat, lon, model.coriolis.f, days,
+        fish)
 
 #####
 ##### Set up and run simulation
