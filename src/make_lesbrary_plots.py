@@ -33,16 +33,31 @@ def plot_forcing(ds, filename="forcing_time_series.png"):
     lat, lon = ds.attrs["lat"], ds.attrs["lon"]
     fig.suptitle(f"Forcing at {lat}°N, {lon}°E")
 
-    ds.τx.plot(ax=axes[0])
-    ds.τy.plot(ax=axes[0])
-    ds.QT.plot(ax=axes[1])
-    ds.QS.plot(ax=axes[2])
+    time = ds.time.values / 86400
+    τx = ds.τx.values
+    τy = ds.τy.values
+    QT = ds.QT.values
+    QS = ds.QS.values
+
+    axes[0].plot(time, τx, label="τx")
+    axes[0].plot(time, τy, label="τy")
+    axes[0].legend(loc="best", frameon=False)
+    axes[0].set_xlabel("")
+    axes[0].set_ylabel("Wind stress ()N/m²)")
+
+    axes[1].plot(time, QT)
+    axes[1].set_xlabel("")
+    axes[1].set_ylabel("QT ()W/m²)")
+
+    axes[2].plot(time, QS)
+    axes[2].set_xlabel("time (days)")
+    axes[2].set_ylabel("QS (kg/m²/s)")
 
     logging.info(f"Saving: {filename}...")
     plt.savefig(filename)
 
 def plot_large_scale(ds):
-    for n in range(0, ds.time.size, 1):
+    for n in range(0, 10, 1):
         fig, axes = plt.subplots(ncols=3, figsize=(16, 9), dpi=300)
 
         t = ds.time.values[n] / 86400
@@ -51,8 +66,8 @@ def plot_large_scale(ds):
 
         u = ds.u.isel(time=n).squeeze()
         v = ds.u.isel(time=n).squeeze()
-        u.plot(ax=axes[0])
-        v.plot(ax=axes[0])
+        u.plot(ax=axes[0], y="zC")
+        v.plot(ax=axes[0], y="zC")
 
         T = ds.T.isel(time=n).squeeze()
         T.plot(ax=axes[1])
