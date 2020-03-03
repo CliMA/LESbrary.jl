@@ -53,11 +53,14 @@ def plot_forcing(ds, filename="forcing_time_series.png"):
     axes[2].set_xlabel("time (days)")
     axes[2].set_ylabel("QS (kg/m²/s)")
 
+    for ax in axes:
+        ax.label_outer()
+
     logging.info(f"Saving: {filename}...")
     plt.savefig(filename)
 
 def plot_large_scale(ds):
-    for n in range(0, 10, 1):
+    for n in range(0, ds.time.size, 10):
         fig, axes = plt.subplots(ncols=3, figsize=(16, 9), dpi=300)
 
         t = ds.time.values[n] / 86400
@@ -66,16 +69,22 @@ def plot_large_scale(ds):
 
         u = ds.u.isel(time=n).squeeze()
         v = ds.u.isel(time=n).squeeze()
-        u.plot(ax=axes[0], y="zC")
-        v.plot(ax=axes[0], y="zC")
+        u.plot(ax=axes[0], y="zC", label="U")
+        v.plot(ax=axes[0], y="zC", label="V")
+        axes[0].legend(loc="best", frameon=False)
+        axes[0].set_xlabel("velocity [m/s]")
 
         T = ds.T.isel(time=n).squeeze()
-        T.plot(ax=axes[1])
+        T.plot(ax=axes[1], y="zC")
 
         S = ds.S.isel(time=n).squeeze()
-        S.plot(ax=axes[2])
+        S.plot(ax=axes[2], y="zC")
 
-        png_filename = f"large_scale_{n:05d}.png"
+        for ax in axes:
+            ax.set_title("")
+            ax.label_outer()
+
+        png_filename = f"large_scale_{n//10:05d}.png"
         logging.info(f"Saving: {png_filename}...")
         plt.savefig(png_filename)
 
