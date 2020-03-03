@@ -41,6 +41,31 @@ def plot_forcing(ds, filename="forcing_time_series.png"):
     logging.info(f"Saving: {filename}...")
     plt.savefig(filename)
 
+def plot_large_scale(ds):
+    for n in range(0, ds.time.size, 1):
+        fig, axes = plt.subplots(ncols=3, figsize=(16, 9), dpi=300)
+
+        t = ds.time.values[n] / 86400
+        lat, lon = ds.attrs["lat"], ds.attrs["lon"]
+        fig.suptitle(f"Large scale at {lat}°N, {lon}°E, t = {t:.3f} days", fontsize=16)
+
+        u = ds.u.isel(time=n).squeeze()
+        v = ds.u.isel(time=n).squeeze()
+        u.plot(ax=axes[0])
+        v.plot(ax=axes[0])
+
+        T = ds.T.isel(time=n).squeeze()
+        T.plot(ax=axes[1])
+
+        S = ds.S.isel(time=n).squeeze()
+        S.plot(ax=axes[2])
+
+        png_filename = f"large_scale_{n:05d}.png"
+        logging.info(f"Saving: {png_filename}...")
+        plt.savefig(png_filename)
+
+        plt.close("all")
+
 def plot_slices(ds):
     for n in range(0, ds.time.size, 1):
         fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(16, 9), dpi=300)
@@ -109,10 +134,12 @@ def make_lesbrary_plots(lat, lon, days):
     dsl = xr.open_dataset(f"lesbrary_lat{lat}_lon{lon}_days{days}_large_scale.nc")
 
     plot_forcing(dsl)
-    plot_slices(dsx)
-    make_movie("slice_%05d.png", "slice.mp4")
-    plot_surfaces(dss)
-    make_movie("surface_%05d.png", "surface.mp4")
+    plot_large_scale(dsl)
+    make_movie("large_scale_%05d.png", "large_scale.mp4")
+    # plot_slices(dsx)
+    # make_movie("slice_%05d.png", "slice.mp4")
+    # plot_surfaces(dss)
+    # make_movie("surface_%05d.png", "surface.mp4")
 
 make_lesbrary_plots(-60, 275, 10)
 
