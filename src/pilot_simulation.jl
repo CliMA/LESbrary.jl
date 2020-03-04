@@ -50,6 +50,9 @@ S = sose.get_profile_time_series(ds3, "SALT",  lat, lon, days) |> Array{FT}
 ds2.close()
 ds3.close()
 
+U .= 0
+V .= 0
+
 #####
 ##### Create linear interpolations for base state solution
 #####
@@ -212,8 +215,8 @@ global_attributes = Dict(
 )
 
 output_attributes = Dict(
-    "τx" => Dict("longname" => "Wind stress in the x-direction", "units" => "N/m"),
-    "τy" => Dict("longname" => "Wind stress in the y-direction", "units" => "N/m"),
+    "τx" => Dict("longname" => "Wind stress in the x-direction", "units" => "N/m²"),
+    "τy" => Dict("longname" => "Wind stress in the y-direction", "units" => "N/m²"),
     "QT" => Dict("longname" => "Net surface heat flux into the ocean (+=down), >0 increases theta", "units" => "W/m²"),
     "QS" => Dict("longname" => "net surface freshwater flux into the ocean (+=down), >0 decreases salinity", "units" => "kg/m²/s"),
     "ν"  => Dict("longname" => "Eddy viscosity", "units" => "m²/s"),
@@ -249,12 +252,12 @@ field_output_writer =
                       global_attributes=global_attributes, output_attributes=output_attributes)
 
 surface_output_writer =
-    NetCDFOutputWriter(model, fields, filename=filename_prefix * "_surface.nc", interval=10minute,
+    NetCDFOutputWriter(model, fields, filename=filename_prefix * "_surface.nc", interval=2minute,
                       global_attributes=global_attributes, output_attributes=output_attributes,
                       zC=Nz, zF=Nz)
 
 slice_output_writer =
-    NetCDFOutputWriter(model, fields, filename=filename_prefix * "_slice.nc", interval=10minute,
+    NetCDFOutputWriter(model, fields, filename=filename_prefix * "_slice.nc", interval=2minute,
                       global_attributes=global_attributes, output_attributes=output_attributes,
                       xC=1, xF=1)
 
@@ -285,7 +288,7 @@ profile_dims = Dict(k => ("zC",) for k in keys(profiles))
 profile_dims["w"] = ("zF",)
 
 profile_output_writer =
-    NetCDFOutputWriter(model, profiles, filename=filename_prefix * "_profiles.nc", interval=10minute,
+    NetCDFOutputWriter(model, profiles, filename=filename_prefix * "_profiles.nc", interval=2minute,
                       global_attributes=global_attributes, output_attributes=output_attributes,
                       dimensions=profile_dims)
 
@@ -311,7 +314,7 @@ large_scale_dims = Dict(
 
 
 large_scale_output_writer =
-    NetCDFOutputWriter(model, large_scale_outputs, filename=filename_prefix * "_large_scale.nc", interval=10minute,
+    NetCDFOutputWriter(model, large_scale_outputs, filename=filename_prefix * "_large_scale.nc", interval=2minute,
                       global_attributes=global_attributes, output_attributes=output_attributes,
                       dimensions=large_scale_dims)
 
@@ -393,7 +396,7 @@ function print_progress(simulation)
             progress, i, prettytime(t), umax, vmax, wmax, cfl(model), νmax, κmax, dcfl(model), simulation.Δt.Δt)
 end
 
-simulation = Simulation(model, Δt=wizard, progress_frequency=20, progress=print_progress)
+simulation = Simulation(model, Δt=wizard, stop_time=24hour, progress_frequency=20, progress=print_progress)
 
 simulation.output_writers[:fields] = field_output_writer
 simulation.output_writers[:surface] = surface_output_writer
@@ -401,6 +404,9 @@ simulation.output_writers[:slice] = slice_output_writer
 simulation.output_writers[:profiles] = profile_output_writer
 simulation.output_writers[:large_scale] = large_scale_output_writer
 
+run!(simulation)
+
+#=
 wizard.cfl = 0.1
 wizard.max_Δt = 5.0
 simulation.stop_time = 1hour
@@ -415,3 +421,4 @@ wizard.cfl = 0.1
 wizard.max_Δt = 5.0
 simulation.stop_time += 2hour
 run!(simulation)
+=#
