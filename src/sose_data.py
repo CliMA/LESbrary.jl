@@ -64,12 +64,17 @@ def get_profile_time_series(ds, var, lat, lon, days):
 def compute_geostrophic_velocities(ds, lat, lon, days, zF, α, β, g, f):
     logging.info(f"Computing geostrophic velocities at (lat={lat}°N, lon={lon}°E) for {days} days...")
 
+    # Reverse z index so we calculate cumulative integrals bottom up
+    ds = ds.reindex(Z=ds.Z[::-1], Zl=ds.Zl[::-1])
+
+    # Only pull out the data we need as time has chunk size 1.
     U =  ds.UVEL.isel(time=slice(0, days))
     V =  ds.VVEL.isel(time=slice(0, days))
     Θ = ds.THETA.isel(time=slice(0, days))
     S =  ds.SALT.isel(time=slice(0, days))
 
     # Set up grid metric
+    # See: https://xgcm.readthedocs.io/en/latest/grid_metrics.html#Using-metrics-with-xgcm
     ds["drW"] = ds.hFacW * ds.drF  # vertical cell size at u point
     ds["drS"] = ds.hFacS * ds.drF  # vertical cell size at v point
     ds["drC"] = ds.hFacC * ds.drF  # vertical cell size at tracer point
@@ -95,13 +100,13 @@ def compute_geostrophic_velocities(ds, lat, lon, days, zF, α, β, g, f):
     Σdz_dBdy = g * (α * Σdz_dΘdy - β * Σdz_dSdy)
 
     # Interpolate velocities in z
-    ℑU = U.interp(Z=zF, method="linear", kwargs={"fill_value": "extrapolate"})
-    ℑV = V.interp(Z=zF, method="linear", kwargs={"fill_value": "extrapolate"})
+    # ℑU = U.interp(Z=zF, method="linear", kwargs={"fill_value": "extrapolate"})
+    # ℑV = V.interp(Z=zF, method="linear", kwargs={"fill_value": "extrapolate"})
 
     # Velocities at depth
-    z_bottom = ds.Z.values[-1]
-    U_d = ℑU.sel(XG=lon, YC=lat, Z=z_bottom, method="nearest")
-    V_d = ℑV.sel(XC=lon, YG=lat, Z=z_bottom, method="nearest")
+    z_bottom = ds.Z.values[0]
+    U_d = U.sel(XG=lon, YC=lat, Z=z_bottom, method="nearest")
+    V_d = V.sel(XC=lon, YG=lat, Z=z_bottom, method="nearest")
 
     with ProgressBar():
         U_geo = (U_d - 1/f * Σdz_dBdy).sel(XC=lon, YG=lat, method="nearest").values
