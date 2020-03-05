@@ -91,6 +91,8 @@ def compute_geostrophic_velocities(ds, lat, lon, day_offset, days, zF, α, β, g
     }
 
     # xgcm grid for calculating derivatives and interpolating
+    # Not sure why it's periodic in Y but copied it from the xgcm SOSE example:
+    # https://pangeo.io/use_cases/physical-oceanography/SOSE.html#create-xgcm-grid
     grid = xgcm.Grid(ds, metrics=metrics, periodic=('X', 'Y'))
 
     # Vertical integrals from z'=-Lz to z'=z (cumulative integrals)
