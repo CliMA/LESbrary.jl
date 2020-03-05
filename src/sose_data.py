@@ -2,6 +2,7 @@ import os
 import logging
 logging.getLogger().setLevel(logging.INFO)
 
+import xgcm
 import numpy as np
 import xarray as xr
 
