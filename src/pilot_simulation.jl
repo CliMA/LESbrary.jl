@@ -22,7 +22,8 @@ sys.path.insert(0, ".")
 ##### Set up grid and some model components
 #####
 
-lat, lon, days = -60, 275, 10
+lat, lon = -50, 275
+day_offset, days = 250, 10
 
 arch = CPU()
 FT = Float64
@@ -54,18 +55,18 @@ end
 
 date_times = sose.get_times(ds2)
 
-τx = sose.get_scalar_time_series(ds2, "oceTAUX",  lat, lon, days) |> Array{FT}
-τy = sose.get_scalar_time_series(ds2, "oceTAUY",  lat, lon, days) |> Array{FT}
-Qθ = sose.get_scalar_time_series(ds2, "oceQnet",  lat, lon, days) |> Array{FT}
-Qs = sose.get_scalar_time_series(ds2, "oceFWflx", lat, lon, days) |> Array{FT}
+τx = sose.get_scalar_time_series(ds2, "oceTAUX",  lat, lon, day_offset, days) |> Array{FT}
+τy = sose.get_scalar_time_series(ds2, "oceTAUY",  lat, lon, day_offset, days) |> Array{FT}
+Qθ = sose.get_scalar_time_series(ds2, "oceQnet",  lat, lon, day_offset, days) |> Array{FT}
+Qs = sose.get_scalar_time_series(ds2, "oceFWflx", lat, lon, day_offset, days) |> Array{FT}
 
-U = sose.get_profile_time_series(ds3, "UVEL",  lat, lon, days) |> Array{FT}
-V = sose.get_profile_time_series(ds3, "VVEL",  lat, lon, days) |> Array{FT}
-Θ = sose.get_profile_time_series(ds3, "THETA", lat, lon, days) |> Array{FT}
-S = sose.get_profile_time_series(ds3, "SALT",  lat, lon, days) |> Array{FT}
+U = sose.get_profile_time_series(ds3, "UVEL",  lat, lon, day_offset, days) |> Array{FT}
+V = sose.get_profile_time_series(ds3, "VVEL",  lat, lon, day_offset, days) |> Array{FT}
+Θ = sose.get_profile_time_series(ds3, "THETA", lat, lon, day_offset, days) |> Array{FT}
+S = sose.get_profile_time_series(ds3, "SALT",  lat, lon, day_offset, days) |> Array{FT}
 
 
-Ugeo, Vgeo = sose.compute_geostrophic_velocities(ds3, lat, lon, days, grid.zF, eos.α, eos.β,
+Ugeo, Vgeo = sose.compute_geostrophic_velocities(ds3, lat, lon, day_offset, days, grid.zF, eos.α, eos.β,
                                                  buoyancy.gravitational_acceleration, coriolis.f)
 
 ds2.close()

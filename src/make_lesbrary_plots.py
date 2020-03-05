@@ -170,10 +170,10 @@ def make_lesbrary_plots(lat, lon, days):
     plot_forcing(dsl)
     plot_large_scale(dsl)
     make_movie("large_scale_%05d.png", "large_scale.mp4")
-    # plot_slices(dsx)
-    # make_movie("slice_%05d.png", "slice.mp4")
-    # plot_surfaces(dss)
-    # make_movie("surface_%05d.png", "surface.mp4")
+    plot_slices(dsx)
+    make_movie("slice_%05d.png", "slice.mp4")
+    plot_surfaces(dss)
+    make_movie("surface_%05d.png", "surface.mp4")
 
 make_lesbrary_plots(-60, 275, 10)
 

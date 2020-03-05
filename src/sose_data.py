@@ -39,39 +39,43 @@ def get_times(ds):
     ts = [datetime.utcfromtimestamp((dt - np.datetime64("1970-01-01T00:00:00Z")) / np.timedelta64(1, "s")) for dt in ts]
     return ts
 
-def get_scalar_time_series(ds, var, lat, lon, days):
+def get_scalar_time_series(ds, var, lat, lon, day_offset, days):
     logging.info(f"Getting time series of {var} at (lat={lat}°N, lon={lon}°E)...")
+    time_slice = slice(day_offset, day_offset + days)
     with ProgressBar():
         if var in ["UVEL", "oceTAUX"]:
-            time_series = ds[var].isel(time=slice(0, days)).sel(XG=lon, YC=lat, method="nearest").values
+            time_series = ds[var].isel(time=time_slice).sel(XG=lon, YC=lat, method="nearest").values
         elif var in ["VVEL", "oceTAUY"]:
-            time_series = ds[var].isel(time=slice(0, days)).sel(XC=lon, YG=lat, method="nearest").values
+            time_series = ds[var].isel(time=time_slice).sel(XC=lon, YG=lat, method="nearest").values
         else:
-            time_series = ds[var].isel(time=slice(0, days)).sel(XC=lon, YC=lat, method="nearest").values
+            time_series = ds[var].isel(time=time_slice).sel(XC=lon, YC=lat, method="nearest").values
     return time_series
 
-def get_profile_time_series(ds, var, lat, lon, days):
+def get_profile_time_series(ds, var, lat, lon, day_offset, days):
     logging.info(f"Getting time series of {var} at (lat={lat}°N, lon={lon}°E) for {days} days...")
+    time_slice = slice(day_offset, day_offset + days)
     with ProgressBar():
         if var in ["UVEL", "oceTAUX"]:
-            time_series = ds[var].isel(time=slice(0, days)).sel(XG=lon, YC=lat, method="nearest").values
+            time_series = ds[var].isel(time=time_slice).sel(XG=lon, YC=lat, method="nearest").values
         elif var in ["VVEL", "oceTAUY"]:
-            time_series = ds[var].isel(time=slice(0, days)).sel(XC=lon, YG=lat, method="nearest").values
+            time_series = ds[var].isel(time=time_slice).sel(XC=lon, YG=lat, method="nearest").values
         else:
-            time_series = ds[var].isel(time=slice(0, days)).sel(XC=lon, YC=lat, method="nearest").values
+            time_series = ds[var].isel(time=time_slice).sel(XC=lon, YC=lat, method="nearest").values
     return time_series
 
-def compute_geostrophic_velocities(ds, lat, lon, days, zF, α, β, g, f):
+def compute_geostrophic_velocities(ds, lat, lon, day_offset, days, zF, α, β, g, f):
     logging.info(f"Computing geostrophic velocities at (lat={lat}°N, lon={lon}°E) for {days} days...")
 
     # Reverse z index so we calculate cumulative integrals bottom up
     ds = ds.reindex(Z=ds.Z[::-1], Zl=ds.Zl[::-1])
 
     # Only pull out the data we need as time has chunk size 1.
-    U =  ds.UVEL.isel(time=slice(0, days))
-    V =  ds.VVEL.isel(time=slice(0, days))
-    Θ = ds.THETA.isel(time=slice(0, days))
-    S =  ds.SALT.isel(time=slice(0, days))
+    time_slice = slice(day_offset, day_offset + days)
+
+    U =  ds.UVEL.isel(time=time_slice)
+    V =  ds.VVEL.isel(time=time_slice)
+    Θ = ds.THETA.isel(time=time_slice)
+    S =  ds.SALT.isel(time=time_slice)
 
     # Set up grid metric
     # See: https://xgcm.readthedocs.io/en/latest/grid_metrics.html#Using-metrics-with-xgcm
