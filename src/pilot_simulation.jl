@@ -19,6 +19,28 @@ sys.path.insert(0, ".")
 """
 
 #####
+##### Set up grid and some model components
+#####
+
+lat, lon, days = -60, 275, 10
+
+arch = CPU()
+FT = Float64
+
+Nx = Ny = 32
+Nz = 2Nx
+Lx = Ly = 1000.0
+Lz = 2Lx
+
+topology = (Periodic, Periodic, Bounded)
+grid = RegularCartesianGrid(topology=topology, size=(Nx, Ny, Nz), x=(0.0, Lx), y=(0.0, Ly), z=(-Lz, 0.0))
+
+eos = LinearEquationOfState()
+buoyancy = SeawaterBuoyancy(equation_of_state=eos)
+
+coriolis = FPlane(latitude=lat)
+
+#####
 ##### Load large-scale (base state) solution from SOSE
 #####
 
@@ -32,11 +54,6 @@ end
 
 date_times = sose.get_times(ds2)
 
-lat, lon, days = -60, 275, 10
-
-arch = CPU()
-FT = Float64
-
 τx = sose.get_scalar_time_series(ds2, "oceTAUX",  lat, lon, days) |> Array{FT}
 τy = sose.get_scalar_time_series(ds2, "oceTAUY",  lat, lon, days) |> Array{FT}
 Qθ = sose.get_scalar_time_series(ds2, "oceQnet",  lat, lon, days) |> Array{FT}
@@ -47,11 +64,12 @@ V = sose.get_profile_time_series(ds3, "VVEL",  lat, lon, days) |> Array{FT}
 Θ = sose.get_profile_time_series(ds3, "THETA", lat, lon, days) |> Array{FT}
 S = sose.get_profile_time_series(ds3, "SALT",  lat, lon, days) |> Array{FT}
 
+
+Ugeo, Vgeo = sose.compute_geostrophic_velocities(ds3, lat, lon, days, grid.zF, eos.α, eos.β,
+                                                 buoyancy.gravitational_acceleration, coriolis.f)
+
 ds2.close()
 ds3.close()
-
-U .= 0
-V .= 0
 
 #####
 ##### Create linear interpolations for base state solution
@@ -71,22 +89,15 @@ U = reverse(U, dims=2)
 V = reverse(V, dims=2)
 Θ = reverse(Θ, dims=2)
 S = reverse(S, dims=2)
+Ugeo = reverse(U, dims=2)
+Vgeo = reverse(V, dims=2)
 
 ℑU = interpolate((ts, zC), U, Gridded(Linear()))
 ℑV = interpolate((ts, zC), V, Gridded(Linear()))
 ℑΘ = interpolate((ts, zC), Θ, Gridded(Linear()))
 ℑS = interpolate((ts, zC), S, Gridded(Linear()))
-
-#####
-##### Set up the grid
-#####
-
-Nx = Ny = 32
-Nz = 2Nx
-Lx = Ly = 1000.0
-Lz = 2Lx
-topology = (Periodic, Periodic, Bounded)
-grid = RegularCartesianGrid(topology=topology, size=(Nx, Ny, Nz), x=(0.0, Lx), y=(0.0, Ly), z=(-Lz, 0.0))
+ℑUgeo = interpolate((ts, zC), Ugeo, Gridded(Linear()))
+ℑVgeo = interpolate((ts, zC), Vgeo, Gridded(Linear()))
 
 #####
 ##### Set up forcing forcings to
@@ -155,11 +166,11 @@ model = IncompressibleModel(
     float_type = FT,
     grid = grid,
     tracers = (:T, :S),
-    coriolis = FPlane(latitude=lat),
+    coriolis = coriolis,
     boundary_conditions = (u=u′_bcs, v=v′_bcs, T=θ′_bcs, S=s′_bcs),
     closure = AnisotropicMinimumDissipation(),
     forcing = forcings,
-    parameters = (ℑτx=ℑτx, ℑτy=ℑτy, ℑQθ=ℑQθ, ℑQs=ℑQs, ℑU=ℑU, ℑV=ℑV, ℑΘ=ℑΘ, ℑS=ℑS, μ=μ)
+    parameters = (ℑτx=ℑτx, ℑτy=ℑτy, ℑQθ=ℑQθ, ℑQs=ℑQs, ℑU=ℑUgeo, ℑV=ℑVgeo, ℑΘ=ℑΘ, ℑS=ℑS, μ=μ)
 )
 
 #####
@@ -215,6 +226,8 @@ global_attributes = Dict(
 )
 
 output_attributes = Dict(
+    "Ugeo" => Dict("longname" => "Zonal component of geostrophic velocity", "units" => "m/s"),
+    "Vgeo" => Dict("longname" => "Meridional component of geostrophic velocity", "units" => "m/s"),
     "τx" => Dict("longname" => "Wind stress in the x-direction", "units" => "N/m²"),
     "τy" => Dict("longname" => "Wind stress in the y-direction", "units" => "N/m²"),
     "QT" => Dict("longname" => "Net surface heat flux into the ocean (+=down), >0 increases theta", "units" => "W/m²"),
@@ -304,12 +317,15 @@ large_scale_outputs = Dict(
      "u" => model ->  ℑU.(model.clock.time, model.grid.zC),
      "v" => model ->  ℑV.(model.clock.time, model.grid.zC),
      "T" => model ->  ℑΘ.(model.clock.time, model.grid.zC),
-     "S" => model ->  ℑS.(model.clock.time, model.grid.zC)
+     "S" => model ->  ℑS.(model.clock.time, model.grid.zC),
+  "Ugeo" => model -> ℑUgeo.(model.clock.time, model.grid.zC),
+  "Vgeo" => model -> ℑVgeo.(model.clock.time, model.grid.zC)
 )
 
 large_scale_dims = Dict(
     "τx" => (), "τy" => (), "QT" => (), "QS" => (),
-    "u" => ("zC",), "v" => ("zC",), "T" => ("zC",), "S" => ("zC",)
+    "u" => ("zC",), "v" => ("zC",), "T" => ("zC",), "S" => ("zC",),
+    "Ugeo" => ("zC",), "Vgeo" => ("zC",)
 )
 
 
