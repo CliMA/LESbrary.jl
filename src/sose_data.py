@@ -63,32 +63,47 @@ def get_profile_time_series(ds, var, lat, lon, days):
 def compute_geostrophic_velocities(ds, lat, lon, days, zC, α, β, g, f):
     logging.info(f"Computing geostrophic velocities at (lat={lat}°N, lon={lon}°E) for {days} days...")
 
-    # Interpolate data onto Oceananigans model.grid.zC
-    ℑU =  ds.UVEL.isel(time=slice(0, days)).interp(Z=zC, method="linear", kwargs={"fill_value": "extrapolate"})
-    ℑV =  ds.VVEL.isel(time=slice(0, days)).interp(Z=zC, method="linear", kwargs={"fill_value": "extrapolate"})
-    ℑΘ = ds.THETA.isel(time=slice(0, days)).interp(Z=zC, method="linear", kwargs={"fill_value": "extrapolate"})
-    ℑS =  ds.SALT.isel(time=slice(0, days)).interp(Z=zC, method="linear", kwargs={"fill_value": "extrapolate"})
+    U =  ds.UVEL.isel(time=slice(0, days))
+    V =  ds.VVEL.isel(time=slice(0, days))
+    Θ = ds.THETA.isel(time=slice(0, days))
+    S =  ds.SALT.isel(time=slice(0, days))
+
+    # Set up grid metric
+    ds["drW"] = ds.hFacW * ds.drF  # vertical cell size at u point
+    ds["drS"] = ds.hFacS * ds.drF  # vertical cell size at v point
+    ds["drC"] = ds.hFacC * ds.drF  # vertical cell size at tracer point
+
+    metrics = {
+        ('X',):     ['dxC', 'dxG'], # X distances
+        ('Y',):     ['dyC', 'dyG'], # Y distances
+        ('Z',):     ['drW', 'drS', 'drC'], # Z distances
+        ('X', 'Y'): ['rA', 'rA', 'rAs', 'rAw'] # Areas
+    }
 
     # xgcm grid for calculating derivatives and interpolating
-    grid = xgcm.Grid(ds3, periodic=('X', 'Y'))
-    Σdz_dΘdx = grid.diff(ℑΘ, 'X').integrate(dim='Z')
-    Σdz_dΘdy = grid.diff(ℑΘ, 'Y').integrate(dim='Z')
-    Σdz_dSdx = grid.diff(ℑS, 'X').integrate(dim='Z')
-    Σdz_dSdy = grid.diff(ℑS, 'Y').integrate(dim='Z')
+    grid = xgcm.Grid(ds, metrics=metrics, periodic=('X', 'Y'))
 
+    # Vertical integrals from z'=-Lz to z'=z (cumulative integrals)
+    Σdz_dΘdx = grid.cumint(grid.diff(Θ, 'X'), 'Z', boundary="extend")
+    Σdz_dΘdy = grid.cumint(grid.diff(Θ, 'Y'), 'Z', boundary="extend")
+    Σdz_dSdx = grid.cumint(grid.diff(S, 'X'), 'Z', boundary="extend")
+    Σdz_dSdy = grid.cumint(grid.diff(S, 'Y'), 'Z', boundary="extend")
+
+    # Assuming linear equation of state
     Σdz_dBdx = g * (α * Σdz_dΘdx - β * Σdz_dSdx)
     Σdz_dBdy = g * (α * Σdz_dΘdy - β * Σdz_dSdy)
 
-    # I
-    grid.interp(f, axis='X')
+    # Interpolate velocities in z
+    ℑU = U.interp(Z=zC, method="linear", kwargs={"fill_value": "extrapolate"})
+    ℑV = V.interp(Z=zC, method="linear", kwargs={"fill_value": "extrapolate"})
+
+    # Velocities at depth
+    U_d = ℑU.sel(XG=lon, YC=lat, Z=zC[-1], method="nearest")
+    V_d = ℑV.sel(XC=lon, YG=lat, Z=zC[-1], method="nearest")
 
     with ProgressBar():
-        # Velocities at depth
-        U_d = ℑU.sel(XG=lon, YC=lat, Z=zC[-1], method="nearest")
-        V_d = ℑV.sel(XG=lon, YC=lat, Z=zC[-1], method="nearest")
-
-        U_geo = (U_d - 1/f * Σdz_dBdy).sel(XG=lon, YC=lat, method="nearest").values
-        V_geo = (U_d + 1/f * Σdz_dBdx).sel(XG=lon, YC=lat, method="nearest").values
+        U_geo = (U_d - 1/f * Σdz_dBdy).interp(Z=zC, method="linear", kwargs={"fill_value": "extrapolate"}).sel(XG=lon, YC=lat, method="nearest").values
+        V_geo = (U_d + 1/f * Σdz_dBdx).interp(Z=zC, method="linear", kwargs={"fill_value": "extrapolate"}).sel(XG=lon, YC=lat, method="nearest").values
 
     return U_geo, V_geo
 
