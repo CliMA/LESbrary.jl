@@ -180,8 +180,8 @@ model = IncompressibleModel(
 
 ε(μ) = μ * randn() # noise
 
-U₀(x, y, z) = ℑU(0, z)
-V₀(x, y, z) = ℑV(0, z)
+U₀(x, y, z) = 0
+V₀(x, y, z) = 0
 W₀(x, y, z) = ε(1e-10)
 Θ₀(x, y, z) = ℑΘ(0, z)
 S₀(x, y, z) = ℑS(0, z)
