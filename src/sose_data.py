@@ -99,8 +99,9 @@ def compute_geostrophic_velocities(ds, lat, lon, days, zF, α, β, g, f):
     ℑV = V.interp(Z=zF, method="linear", kwargs={"fill_value": "extrapolate"})
 
     # Velocities at depth
-    U_d = ℑU.sel(XG=lon, YC=lat, Z=zF[-1], method="nearest")
-    V_d = ℑV.sel(XC=lon, YG=lat, Z=zF[-1], method="nearest")
+    z_bottom = ds.Z.values[-1]
+    U_d = ℑU.sel(XG=lon, YC=lat, Z=z_bottom, method="nearest")
+    V_d = ℑV.sel(XC=lon, YG=lat, Z=z_bottom, method="nearest")
 
     with ProgressBar():
         U_geo = (U_d - 1/f * Σdz_dBdy).sel(XC=lon, YG=lat, method="nearest").values

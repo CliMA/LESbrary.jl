@@ -385,7 +385,7 @@ fish = raw"""
 ##### Set up and run simulation
 #####
 
-wizard = TimeStepWizard(cfl=0.1, Δt=1.0, max_change=1.2, max_Δt=5.0)
+wizard = TimeStepWizard(cfl=0.1, Δt=1.0, max_change=1.2, max_Δt=10.0)
 
 # CFL utilities for reporting stability criterions.
 cfl = AdvectiveCFL(wizard)
@@ -412,7 +412,7 @@ function print_progress(simulation)
             progress, i, prettytime(t), umax, vmax, wmax, cfl(model), νmax, κmax, dcfl(model), simulation.Δt.Δt)
 end
 
-simulation = Simulation(model, Δt=wizard, stop_time=24hour, progress_frequency=20, progress=print_progress)
+simulation = Simulation(model, Δt=wizard, stop_time=4hour, progress_frequency=20, progress=print_progress)
 
 simulation.output_writers[:fields] = field_output_writer
 simulation.output_writers[:surface] = surface_output_writer
