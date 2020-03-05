@@ -159,6 +159,7 @@ dmypy.json
 .pytype/
 
 # Output data
+*.nc
 *.jld2
 
 # Plots and movies
@@ -169,3 +170,4 @@ dmypy.json
 *.slurm
 *.out
 *.err
+core.*

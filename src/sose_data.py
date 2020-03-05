@@ -2,6 +2,7 @@ import os
 import logging
 logging.getLogger().setLevel(logging.INFO)
 
+import xgcm
 import numpy as np
 import xarray as xr
 
@@ -38,25 +39,82 @@ def get_times(ds):
     ts = [datetime.utcfromtimestamp((dt - np.datetime64("1970-01-01T00:00:00Z")) / np.timedelta64(1, "s")) for dt in ts]
     return ts
 
-def get_scalar_time_series(ds, var, lat, lon, days):
+def get_scalar_time_series(ds, var, lat, lon, day_offset, days):
     logging.info(f"Getting time series of {var} at (lat={lat}°N, lon={lon}°E)...")
+    time_slice = slice(day_offset, day_offset + days)
     with ProgressBar():
         if var in ["UVEL", "oceTAUX"]:
-            time_series = ds[var].isel(time=slice(0, days)).sel(XG=lon, YC=lat, method="nearest").values
+            time_series = ds[var].isel(time=time_slice).sel(XG=lon, YC=lat, method="nearest").values
         elif var in ["VVEL", "oceTAUY"]:
-            time_series = ds[var].isel(time=slice(0, days)).sel(XC=lon, YG=lat, method="nearest").values
+            time_series = ds[var].isel(time=time_slice).sel(XC=lon, YG=lat, method="nearest").values
         else:
-            time_series = ds[var].isel(time=slice(0, days)).sel(XC=lon, YC=lat, method="nearest").values
+            time_series = ds[var].isel(time=time_slice).sel(XC=lon, YC=lat, method="nearest").values
     return time_series
 
-def get_profile_time_series(ds, var, lat, lon, days):
+def get_profile_time_series(ds, var, lat, lon, day_offset, days):
     logging.info(f"Getting time series of {var} at (lat={lat}°N, lon={lon}°E) for {days} days...")
+    time_slice = slice(day_offset, day_offset + days)
     with ProgressBar():
         if var in ["UVEL", "oceTAUX"]:
-            time_series = ds[var].isel(time=slice(0, days)).sel(XG=lon, YC=lat, method="nearest").values
+            time_series = ds[var].isel(time=time_slice).sel(XG=lon, YC=lat, method="nearest").values
         elif var in ["VVEL", "oceTAUY"]:
-            time_series = ds[var].isel(time=slice(0, days)).sel(XC=lon, YG=lat, method="nearest").values
+            time_series = ds[var].isel(time=time_slice).sel(XC=lon, YG=lat, method="nearest").values
         else:
-            time_series = ds[var].isel(time=slice(0, days)).sel(XC=lon, YC=lat, method="nearest").values
+            time_series = ds[var].isel(time=time_slice).sel(XC=lon, YC=lat, method="nearest").values
     return time_series
+
+def compute_geostrophic_velocities(ds, lat, lon, day_offset, days, zF, α, β, g, f):
+    logging.info(f"Computing geostrophic velocities at (lat={lat}°N, lon={lon}°E) for {days} days...")
+
+    # Reverse z index so we calculate cumulative integrals bottom up
+    ds = ds.reindex(Z=ds.Z[::-1], Zl=ds.Zl[::-1])
+
+    # Only pull out the data we need as time has chunk size 1.
+    time_slice = slice(day_offset, day_offset + days)
+
+    U =  ds.UVEL.isel(time=time_slice)
+    V =  ds.VVEL.isel(time=time_slice)
+    Θ = ds.THETA.isel(time=time_slice)
+    S =  ds.SALT.isel(time=time_slice)
+
+    # Set up grid metric
+    # See: https://xgcm.readthedocs.io/en/latest/grid_metrics.html#Using-metrics-with-xgcm
+    ds["drW"] = ds.hFacW * ds.drF  # vertical cell size at u point
+    ds["drS"] = ds.hFacS * ds.drF  # vertical cell size at v point
+    ds["drC"] = ds.hFacC * ds.drF  # vertical cell size at tracer point
+
+    metrics = {
+        ('X',):     ['dxC', 'dxG'], # X distances
+        ('Y',):     ['dyC', 'dyG'], # Y distances
+        ('Z',):     ['drW', 'drS', 'drC'], # Z distances
+        ('X', 'Y'): ['rA', 'rA', 'rAs', 'rAw'] # Areas
+    }
+
+    # xgcm grid for calculating derivatives and interpolating
+    grid = xgcm.Grid(ds, metrics=metrics, periodic=('X', 'Y'))
+
+    # Vertical integrals from z'=-Lz to z'=z (cumulative integrals)
+    Σdz_dΘdx = grid.cumint(grid.derivative(Θ, 'X'), 'Z', boundary="extend")
+    Σdz_dΘdy = grid.cumint(grid.derivative(Θ, 'Y'), 'Z', boundary="extend")
+    Σdz_dSdx = grid.cumint(grid.derivative(S, 'X'), 'Z', boundary="extend")
+    Σdz_dSdy = grid.cumint(grid.derivative(S, 'Y'), 'Z', boundary="extend")
+
+    # Assuming linear equation of state
+    Σdz_dBdx = g * (α * Σdz_dΘdx - β * Σdz_dSdx)
+    Σdz_dBdy = g * (α * Σdz_dΘdy - β * Σdz_dSdy)
+
+    # Interpolate velocities in z
+    # ℑU = U.interp(Z=zF, method="linear", kwargs={"fill_value": "extrapolate"})
+    # ℑV = V.interp(Z=zF, method="linear", kwargs={"fill_value": "extrapolate"})
+
+    # Velocities at depth
+    z_bottom = ds.Z.values[0]
+    U_d = U.sel(XG=lon, YC=lat, Z=z_bottom, method="nearest")
+    V_d = V.sel(XC=lon, YG=lat, Z=z_bottom, method="nearest")
+
+    with ProgressBar():
+        U_geo = (U_d - 1/f * Σdz_dBdy).sel(XC=lon, YG=lat, method="nearest").values
+        V_geo = (V_d + 1/f * Σdz_dBdx).sel(XG=lon, YC=lat, method="nearest").values
+
+    return U_geo, V_geo
 
