@@ -60,7 +60,7 @@ def get_profile_time_series(ds, var, lat, lon, days):
             time_series = ds[var].isel(time=slice(0, days)).sel(XC=lon, YC=lat, method="nearest").values
     return time_series
 
-def compute_geostrophic_velocities(ds, lat, lon, days, zC, α, β, g, f):
+def compute_geostrophic_velocities(ds, lat, lon, days, zF, α, β, g, f):
     logging.info(f"Computing geostrophic velocities at (lat={lat}°N, lon={lon}°E) for {days} days...")
 
     U =  ds.UVEL.isel(time=slice(0, days))
@@ -84,26 +84,26 @@ def compute_geostrophic_velocities(ds, lat, lon, days, zC, α, β, g, f):
     grid = xgcm.Grid(ds, metrics=metrics, periodic=('X', 'Y'))
 
     # Vertical integrals from z'=-Lz to z'=z (cumulative integrals)
-    Σdz_dΘdx = grid.cumint(grid.diff(Θ, 'X'), 'Z', boundary="extend")
-    Σdz_dΘdy = grid.cumint(grid.diff(Θ, 'Y'), 'Z', boundary="extend")
-    Σdz_dSdx = grid.cumint(grid.diff(S, 'X'), 'Z', boundary="extend")
-    Σdz_dSdy = grid.cumint(grid.diff(S, 'Y'), 'Z', boundary="extend")
+    Σdz_dΘdx = grid.cumint(grid.derivative(Θ, 'X'), 'Z', boundary="extend")
+    Σdz_dΘdy = grid.cumint(grid.derivative(Θ, 'Y'), 'Z', boundary="extend")
+    Σdz_dSdx = grid.cumint(grid.derivative(S, 'X'), 'Z', boundary="extend")
+    Σdz_dSdy = grid.cumint(grid.derivative(S, 'Y'), 'Z', boundary="extend")
 
     # Assuming linear equation of state
     Σdz_dBdx = g * (α * Σdz_dΘdx - β * Σdz_dSdx)
     Σdz_dBdy = g * (α * Σdz_dΘdy - β * Σdz_dSdy)
 
     # Interpolate velocities in z
-    ℑU = U.interp(Z=zC, method="linear", kwargs={"fill_value": "extrapolate"})
-    ℑV = V.interp(Z=zC, method="linear", kwargs={"fill_value": "extrapolate"})
+    ℑU = U.interp(Z=zF, method="linear", kwargs={"fill_value": "extrapolate"})
+    ℑV = V.interp(Z=zF, method="linear", kwargs={"fill_value": "extrapolate"})
 
     # Velocities at depth
-    U_d = ℑU.sel(XG=lon, YC=lat, Z=zC[-1], method="nearest")
-    V_d = ℑV.sel(XC=lon, YG=lat, Z=zC[-1], method="nearest")
+    U_d = ℑU.sel(XG=lon, YC=lat, Z=zF[-1], method="nearest")
+    V_d = ℑV.sel(XC=lon, YG=lat, Z=zF[-1], method="nearest")
 
     with ProgressBar():
-        U_geo = (U_d - 1/f * Σdz_dBdy).interp(Z=zC, method="linear", kwargs={"fill_value": "extrapolate"}).sel(XG=lon, YC=lat, method="nearest").values
-        V_geo = (U_d + 1/f * Σdz_dBdx).interp(Z=zC, method="linear", kwargs={"fill_value": "extrapolate"}).sel(XG=lon, YC=lat, method="nearest").values
+        U_geo = (U_d - 1/f * Σdz_dBdy).sel(XC=lon, YG=lat, method="nearest").values
+        V_geo = (V_d + 1/f * Σdz_dBdx).sel(XG=lon, YC=lat, method="nearest").values
 
     return U_geo, V_geo
 
