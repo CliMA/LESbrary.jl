@@ -30,7 +30,7 @@ FT = Float64
 
 Nx = Ny = 32
 Nz = 2Nx
-Lx = Ly = 1000.0
+Lx = Ly = 250.0
 Lz = 2Lx
 
 topology = (Periodic, Periodic, Bounded)
@@ -413,7 +413,7 @@ function print_progress(simulation)
             progress, i, prettytime(t), umax, vmax, wmax, cfl(model), νmax, κmax, dcfl(model), simulation.Δt.Δt)
 end
 
-simulation = Simulation(model, Δt=wizard, stop_time=4hour, progress_frequency=20, progress=print_progress)
+simulation = Simulation(model, Δt=wizard, stop_time=8hour, progress_frequency=20, progress=print_progress)
 
 simulation.output_writers[:fields] = field_output_writer
 simulation.output_writers[:surface] = surface_output_writer

@@ -175,5 +175,5 @@ def make_lesbrary_plots(lat, lon, days):
     plot_surfaces(dss)
     make_movie("surface_%05d.png", "surface.mp4")
 
-make_lesbrary_plots(-60, 275, 10)
+make_lesbrary_plots(-50, 275, 10)
 
