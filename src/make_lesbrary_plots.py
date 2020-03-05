@@ -67,10 +67,16 @@ def plot_large_scale(ds):
         lat, lon = ds.attrs["lat"], ds.attrs["lon"]
         fig.suptitle(f"Large scale at {lat}°N, {lon}°E, t = {t:.3f} days", fontsize=16)
 
+        Ugeo = ds.Ugeo.isel(time=n).squeeze()
+        Vgeo = ds.Vgeo.isel(time=n).squeeze()
+        Ugeo.plot(ax=axes[0], y="zC", label="Ugeo", color="tab:green")
+        Vgeo.plot(ax=axes[0], y="zC", label="Vgeo", color="tab:red")
+
         u = ds.u.isel(time=n).squeeze()
-        v = ds.u.isel(time=n).squeeze()
-        u.plot(ax=axes[0], y="zC", label="U")
-        v.plot(ax=axes[0], y="zC", label="V")
+        v = ds.v.isel(time=n).squeeze()
+        u.plot(ax=axes[0], y="zC", label="U", color="tab:green", linestyle="--")
+        v.plot(ax=axes[0], y="zC", label="V", color="tab:red", linestyle="--")
+
         axes[0].legend(loc="best", frameon=False)
         axes[0].set_xlabel("velocity [m/s]")
 
@@ -119,6 +125,10 @@ def plot_slices(ds):
         plt.savefig(png_filename)
 
         plt.close("all")
+
+# def plot_profiles(ds):
+#     for n in range(0, ds.time.size, 1):
+#         fig, axes = plt.subplots(nrows)
 
 def plot_surfaces(ds):
     for n in range(0, ds.time.size, 1):
