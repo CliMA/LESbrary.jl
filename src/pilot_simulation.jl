@@ -30,7 +30,7 @@ FT = Float64
 
 Nx = Ny = 32
 Nz = 2Nx
-Lx = Ly = 1000.0
+Lx = Ly = 250.0
 Lz = 2Lx
 
 topology = (Periodic, Periodic, Bounded)
@@ -180,8 +180,8 @@ model = IncompressibleModel(
 
 ε(μ) = μ * randn() # noise
 
-U₀(x, y, z) = ℑU(0, z)
-V₀(x, y, z) = ℑV(0, z)
+U₀(x, y, z) = 0
+V₀(x, y, z) = 0
 W₀(x, y, z) = ε(1e-10)
 Θ₀(x, y, z) = ℑΘ(0, z)
 S₀(x, y, z) = ℑS(0, z)
@@ -279,23 +279,25 @@ slice_output_writer =
 ##### Horizontal averages output writer
 #####
 
+Hz = model.grid.Hz
+
 profiles = Dict(
-    "u"  => model ->  Up(model)[1+model.grid.Hz:end-model.grid.Hz],
-    "v"  => model ->  Vp(model)[1+model.grid.Hz:end-model.grid.Hz],
-    "w"  => model ->  Wp(model)[1+model.grid.Hz:end-model.grid.Hz],
-    "T"  => model ->  Tp(model)[1+model.grid.Hz:end-model.grid.Hz],
-    "S"  => model ->  Sp(model)[1+model.grid.Hz:end-model.grid.Hz],
-    "ν"  => model ->  νp(model)[1+model.grid.Hz:end-model.grid.Hz],
-    "κT" => model -> κTp(model)[1+model.grid.Hz:end-model.grid.Hz],
-    "κS" => model -> κSp(model)[1+model.grid.Hz:end-model.grid.Hz],
-    "uu" => model ->  uu(model)[1+model.grid.Hz:end-model.grid.Hz],
-    "vv" => model ->  vv(model)[1+model.grid.Hz:end-model.grid.Hz],
-    "ww" => model ->  ww(model)[1+model.grid.Hz:end-model.grid.Hz],
-    "uv" => model ->  uv(model)[1+model.grid.Hz:end-model.grid.Hz],
-    "uw" => model ->  uw(model)[1+model.grid.Hz:end-model.grid.Hz],
-    "vw" => model ->  vw(model)[1+model.grid.Hz:end-model.grid.Hz],
-    "wT" => model ->  wT(model)[1+model.grid.Hz:end-model.grid.Hz],
-    "wS" => model ->  wS(model)[1+model.grid.Hz:end-model.grid.Hz]
+    "u"  => model ->  Up(model)[1+Hz:end-Hz],
+    "v"  => model ->  Vp(model)[1+Hz:end-Hz],
+    "w"  => model ->  Wp(model)[1+Hz:end-Hz],
+    "T"  => model ->  Tp(model)[1+Hz:end-Hz],
+    "S"  => model ->  Sp(model)[1+Hz:end-Hz],
+    "ν"  => model ->  νp(model)[1+Hz:end-Hz],
+    "κT" => model -> κTp(model)[1+Hz:end-Hz],
+    "κS" => model -> κSp(model)[1+Hz:end-Hz],
+    "uu" => model ->  uu(model)[1+Hz:end-Hz],
+    "vv" => model ->  vv(model)[1+Hz:end-Hz],
+    "ww" => model ->  ww(model)[1+Hz:end-Hz],
+    "uv" => model ->  uv(model)[1+Hz:end-Hz],
+    "uw" => model ->  uw(model)[1+Hz:end-Hz],
+    "vw" => model ->  vw(model)[1+Hz:end-Hz],
+    "wT" => model ->  wT(model)[1+Hz:end-Hz],
+    "wS" => model ->  wS(model)[1+Hz:end-Hz]
 )
 
 profile_dims = Dict(k => ("zC",) for k in keys(profiles))
@@ -423,19 +425,3 @@ simulation.output_writers[:large_scale] = large_scale_output_writer
 
 run!(simulation)
 
-#=
-wizard.cfl = 0.1
-wizard.max_Δt = 5.0
-simulation.stop_time = 1hour
-run!(simulation)
-
-wizard.cfl = 0.05
-wizard.max_Δt = 1.0
-simulation.stop_time += 1hour
-run!(simulation)
-
-wizard.cfl = 0.1
-wizard.max_Δt = 5.0
-simulation.stop_time += 2hour
-run!(simulation)
-=#
