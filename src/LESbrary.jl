@@ -21,7 +21,7 @@ using Oceananigans.Fields: xnodes, ynodes, znodes
 include("Utils.jl")
 include("SpongeLayers.jl")
 include("FileManagement.jl")
-include("OnlineCalculations.jl")
+include("Statistics/Statistics.jl")
 include("NearSurfaceTurbulenceModels.jl")
 
 end # module
