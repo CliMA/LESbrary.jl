@@ -103,4 +103,3 @@ function horizontal_averages(model)
 
     return merge(primitive_averages, average_tracers, average_stresses, average_fluxes, average_diffusivities)
 end
-

@@ -5,20 +5,28 @@ used to 'spin up' a turbulent boundary layer, for use as an initial
 condition for simulations of boundary layer turbulence forced by the
 growth of surface waves.
 =#
-using WaveTransmittedTurbulence
-
 using 
-    Oceananigans, 
-    Oceananigans.Diagnostics, 
-    Oceananigans.OutputWriters, 
-    Oceananigans.Coriolis, 
-    Oceananigans.BoundaryConditions, 
-    Oceananigans.Forcing, 
-    Oceananigans.Utils, 
-    Oceananigans.TurbulenceClosures, 
+    LESbrary.SpongeLayers,
+    LESbrary.Statistics,
+    LESbrary.NearSurfaceTurbulenceModels,
+    LESbrary.Utils
+
+using
+    Oceananigans,
+    Oceananigans.Diagnostics,
+    Oceananigans.OutputWriters,
+    Oceananigans.Coriolis,
+    Oceananigans.BoundaryConditions,
+    Oceananigans.Forcing,
+    Oceananigans.Utils,
+    Oceananigans.TurbulenceClosures,
     Oceananigans.Buoyancy
 
 using Random, Printf, Statistics, ArgParse
+
+using CUDAapi: has_cuda
+
+using Oceananigans: @hascuda
 
 "Returns a dictionary of command line arguments."
 function parse_command_line_arguments()
@@ -27,18 +35,18 @@ function parse_command_line_arguments()
     @add_arg_table! settings begin
         "--Nh"
             help = "The number of grid points in x, y."
-            default = 32
+            default = 16
             arg_type = Int
 
         "--Nz"
             help = "The number of grid points in z."
-            default = 32
+            default = 16
             arg_type = Int
 
         "--buoyancy_flux", "-Q"
             help = """The surface buoyancy flux that drives convection in units of m² s⁻³. 
                       A positive buoyancy flux implies cooling."""
-            default = 5e-10
+            default = 1e-9
             arg_type = Float64
 
         "--buoyancy_gradient"
@@ -47,9 +55,14 @@ function parse_command_line_arguments()
             default = 1e-6
             arg_type = Float64
 
-        "--inertial_periods"
-            help = "The number of inertial periods for which the simulation should be run."
-            default = 0.5
+        "--coriolis"
+            help = "The Coriolis parameter."
+            default = 1e-4
+            arg_type = Float64
+
+        "--hours"
+            help = "The stop time for the simulation in hours."
+            default = 0.1
             arg_type = Float64
 
         "--device", "-d"
@@ -76,7 +89,7 @@ N² = args["buoyancy_gradient"] # [s⁻²] Initial buoyancy gradient
 Lh = 128                       # [m] Grid spacing in x, y (meters)
 Lz = 64                        # [m] Grid spacing in z (meters)
 θ₀ = 20.0                      # [ᵒC] Surface temperature
- f = 1e-4                      # [s⁻¹] Coriolis parameter
+ f = args["coriolis"]          # [s⁻¹] Coriolis parameter
 
 # Create the grid 
 grid = RegularCartesianGrid(size=(Nh, Nh, Nz), x=(0, Lh), y=(0, Lh), z=(-Lz, 0))
@@ -86,7 +99,7 @@ grid = RegularCartesianGrid(size=(Nh, Nh, Nz), x=(0, Lh), y=(0, Lh), z=(-Lz, 0))
 #
 #   h ∼ √(2 * Qᵇ * stop_time / N²)
 
-stop_time = 2π / f * args["inertial_periods"]
+stop_time = args["hours"] * hour
 
 # # Near-wall LES diffusivity modification + temperature flux specification
 
@@ -115,7 +128,7 @@ b_forcing = ParameterizedForcing(Fb, (δ=δ, τ=τ, dbdz=N²))
 # # Model instantiation, initial condition, and model run
 
 prefix = @sprintf("free_convection_Qb%.1e_Nsq%.1e_stop%.1f_Nh%d_Nz%d", Qᵇ, N², 
-                  stop_time * f / 2π, Nh, Nz)
+                  stop_time / hour, Nh, Nz)
 
 model = IncompressibleModel(       architecture = has_cuda() ? GPU() : CPU(),
                                            grid = grid,
@@ -128,10 +141,15 @@ model = IncompressibleModel(       architecture = has_cuda() ? GPU() : CPU(),
                            )
 
 # Initial condition
-ε₀, Δb, w★ = 1e-6, N² * Lz, (Qᵇ * Lz)^(1/3)
-Ξ(ε₀, z) = ε₀ * randn() * z / Lz * exp(z / 2) # rapidly decaying noise
-bᵢ(x, y, z) = N² * z + Ξ(ε₀ * Δb, z)
-uᵢ(x, y, z) = Ξ(ε₀ * w★, z)
+ε₀ = 1e-6
+Δb = N² * Lz
+w★ = (Qᵇ * Lz)^(1/3)
+Lϵ = 2 # noise decay scale, meters
+
+Ξ(ε₀, L, z) = ε₀ * randn() * z / Lz * exp(z / L) # rapidly decaying noise
+
+bᵢ(x, y, z) = Ξ(ε₀ * Δb, Lϵ, z) + N² * z
+uᵢ(x, y, z) = Ξ(ε₀ * w★, Lϵ, z)
 
 Oceananigans.set!(model, b=bᵢ, u=uᵢ, v=uᵢ, w=uᵢ)
 
@@ -148,7 +166,7 @@ end
 # # Prepare the simulation
 
 # Adaptive time-stepping
-wizard = TimeStepWizard(       cfl = 0.01,
+wizard = TimeStepWizard(       cfl = 0.1,
                                 Δt = 1e-1,
                         max_change = 1.1,
                             max_Δt = 10.0)
@@ -170,7 +188,7 @@ fields_to_output = merge(model.velocities, model.tracers, (νₑ=model.diffusivi
                          prefix_tuple_names(:κₑ, model.diffusivities.κₑ))
 
 field_writer = JLD2OutputWriter(model, FieldOutputs(fields_to_output); force=true, init=init,
-                                    interval = π / 2f, # every quarter period
+                                    interval = 4hour, # every quarter period
                                 max_filesize = 2GiB,
                                          dir = data_directory,
                                       prefix = prefix * "_fields")

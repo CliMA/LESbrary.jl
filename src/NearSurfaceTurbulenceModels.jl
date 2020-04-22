@@ -6,7 +6,8 @@ export
     save_closure_parameters!
 
 using Oceananigans,
-      Oceananigans.BoundaryConditions
+      Oceananigans.BoundaryConditions,
+      Oceananigans.TurbulenceClosures
 
 using JLD2
 
