@@ -171,3 +171,6 @@ dmypy.json
 *.out
 *.err
 core.*
+
+# Anything in /data
+data
