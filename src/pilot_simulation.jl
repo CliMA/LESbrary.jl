@@ -49,8 +49,8 @@ sose = pyimport("sose_data")
 
 # Don't have to wait minutes to load 3D data if we already did so.
 if (!@isdefined ds2) && (!@isdefined ds3)
-    ds2 = sose.open_sose_2d_datasets("/home/alir/cnhlab004/bsose_i122/")
-    ds3 = sose.open_sose_3d_datasets("/home/alir/cnhlab004/bsose_i122/")
+    ds2 = sose.open_sose_2d_datasets("/storage3/alir/bsose_i122/")
+    ds3 = sose.open_sose_3d_datasets("/storage3/alir/bsose_i122/")
 end
 
 date_times = sose.get_times(ds2)
@@ -163,15 +163,15 @@ s′_bcs =    TracerBoundaryConditions(grid, top=FluxBoundaryCondition(salt_flux
 #####
 
 model = IncompressibleModel(
-    architecture = arch,
-    float_type = FT,
-    grid = grid,
-    tracers = (:T, :S),
-    coriolis = coriolis,
+           architecture = arch,
+             float_type = FT,
+            	   grid = grid,
+                tracers = (:T, :S),
+               coriolis = coriolis,
     boundary_conditions = (u=u′_bcs, v=v′_bcs, T=θ′_bcs, S=s′_bcs),
-    closure = AnisotropicMinimumDissipation(),
-    forcing = forcings,
-    parameters = (ℑτx=ℑτx, ℑτy=ℑτy, ℑQθ=ℑQθ, ℑQs=ℑQs, ℑU=ℑUgeo, ℑV=ℑVgeo, ℑΘ=ℑΘ, ℑS=ℑS, μ=μ)
+                closure = AnisotropicMinimumDissipation(),
+                forcing = forcings,
+             parameters = (ℑτx=ℑτx, ℑτy=ℑτy, ℑQθ=ℑQθ, ℑQs=ℑQs, ℑU=ℑUgeo, ℑV=ℑVgeo, ℑΘ=ℑΘ, ℑS=ℑS, μ=μ)
 )
 
 #####
