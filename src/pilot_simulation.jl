@@ -193,7 +193,7 @@ model = IncompressibleModel(
             	   grid = grid,
                 tracers = (:T, :S),
                coriolis = coriolis,
-#   boundary_conditions = (u=u′_bcs, v=v′_bcs, T=θ′_bcs, S=s′_bcs),
+    boundary_conditions = (u=u′_bcs, v=v′_bcs, T=θ′_bcs, S=s′_bcs),
                 closure = AnisotropicMinimumDissipation(),
                 forcing = forcings
 )
