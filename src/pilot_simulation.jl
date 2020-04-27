@@ -8,6 +8,7 @@ const ∇ = gradient
 using Oceananigans
 using Oceananigans.Grids
 using Oceananigans.Operators
+using Oceananigans.Buoyancy
 using Oceananigans.Forcing
 using Oceananigans.Diagnostics
 using Oceananigans.OutputWriters
@@ -38,7 +39,7 @@ Lz = 2Lx
 topology = (Periodic, Periodic, Bounded)
 grid = RegularCartesianGrid(topology=topology, size=(Nx, Ny, Nz), x=(0.0, Lx), y=(0.0, Ly), z=(-Lz, 0.0))
 
-eos = LinearEquationOfState()
+eos = TEOS10(FT)
 buoyancy = SeawaterBuoyancy(equation_of_state=eos)
 
 coriolis = FPlane(latitude=lat)
@@ -67,8 +68,12 @@ V = sose.get_profile_time_series(ds3, "VVEL",  lat, lon, day_offset, days) |> Ar
 Θ = sose.get_profile_time_series(ds3, "THETA", lat, lon, day_offset, days) |> Array{FT}
 S = sose.get_profile_time_series(ds3, "SALT",  lat, lon, day_offset, days) |> Array{FT}
 
+# Nominal values for α, β to compute geostrophic velocities
+# FIXME: Use TEOS-10 (Θ, Sᴬ, Z) dependent values
+α = 1.67e-4
+β = 7.80e-4
 
-Ugeo, Vgeo = sose.compute_geostrophic_velocities(ds3, lat, lon, day_offset, days, grid.zF, eos.α, eos.β,
+Ugeo, Vgeo = sose.compute_geostrophic_velocities(ds3, lat, lon, day_offset, days, grid.zF, α, β,
                                                  buoyancy.gravitational_acceleration, coriolis.f)
 
 ds2.close()
