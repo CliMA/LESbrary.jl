@@ -6,7 +6,9 @@ using Interpolations: interpolate, gradient, Gridded, Linear
 const ∇ = gradient
 
 using Oceananigans
+using Oceananigans.Grids
 using Oceananigans.Operators
+using Oceananigans.Forcing
 using Oceananigans.Diagnostics
 using Oceananigans.OutputWriters
 using Oceananigans.Utils
@@ -136,7 +138,25 @@ week = 7day
 @inline Fθ_μ(i, j, k, grid, t, ũ′, c′, p) = @inbounds p.μ.T * (p.ℑΘ(t, grid.zC[k]) - c′.T[i, j, k])
 @inline FS_μ(i, j, k, grid, t, ũ′, c′, p) = @inbounds p.μ.S * (p.ℑS(t, grid.zC[k]) - c′.S[i, j, k])
 
-forcings = ModelForcing(u=Fu′, v=Fv′, w=Fw′, T=Fθ′, S=Fs′)
+@inline u_forcing_wrapper(i, j, k, grid, clock, state, params) = Fu′(i, j, k, grid, clock.time, state.velocities, state.tracers, params)
+@inline v_forcing_wrapper(i, j, k, grid, clock, state, params) = Fv′(i, j, k, grid, clock.time, state.velocities, state.tracers, params)
+@inline w_forcing_wrapper(i, j, k, grid, clock, state, params) = Fw′(i, j, k, grid, clock.time, state.velocities, state.tracers, params)
+
+@inline T_forcing_wrapper(i, j, k, grid, clock, state, params) =
+    Fθ′(i, j, k, grid, clock.time, state.velocities, state.tracers, params) + Fθ_μ(i, j, k, grid, clock.time, state.velocities, state.tracers, params)
+
+@inline S_forcing_wrapper(i, j, k, grid, clock, state, params) =
+    Fs′(i, j, k, grid, clock.time, state.velocities, state.tracers, params) + FS_μ(i, j, k, grid, clock.time, state.velocities, state.tracers, params)
+
+parameters = (ℑτx=ℑτx, ℑτy=ℑτy, ℑQθ=ℑQθ, ℑQs=ℑQs, ℑU=ℑUgeo, ℑV=ℑVgeo, ℑΘ=ℑΘ, ℑS=ℑS, μ=μ)
+
+forcings = ModelForcing(
+    u = ParameterizedForcing(u_forcing_wrapper, parameters),
+    v = ParameterizedForcing(v_forcing_wrapper, parameters),
+    w = ParameterizedForcing(w_forcing_wrapper, parameters),
+    T = ParameterizedForcing(T_forcing_wrapper, parameters),
+    S = ParameterizedForcing(S_forcing_wrapper, parameters)
+)
 
 #####
 ##### Set up boundary conditions to
@@ -168,10 +188,9 @@ model = IncompressibleModel(
             	   grid = grid,
                 tracers = (:T, :S),
                coriolis = coriolis,
-    boundary_conditions = (u=u′_bcs, v=v′_bcs, T=θ′_bcs, S=s′_bcs),
+#   boundary_conditions = (u=u′_bcs, v=v′_bcs, T=θ′_bcs, S=s′_bcs),
                 closure = AnisotropicMinimumDissipation(),
-                forcing = forcings,
-             parameters = (ℑτx=ℑτx, ℑτy=ℑτy, ℑQθ=ℑQθ, ℑQs=ℑQs, ℑU=ℑUgeo, ℑV=ℑVgeo, ℑΘ=ℑΘ, ℑS=ℑS, μ=μ)
+                forcing = forcings
 )
 
 #####
@@ -317,12 +336,12 @@ large_scale_outputs = Dict(
     "τy" => model -> ℑτy.(model.clock.time),
     "QT" => model -> ℑQθ.(model.clock.time),
     "QS" => model -> ℑQs.(model.clock.time),
-     "u" => model ->  ℑU.(model.clock.time, model.grid.zC),
-     "v" => model ->  ℑV.(model.clock.time, model.grid.zC),
-     "T" => model ->  ℑΘ.(model.clock.time, model.grid.zC),
-     "S" => model ->  ℑS.(model.clock.time, model.grid.zC),
-  "Ugeo" => model -> ℑUgeo.(model.clock.time, model.grid.zC),
-  "Vgeo" => model -> ℑVgeo.(model.clock.time, model.grid.zC)
+     "u" => model ->  ℑU.(model.clock.time, znodes(Cell, model.grid)[:]),
+     "v" => model ->  ℑV.(model.clock.time, znodes(Cell, model.grid)[:]),
+     "T" => model ->  ℑΘ.(model.clock.time, znodes(Cell, model.grid)[:]),
+     "S" => model ->  ℑS.(model.clock.time, znodes(Cell, model.grid)[:]),
+  "Ugeo" => model -> ℑUgeo.(model.clock.time, znodes(Cell, model.grid)[:]),
+  "Vgeo" => model -> ℑVgeo.(model.clock.time, znodes(Cell, model.grid)[:])
 )
 
 large_scale_dims = Dict(
