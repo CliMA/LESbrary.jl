@@ -9,6 +9,7 @@ using Oceananigans
 using Oceananigans.Grids
 using Oceananigans.Operators
 using Oceananigans.Buoyancy
+using Oceananigans.BoundaryConditions
 using Oceananigans.Forcing
 using Oceananigans.Diagnostics
 using Oceananigans.OutputWriters
@@ -173,15 +174,15 @@ forcings = ModelForcing(
 const ρ₀ = 1027.0  # Density of seawater [kg/m³]
 const cₚ = 4000.0  # Specific heat capacity of seawater at constant pressure [J/(kg·K)]
 
-@inline wind_stress_x(i, j, grid, t, I, ũ′, c′, p) = p.ℑτx(t) / ρ₀
-@inline wind_stress_y(i, j, grid, t, I, ũ′, c′, p) = p.ℑτy(t) / ρ₀
-@inline     heat_flux(i, j, grid, t, I, ũ′, c′, p) = - p.ℑQθ(t) / ρ₀ / cₚ
-@inline     salt_flux(i, j, grid, t, I, ũ′, c′, p) =   p.ℑQs(t) / ρ₀  # Minus sign because a freshwater flux would decrease salinity.
+@inline wind_stress_x(i, j, grid, clock, state, p) = p.ℑτx(clock.time) / ρ₀
+@inline wind_stress_y(i, j, grid, clock, state, p) = p.ℑτy(clock.time) / ρ₀
+@inline     heat_flux(i, j, grid, clock, state, p) = - p.ℑQθ(clock.time) / ρ₀ / cₚ
+@inline     salt_flux(i, j, grid, clock, state, p) =   p.ℑQs(clock.time) / ρ₀  # Minus sign because a freshwater flux would decrease salinity.
 
-u′_bcs = UVelocityBoundaryConditions(grid, top=FluxBoundaryCondition(wind_stress_x))
-v′_bcs = UVelocityBoundaryConditions(grid, top=FluxBoundaryCondition(wind_stress_y))
-θ′_bcs =    TracerBoundaryConditions(grid, top=FluxBoundaryCondition(heat_flux))
-s′_bcs =    TracerBoundaryConditions(grid, top=FluxBoundaryCondition(salt_flux))
+u′_bcs = UVelocityBoundaryConditions(grid, top=ParameterizedBoundaryCondition(Flux, wind_stress_x, parameters))
+v′_bcs = VVelocityBoundaryConditions(grid, top=ParameterizedBoundaryCondition(Flux, wind_stress_y, parameters))
+θ′_bcs =    TracerBoundaryConditions(grid, top=ParameterizedBoundaryCondition(Flux, heat_flux, parameters))
+s′_bcs =    TracerBoundaryConditions(grid, top=ParameterizedBoundaryCondition(Flux, salt_flux, parameters))
 
 #####
 ##### Model setup
@@ -439,7 +440,7 @@ function print_progress(simulation)
             progress, i, prettytime(t), umax, vmax, wmax, cfl(model), νmax, κmax, dcfl(model), simulation.Δt.Δt)
 end
 
-simulation = Simulation(model, Δt=wizard, stop_time=4hour, progress_frequency=20, progress=print_progress)
+simulation = Simulation(model, Δt=wizard, stop_time=7day, progress_frequency=20, progress=print_progress)
 
 simulation.output_writers[:fields] = field_output_writer
 simulation.output_writers[:surface] = surface_output_writer
