@@ -6,7 +6,11 @@ using Interpolations: interpolate, gradient, Gridded, Linear
 const ∇ = gradient
 
 using Oceananigans
+using Oceananigans.Grids
 using Oceananigans.Operators
+using Oceananigans.Buoyancy
+using Oceananigans.BoundaryConditions
+using Oceananigans.Forcing
 using Oceananigans.Diagnostics
 using Oceananigans.OutputWriters
 using Oceananigans.Utils
@@ -36,7 +40,7 @@ Lz = 2Lx
 topology = (Periodic, Periodic, Bounded)
 grid = RegularCartesianGrid(topology=topology, size=(Nx, Ny, Nz), x=(0.0, Lx), y=(0.0, Ly), z=(-Lz, 0.0))
 
-eos = LinearEquationOfState()
+eos = TEOS10(FT)
 buoyancy = SeawaterBuoyancy(equation_of_state=eos)
 
 coriolis = FPlane(latitude=lat)
@@ -49,8 +53,8 @@ sose = pyimport("sose_data")
 
 # Don't have to wait minutes to load 3D data if we already did so.
 if (!@isdefined ds2) && (!@isdefined ds3)
-    ds2 = sose.open_sose_2d_datasets("/home/alir/cnhlab004/bsose_i122/")
-    ds3 = sose.open_sose_3d_datasets("/home/alir/cnhlab004/bsose_i122/")
+    ds2 = sose.open_sose_2d_datasets("/storage3/alir/bsose_i122/")
+    ds3 = sose.open_sose_3d_datasets("/storage3/alir/bsose_i122/")
 end
 
 date_times = sose.get_times(ds2)
@@ -65,8 +69,12 @@ V = sose.get_profile_time_series(ds3, "VVEL",  lat, lon, day_offset, days) |> Ar
 Θ = sose.get_profile_time_series(ds3, "THETA", lat, lon, day_offset, days) |> Array{FT}
 S = sose.get_profile_time_series(ds3, "SALT",  lat, lon, day_offset, days) |> Array{FT}
 
+# Nominal values for α, β to compute geostrophic velocities
+# FIXME: Use TEOS-10 (Θ, Sᴬ, Z) dependent values
+α = 1.67e-4
+β = 7.80e-4
 
-Ugeo, Vgeo = sose.compute_geostrophic_velocities(ds3, lat, lon, day_offset, days, grid.zF, eos.α, eos.β,
+Ugeo, Vgeo = sose.compute_geostrophic_velocities(ds3, lat, lon, day_offset, days, grid.zF, α, β,
                                                  buoyancy.gravitational_acceleration, coriolis.f)
 
 ds2.close()
@@ -136,7 +144,25 @@ week = 7day
 @inline Fθ_μ(i, j, k, grid, t, ũ′, c′, p) = @inbounds p.μ.T * (p.ℑΘ(t, grid.zC[k]) - c′.T[i, j, k])
 @inline FS_μ(i, j, k, grid, t, ũ′, c′, p) = @inbounds p.μ.S * (p.ℑS(t, grid.zC[k]) - c′.S[i, j, k])
 
-forcings = ModelForcing(u=Fu′, v=Fv′, w=Fw′, T=Fθ′, S=Fs′)
+@inline u_forcing_wrapper(i, j, k, grid, clock, state, params) = Fu′(i, j, k, grid, clock.time, state.velocities, state.tracers, params)
+@inline v_forcing_wrapper(i, j, k, grid, clock, state, params) = Fv′(i, j, k, grid, clock.time, state.velocities, state.tracers, params)
+@inline w_forcing_wrapper(i, j, k, grid, clock, state, params) = Fw′(i, j, k, grid, clock.time, state.velocities, state.tracers, params)
+
+@inline T_forcing_wrapper(i, j, k, grid, clock, state, params) =
+    Fθ′(i, j, k, grid, clock.time, state.velocities, state.tracers, params) + Fθ_μ(i, j, k, grid, clock.time, state.velocities, state.tracers, params)
+
+@inline S_forcing_wrapper(i, j, k, grid, clock, state, params) =
+    Fs′(i, j, k, grid, clock.time, state.velocities, state.tracers, params) + FS_μ(i, j, k, grid, clock.time, state.velocities, state.tracers, params)
+
+parameters = (ℑτx=ℑτx, ℑτy=ℑτy, ℑQθ=ℑQθ, ℑQs=ℑQs, ℑU=ℑUgeo, ℑV=ℑVgeo, ℑΘ=ℑΘ, ℑS=ℑS, μ=μ)
+
+forcings = ModelForcing(
+    u = ParameterizedForcing(u_forcing_wrapper, parameters),
+    v = ParameterizedForcing(v_forcing_wrapper, parameters),
+    w = ParameterizedForcing(w_forcing_wrapper, parameters),
+    T = ParameterizedForcing(T_forcing_wrapper, parameters),
+    S = ParameterizedForcing(S_forcing_wrapper, parameters)
+)
 
 #####
 ##### Set up boundary conditions to
@@ -148,30 +174,29 @@ forcings = ModelForcing(u=Fu′, v=Fv′, w=Fw′, T=Fθ′, S=Fs′)
 const ρ₀ = 1027.0  # Density of seawater [kg/m³]
 const cₚ = 4000.0  # Specific heat capacity of seawater at constant pressure [J/(kg·K)]
 
-@inline wind_stress_x(i, j, grid, t, I, ũ′, c′, p) = p.ℑτx(t) / ρ₀
-@inline wind_stress_y(i, j, grid, t, I, ũ′, c′, p) = p.ℑτy(t) / ρ₀
-@inline     heat_flux(i, j, grid, t, I, ũ′, c′, p) = - p.ℑQθ(t) / ρ₀ / cₚ
-@inline     salt_flux(i, j, grid, t, I, ũ′, c′, p) =   p.ℑQs(t) / ρ₀  # Minus sign because a freshwater flux would decrease salinity.
+@inline wind_stress_x(i, j, grid, clock, state, p) = p.ℑτx(clock.time) / ρ₀
+@inline wind_stress_y(i, j, grid, clock, state, p) = p.ℑτy(clock.time) / ρ₀
+@inline     heat_flux(i, j, grid, clock, state, p) = - p.ℑQθ(clock.time) / ρ₀ / cₚ
+@inline     salt_flux(i, j, grid, clock, state, p) =   p.ℑQs(clock.time) / ρ₀  # Minus sign because a freshwater flux would decrease salinity.
 
-u′_bcs = UVelocityBoundaryConditions(grid, top=FluxBoundaryCondition(wind_stress_x))
-v′_bcs = UVelocityBoundaryConditions(grid, top=FluxBoundaryCondition(wind_stress_y))
-θ′_bcs =    TracerBoundaryConditions(grid, top=FluxBoundaryCondition(heat_flux))
-s′_bcs =    TracerBoundaryConditions(grid, top=FluxBoundaryCondition(salt_flux))
+u′_bcs = UVelocityBoundaryConditions(grid, top=ParameterizedBoundaryCondition(Flux, wind_stress_x, parameters))
+v′_bcs = VVelocityBoundaryConditions(grid, top=ParameterizedBoundaryCondition(Flux, wind_stress_y, parameters))
+θ′_bcs =    TracerBoundaryConditions(grid, top=ParameterizedBoundaryCondition(Flux, heat_flux, parameters))
+s′_bcs =    TracerBoundaryConditions(grid, top=ParameterizedBoundaryCondition(Flux, salt_flux, parameters))
 
 #####
 ##### Model setup
 #####
 
 model = IncompressibleModel(
-    architecture = arch,
-    float_type = FT,
-    grid = grid,
-    tracers = (:T, :S),
-    coriolis = coriolis,
+           architecture = arch,
+             float_type = FT,
+            	   grid = grid,
+                tracers = (:T, :S),
+               coriolis = coriolis,
     boundary_conditions = (u=u′_bcs, v=v′_bcs, T=θ′_bcs, S=s′_bcs),
-    closure = AnisotropicMinimumDissipation(),
-    forcing = forcings,
-    parameters = (ℑτx=ℑτx, ℑτy=ℑτy, ℑQθ=ℑQθ, ℑQs=ℑQs, ℑU=ℑUgeo, ℑV=ℑVgeo, ℑΘ=ℑΘ, ℑS=ℑS, μ=μ)
+                closure = AnisotropicMinimumDissipation(),
+                forcing = forcings
 )
 
 #####
@@ -317,12 +342,12 @@ large_scale_outputs = Dict(
     "τy" => model -> ℑτy.(model.clock.time),
     "QT" => model -> ℑQθ.(model.clock.time),
     "QS" => model -> ℑQs.(model.clock.time),
-     "u" => model ->  ℑU.(model.clock.time, model.grid.zC),
-     "v" => model ->  ℑV.(model.clock.time, model.grid.zC),
-     "T" => model ->  ℑΘ.(model.clock.time, model.grid.zC),
-     "S" => model ->  ℑS.(model.clock.time, model.grid.zC),
-  "Ugeo" => model -> ℑUgeo.(model.clock.time, model.grid.zC),
-  "Vgeo" => model -> ℑVgeo.(model.clock.time, model.grid.zC)
+     "u" => model ->  ℑU.(model.clock.time, znodes(Cell, model.grid)[:]),
+     "v" => model ->  ℑV.(model.clock.time, znodes(Cell, model.grid)[:]),
+     "T" => model ->  ℑΘ.(model.clock.time, znodes(Cell, model.grid)[:]),
+     "S" => model ->  ℑS.(model.clock.time, znodes(Cell, model.grid)[:]),
+  "Ugeo" => model -> ℑUgeo.(model.clock.time, znodes(Cell, model.grid)[:]),
+  "Vgeo" => model -> ℑVgeo.(model.clock.time, znodes(Cell, model.grid)[:])
 )
 
 large_scale_dims = Dict(
@@ -415,7 +440,7 @@ function print_progress(simulation)
             progress, i, prettytime(t), umax, vmax, wmax, cfl(model), νmax, κmax, dcfl(model), simulation.Δt.Δt)
 end
 
-simulation = Simulation(model, Δt=wizard, stop_time=4hour, progress_frequency=20, progress=print_progress)
+simulation = Simulation(model, Δt=wizard, stop_time=7day, progress_frequency=20, progress=print_progress)
 
 simulation.output_writers[:fields] = field_output_writer
 simulation.output_writers[:surface] = surface_output_writer
