@@ -171,3 +171,9 @@ dmypy.json
 *.out
 *.err
 core.*
+
+# Anything in /data
+data
+
+# vim temporary files
+*.swp
