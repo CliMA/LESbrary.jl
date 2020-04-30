@@ -3,6 +3,8 @@
 # This script runs a simulation of convection driven by cooling at the 
 # surface of an idealized, stratified, rotating ocean surface boundary layer.
 
+using LESbrary
+
 using
     Oceananigans,
     Oceananigans.Diagnostics,
@@ -69,9 +71,7 @@ end
 args = parse_command_line_arguments()
 
 ## The first thing we do is to select the GPU to run on as specified on the command line.
-using LESbrary.Utils: select_device!
-
-@hascuda select_device!(args["device"])
+@hascuda LESbrary.Utils.select_device!(args["device"])
 
 # # Numerical and physical parameters
 
@@ -91,10 +91,21 @@ Lz = 128                       # [m] Grid spacing in z (meters)
 ## Create the grid
 grid = RegularCartesianGrid(size=(Nh, Nh, Nz), x=(0, Lh), y=(0, Lh), z=(-Lz, 0))
 
+#####
+##### Buoyancy, equation of state, temperature flux, and initial temperature gradient
+#####
+
+buoyancy = SeawaterBuoyancy(equation_of_state=LinearEquationOfState(α=2e-4), constant_salinity=35.0)
+
+   Qᶿ = Qᵇ / (buoyancy.gravitational_acceleration * buoyancy.equation_of_state.α)
+dθdz₀ = N² / (buoyancy.gravitational_acceleration * buoyancy.equation_of_state.α)
+ dθdz = dθdz₀
+
 # # Near-wall LES diffusivity modification + temperature flux specification
 
 using LESbrary.NearSurfaceTurbulenceModels: SurfaceEnhancedModelConstant,
-                                            SurfaceFluxDiffusivityBoundaryConditions
+                                            SurfaceFluxDiffusivityBoundaryConditions,
+                                            save_closure_parameters!
 
 # We use a wall-aware AMD model constant which is 'enhanced' near the upper boundary.
 # This is necessary to obtain smooth buoyancy profiles near the boundary.
@@ -106,10 +117,10 @@ Cᴬᴹᴰ = SurfaceEnhancedModelConstant(Δz, C₀=1/12, enhancement=7, decay_s
 κₑ_bcs = SurfaceFluxDiffusivityBoundaryConditions(grid, Qᵇ; Cʷ=1.0)
 
 κ₀ = κₑ_bcs.z.top.condition # surface diffusivity
-dbdz_surface = - Qᵇ / κ₀    # set temperature gradient = - flux / diffusivity
+dθdz_surface = - Qᶿ / κ₀    # set temperature gradient = - flux / diffusivity
 
-b_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Gradient, dbdz_surface),
-                                       bottom = BoundaryCondition(Gradient, N²))
+θ_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Gradient, dθdz_surface),
+                                       bottom = BoundaryCondition(Gradient, dθdz₀))
 
 # # Sponge layer specification
 
@@ -121,7 +132,7 @@ using LESbrary.SpongeLayers: Fu, Fv, Fw, Fθ
 u_forcing = ParameterizedForcing(Fu, (δ=δ, τ=τ))
 v_forcing = ParameterizedForcing(Fv, (δ=δ, τ=τ))
 w_forcing = ParameterizedForcing(Fw, (δ=δ, τ=τ))
-b_forcing = ParameterizedForcing(Fb, (δ=δ, τ=τ, dbdz=N²))
+θ_forcing = ParameterizedForcing(Fθ, (δ=δ, τ=τ, dθdz=N²))
 
 # # Model instantiation, initial condition, and model run
 
@@ -132,12 +143,12 @@ using CUDAapi: has_cuda
 
 model = IncompressibleModel(       architecture = has_cuda() ? GPU() : CPU(),
                                            grid = grid,
-                                        tracers = :b,
-                                       buoyancy = BuoyancyTracer(),
+                                        tracers = (:T,),
+                                       buoyancy = buoyancy,
                                        coriolis = FPlane(f=f),
                                         closure = AnisotropicMinimumDissipation(C=Cᴬᴹᴰ),
-                            boundary_conditions = (b=b_bcs, κₑ=(b=κₑ_bcs,)),
-                                        forcing = ModelForcing(u=u_forcing, v=v_forcing, w=w_forcing, b=b_forcing)
+                            boundary_conditions = (θ=θ_bcs, κₑ=(θ=κₑ_bcs,)),
+                                        forcing = ModelForcing(u=u_forcing, v=v_forcing, w=w_forcing, θ=θ_forcing)
                            )
 
 # # Initial condition
@@ -145,15 +156,15 @@ model = IncompressibleModel(       architecture = has_cuda() ? GPU() : CPU(),
 # ## Noise
 ε₀ = 1e-6               # Non-dimensional noise amplitude
 Lϵ = 2                  # Decay scale
-Δb = N² * Lz            # Buoyancy perturbation scale
+Δθ = dθdz₀ * Lz         # Temperature perturbation scale
 w★ = (Qᵇ * Lz)^(1/3)    # Vertical velocity scale
 
 Ξ(ε₀, L, z) = ε₀ * randn() * z / Lz * exp(z / L) # rapidly decaying noise
 
-bᵢ(x, y, z) = Ξ(ε₀ * Δb, Lϵ, z) + N² * z
+θᵢ(x, y, z) = Ξ(ε₀ * Δθ, Lϵ, z) + dθdz₀ * z
 uᵢ(x, y, z) = Ξ(ε₀ * w★, Lϵ, z)
 
-Oceananigans.set!(model, b=bᵢ, u=uᵢ, v=uᵢ, w=uᵢ)
+Oceananigans.set!(model, T=θᵢ, u=uᵢ, v=uᵢ, w=uᵢ)
 
 "Save a few things that we might want when we analyze the data."
 function init(file, model; kwargs...)
@@ -161,6 +172,7 @@ function init(file, model; kwargs...)
     file["sponge_layer/τ"] = τ
     file["initial_conditions/N²"] = N²
     file["boundary_conditions/Qᵇ"] = Qᵇ
+    file["boundary_conditions/Qᶿ"] = Qᶿ
     save_closure_parameters!(file, model.closure)
     return nothing
 end
@@ -181,7 +193,7 @@ simulation = Simulation(model, Δt=wizard, stop_time=stop_time, progress_frequen
 
 # # Output
 
-using LESbrary.Output: TurbulenceStatistics
+using LESbrary.Statistics: horizontal_averages
 
 data_directory = joinpath(@__DIR__, "..", "data", prefix) # save data in /data/prefix
 
@@ -191,7 +203,7 @@ cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
 
 # Three-dimensional field output
 fields_to_output = merge(model.velocities, model.tracers, (νₑ=model.diffusivities.νₑ,),
-                         prefix_tuple_names(:κₑ, model.diffusivities.κₑ))
+                         LESbrary.Utils.prefix_tuple_names(:κₑ, model.diffusivities.κₑ))
 
 field_writer = JLD2OutputWriter(model, FieldOutputs(fields_to_output); force=true, init=init,
                                     interval = 4hour, # every quarter period
@@ -203,7 +215,9 @@ simulation.output_writers[:fields] = field_writer
 
 
 # Horizontal averages
-averages_writer = JLD2OutputWriter(model, horizontal_averages(model); force=true, init=init,
+averages_writer = JLD2OutputWriter(model, LESbrary.Statistics.horizontal_averages(model); 
+                                      force = true, 
+                                       init = init,
                                    interval = 10minute,
                                         dir = data_directory,
                                      prefix = prefix*"_averages")
@@ -212,7 +226,7 @@ simulation.output_writers[:averages] = averages_writer
 
 # # Run
 
-print_banner(simulation)
+LESbrary.Utils.print_banner(simulation)
 
 run!(simulation)
 

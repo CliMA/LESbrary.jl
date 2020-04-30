@@ -14,10 +14,11 @@ export
 
 using Oceananigans,
       Oceananigans.AbstractOperations,
+      Oceananigans.Architectures,
       Oceananigans.Diagnostics,
+      Oceananigans.Grids,
       Oceananigans.Fields,
-      Oceananigans.Operators,
-      Oceananigans.Grids
+      Oceananigans.Operators
 
 using Oceananigans.Utils: @loop_xyz, datatuple
 

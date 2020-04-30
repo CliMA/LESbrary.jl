@@ -1,10 +1,9 @@
-mutable struct SimulationProgressMessenger{T, U, V, W, N, K, A, D, Z} <: Function
+mutable struct SimulationProgressMessenger{T, U, V, W, N, A, D, Z} <: Function
     wall_time :: T
          umax :: U
          vmax :: V
          wmax :: W
          νmax :: N
-         κmax :: K
       adv_cfl :: A
       dif_cfl :: D
        wizard :: Z
@@ -17,7 +16,6 @@ SimulationProgressMessenger(model, Δt) =
                       FieldMaximum(abs, model.velocities.v),
                       FieldMaximum(abs, model.velocities.w),
                       FieldMaximum(abs, model.diffusivities.νₑ),
-                      FieldMaximum(abs, model.diffusivities.κₑ.b),
                       AdvectiveCFL(Δt),
                       DiffusiveCFL(Δt),
                       Δt
@@ -36,9 +34,9 @@ function (pm::SimulationProgressMessenger)(simulation)
     msg1 = @sprintf("[%06.2f%%] i: % 6d, sim time: % 10s, Δt: % 10s, wall time: % 8s,",
                     progress, i, prettytime(t), prettytime(simulation.Δt.Δt), prettytime(elapsed_wall_time))
 
-    msg2 = @sprintf("umax: (%.2e, %.2e, %.2e) m/s, CFL: %.2e, νκmax: (%.2e, %.2e), νκCFL: %.2e,\n",
-                    pm.umax(model), pm.vmax(model), pm.wmax(model), pm.adv_cfl(model), pm.νmax(model), 
-                    pm.κmax(model), pm.dif_cfl(model))
+    msg2 = @sprintf("umax: (%.2e, %.2e, %.2e) m/s, CFL: %.2e, νmax: %.2e m² s⁻¹, νCFL: %.2e,\n",
+                    pm.umax(model), pm.vmax(model), pm.wmax(model), pm.adv_cfl(model), pm.νmax(model),
+                    pm.dif_cfl(model))
 
     @printf("%s %s", msg1, msg2)
 
