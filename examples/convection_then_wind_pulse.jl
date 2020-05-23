@@ -2,6 +2,12 @@
 
 using Oceananigans, LESbrary, Printf
 
+using Oceananigans: @hascuda
+
+using LESbrary.Utils
+
+@hascuda select_device!(0)
+
 # ## Model set-up
 #
 # ### Domain specification and Grid construction
@@ -10,7 +16,7 @@ using Oceananigans, LESbrary, Printf
 
 using Oceananigans.Grids
 
-grid = RegularCartesianGrid(size=(64, 64, 64), extent=(512, 512, 256))
+grid = RegularCartesianGrid(size=(128, 128, 128), extent=(512, 512, 256))
 
 # ### Boundary conditions
 #
@@ -75,7 +81,7 @@ f = 1e-4 # s⁻¹
 
 using Oceananigans.Buoyancy: BuoyancyTracer 
 
-model = IncompressibleModel(        architecture = CPU(),
+model = IncompressibleModel(        architecture = GPU(),
                                             grid = grid,
                                          tracers = :b,
                                         buoyancy = BuoyancyTracer(),
@@ -103,44 +109,16 @@ set!(model, b=bᵢ)
 wizard = TimeStepWizard(cfl=0.2, Δt=5.0, max_change=1.1, max_Δt=20.0)
 nothing # hide
 
-# ### Nice progress messaging
-#
-# We define a function that prints a helpful message with
-# maximum absolute value of $u, v, w$ and the current wall clock time.
-
-using Oceananigans.Diagnostics, Printf
-
-umax = FieldMaximum(abs, model.velocities.u)
-vmax = FieldMaximum(abs, model.velocities.v)
-wmax = FieldMaximum(abs, model.velocities.w)
-
-wall_clock = time_ns()
-
-function print_progress(simulation)
-    model = simulation.model
-
-    ## Print a progress message
-    msg = @sprintf("i: %04d, t: %s, Δt: %s, umax = (%.1e, %.1e, %.1e) ms⁻¹, wall time: %s\n",
-                   model.clock.iteration,
-                   prettytime(model.clock.time),
-                   prettytime(wizard.Δt),
-                   umax(), vmax(), wmax(),
-                   prettytime(1e-9 * (time_ns() - wall_clock))
-                  )       
-
-    @info msg
-
-    return nothing
-end
-
 # Now we create the simulation,
 
 using Oceananigans.Utils: hour # correpsonds to "1 hour", in units of seconds
 
-simulation = Simulation(model, progress_frequency = 100,
-                                               Δt = wizard,
-                                        stop_time = 36hour,
-                                         progress = print_progress)
+simulation = Simulation(model, 
+                        Δt = wizard,
+        progress_frequency = 100,
+                 stop_time = 36hour,
+                  progress = SimulationProgressMessenger(model, wizard)
+)
                         
 # ## Output
 #
