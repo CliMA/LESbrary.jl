@@ -1,6 +1,6 @@
 # # Ocean convection, followed by a wind pulse
 
-using Oceananigans
+using Oceananigans, LESbrary, Printf
 
 # ## Model set-up
 #
@@ -10,7 +10,7 @@ using Oceananigans
 
 using Oceananigans.Grids
 
-grid = RegularCartesianGrid(size=(32, 32, 32), extent=(512, 512, 256))
+grid = RegularCartesianGrid(size=(64, 64, 64), extent=(512, 512, 256))
 
 # ### Boundary conditions
 #
@@ -40,10 +40,12 @@ using Oceananigans.Utils: hour
 
 const τᵐᵃˣ = 1e-3 # m² s⁻²
 const tᵖ = 1.2tᶜ
-const Tᵖ = 8hour
+const Tᵖ = 12hour
 
-@inline Qᵘ(x, y, t) = ifelse(t < tᵖ, 0.0,
-                             - τᵐᵃˣ * (t - tᵖ) / Tᵖ * exp( - (t - tᵖ)^2 / (2 * Tᵖ^2)))
+@inline wind_pulse(t, T, τ) = - τ * t / T * exp( - t^2 / (2 * T^2))
+
+@inline Qᵘ(x, y, t) = ifelse(t < tᵖ, 0.0, wind_pulse(t - tᵖ, Tᵖ, τᵐᵃˣ))
+                             
 
 # Oceananigans uses "positive upward" conventions for all fluxes. In consequence,
 # a negative flux at the surface drives positive velocities, and a positive flux of
@@ -85,13 +87,9 @@ model = IncompressibleModel(        architecture = CPU(),
 
 # ## Initial conditions
 #
-# We make use of random noise concentrated in the upper 4 meters 
-# for buoyancy and velocity initial conditions,
-
-Ξ(z) = randn() * exp(z / 4)
-nothing # hide
-
 # Our initial condition for buoyancy consists of a linear stratification, plus noise,
+
+Ξ(z) = randn() * exp(z / 8)
 
 bᵢ(x, y, z) = N² * z + 1e-3 * Ξ(z) * N² * model.grid.Lz
 
@@ -102,7 +100,7 @@ set!(model, b=bᵢ)
 # We use the `TimeStepWizard` for adaptive time-stepping
 # with a Courant-Freidrichs-Lewy (CFL) number of 0.2,
 
-wizard = TimeStepWizard(cfl=0.2, Δt=5.0, max_change=1.1, max_Δt=10.0)
+wizard = TimeStepWizard(cfl=0.2, Δt=5.0, max_change=1.1, max_Δt=20.0)
 nothing # hide
 
 # ### Nice progress messaging
@@ -141,7 +139,7 @@ using Oceananigans.Utils: hour # correpsonds to "1 hour", in units of seconds
 
 simulation = Simulation(model, progress_frequency = 100,
                                                Δt = wizard,
-                                        stop_time = 24hour,
+                                        stop_time = 36hour,
                                          progress = print_progress)
                         
 # ## Output
@@ -152,13 +150,27 @@ simulation = Simulation(model, progress_frequency = 100,
 using Oceananigans.OutputWriters
 using Oceananigans.Utils: minute
 
-field_outputs = FieldOutputs(merge(model.velocities, model.tracers, (νₑ=model.diffusivities.νₑ,)))
+prefix = "convection_then_wind_pulse"
 
-simulation.output_writers[:fields] = JLD2OutputWriter(model, field_outputs,
-                                                      interval = 2minute,
-                                                        prefix = "langmuir_turbulence",
-                                                         force = true)
-nothing # hide
+fields = merge(model.velocities, model.tracers)
+
+fields_writer = JLD2OutputWriter(model, FieldOutputs(fields), interval = 2hour,
+                                                                 force = true,
+                                                                prefix = prefix * "_fields")
+
+averages_writer = JLD2OutputWriter(model, LESbrary.Statistics.horizontal_averages(model);
+                                      force = true,
+                                   interval = 15minute,
+                                     prefix = prefix * "_averages")
+
+slices_writer = JLD2OutputWriter(model, LESbrary.Statistics.XZSlices(fields, y=128);
+                                      force = true,
+                                   interval = 2minute,
+                                     prefix = prefix * "_xz_slices")
+
+simulation.output_writers[:fields] = fields_writer
+simulation.output_writers[:averages] = averages_writer
+simulation.output_writers[:slices] = slices_writer
 
 # ## Running the simulation
 #
@@ -168,11 +180,6 @@ run!(simulation)
 
 # # Making a neat movie
 #
-# We look at the results by plotting vertical slices of $u$ and $w$, and a horizontal
-# slice of $w$ to look for Langmuir cells.
-
-k = searchsortedfirst(grid.zF[:], -8)
-
 # Making the coordinate arrays takes a few lines of code,
 
 xw, yw, zw = nodes(model.velocities.w)
@@ -186,7 +193,7 @@ nothing # hide
 
 using JLD2, Plots
 
-file = jldopen(simulation.output_writers[:fields].filepath)
+file = jldopen(simulation.output_writers[:slices].filepath)
 
 iterations = parse.(Int, keys(file["timeseries/t"]))
 
@@ -212,20 +219,16 @@ anim = @animate for (i, iter) in enumerate(iterations)
 
     @info "Drawing frame $i from iteration $iter \n"
 
-    ## Load 3D fields from file, omitting halo regions
-    w = file["timeseries/w/$iter"][2:end-1, 2:end-1, 2:end-1]
-    u = file["timeseries/u/$iter"][2:end-1, 2:end-1, 2:end-1]
+    ## Load slices from file, omitting halo regions
+    wxz = file["timeseries/w/$iter"][2:end-1, 1, 2:end-1]
+    uxz = file["timeseries/u/$iter"][2:end-1, 1, 2:end-1]
 
-    ## Extract slices
-    wxz = w[:, 1, :]
-    uxz = u[:, 1, :]
+    wlim = 0.05
+    ulim = 0.1
+    wlevels = nice_divergent_levels(wxz, wlim)
+    ulevels = nice_divergent_levels(uxz, ulim)
 
-    wlim = 0.02
-    ulim = 0.05
-    wlevels = nice_divergent_levels(w, wlim)
-    ulevels = nice_divergent_levels(w, ulim)
-
-    wxz_plot = contourf(xw, zw, wxz';
+    wxz_plot = heatmap(xw, zw, wxz';
                               color = :balance,
                         aspectratio = :equal,
                               clims = (-wlim, wlim),
@@ -235,7 +238,7 @@ anim = @animate for (i, iter) in enumerate(iterations)
                              xlabel = "x (m)",
                              ylabel = "z (m)")
 
-    uxz_plot = contourf(xu, zu, uxz';
+    uxz_plot = heatmap(xu, zu, uxz';
                               color = :balance,
                         aspectratio = :equal,
                               clims = (-ulim, ulim),
