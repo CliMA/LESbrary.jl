@@ -6,7 +6,7 @@ using Oceananigans: @hascuda
 
 using LESbrary.Utils
 
-@hascuda select_device!(3)
+@hascuda select_device!(1)
 
 # ## Model set-up
 #
@@ -16,44 +16,89 @@ using LESbrary.Utils
 
 using Oceananigans.Grids
 
-grid = RegularCartesianGrid(size=(128, 128, 128), extent=(512, 512, 256))
+N = 128 # isotropic resolution...
+
+# ... anistropic grid spacing
+grid = RegularCartesianGrid(size=(N, N, N), extent=(512, 512, 256))
+
+# ### Coriolis parameter
+
+const f = 1e-4 # s⁻¹
 
 # ### Boundary conditions
 #
-# First, we impose the linear startification
+# #### Linear bottom (and initial) stratification
 
 N² = 5e-6 # s⁻²
 
-# Next we impose a cooling with buoyancy flux
+# #### Surface buoyancy flux
+#
+# At the beginning of the simulation, we impose strong cooling 
+# with the buoyancy flux
 
 const cooling_flux = 5e-7 # m² s⁻³
 
 # which corresponds to an upward heat flux of ≈ 1000 W m⁻².
 # We cool just long enough to deepen the boundary layer to 100 m.
 
-target_depth = 100
+target_depth = 100 # m
 
-const tᶜ = target_depth^2 * N² / (3 * cooling_flux) # the 3 is empirical
+## Duration of convection to produce a boundary layer with `target_depth`. 
+## The "3" is empirical.
+const t_convection = target_depth^2 * N² / (3 * cooling_flux)
 
-@inline Qᵇ(x, y, t) = ifelse(t < tᶜ, cooling_flux, 0.0)
+@inline Qᵇ(x, y, t) = ifelse(t < t_convection, cooling_flux, 0.0)
 
-using Oceananigans.Utils: hour, day
+# #### "... then wind"
+#
+# A bit after convection has done its work, the wind picks up.
 
-@info @sprintf("Convection time: %.2f hours", tᶜ / hour)
+wind_strength = "strong"
+const wind_stress = 1e-4 # m² s⁻²
 
-# A bit after convection has done its work, we impose a strong pulse of wind
-# for 8 hours,
+const t_wind = 1.2t_convection # time at which wind forcing starts.
 
-const τᵐᵃˣ = 1e-4 # m² s⁻²
-const tᵖ = 1.2tᶜ
-const Tᵖ = 12hour
+using Oceananigans.Utils: hour # correpsonds to "1 hour", in units of seconds
 
-@inline wind_pulse(t, T, τ) = - τ * t / T * exp(- t^2 / (2 * T^2))
+@info @sprintf("Duration of convection is %.2f hours", t_convection / hour)
+@info @sprintf("Wind starts to blow at %.2f hours", t_wind / hour)
 
-@inline Qᵘ(x, y, t) = ifelse(t < tᵖ, 0.0, - τᵐᵃˣ) #wind_pulse(t - tᵖ, Tᵖ, τᵐᵃˣ))
+# We consider three types of time-depenent wind forcing:
 
-## Uncomment to run convection followed by a wind *pulse*, rather than constant wind
-#@inline Qᵘ(x, y, t) = ifelse(t < tᵖ, 0.0, wind_pulse(t - tᵖ, Tᵖ, τᵐᵃˣ))
+#winds_time_dependence = "pulsed"
+#winds_time_dependence = "constant"
+winds_time_dependence = "inertial"
+
+# ##### A wind pulse"
+#
+# One type of wind forcing we consider is a pulse of wind,
+
+const T_pulse = 12hour
+
+if winds_time_dependence == "pulsed"
+    @inline wind_pulse(t, T, τ) = - τ * t / T * exp(- t^2 / (2 * T^2))
+    
+    @inline Qᵘ(x, y, t) = ifelse(t < t_wind, 0.0, wind_pulse(t - t_wind, T_pulse, wind_stress))
+    @inline Qᵛ(x, y, t) = 0
+end
+
+# ##### Constant wind
+
+if winds_time_dependence == "constant"
+    @inline Qᵘ(x, y, t) = ifelse(t < t_wind, 0.0, - wind_stress) #wind_pulse(t - t_wind, Tᵖ, wind_stress))
+    @inline Qᵛ(x, y, t) = 0
+end
+
+# ##### Inertially-rotating wind
+
+if winds_time_dependence == "inertial"
+    # Qᵘ + im Qᵛ ~ exp(- i f t)
+    @inline Qᵘ_inertial(t, τ, f) =   τ * cos(2π * t / f)
+    @inline Qᵛ_inertial(t, τ, f) = - τ * sin(2π * t / f)
+
+    @inline Qᵘ(x, y, t) = ifelse(t < t_wind, 0.0, Qᵘ_inertial(t - t_wind, wind_stress, f))
+    @inline Qᵛ(x, y, t) = ifelse(t < t_wind, 0.0, Qᵛ_inertial(t - t_wind, wind_stress, f))
+end
 
 # Oceananigans uses "positive upward" conventions for all fluxes. In consequence,
 # a negative flux at the surface drives positive velocities, and a positive flux of
@@ -64,16 +109,13 @@ const Tᵖ = 12hour
 using Oceananigans.BoundaryConditions
 
 u_boundary_conditions = UVelocityBoundaryConditions(grid, top = UVelocityBoundaryCondition(Flux, :z, Qᵘ))
+v_boundary_conditions = VVelocityBoundaryConditions(grid, top = VVelocityBoundaryCondition(Flux, :z, Qᵛ))
 
 # and a surface flux and bottom linear gradient on buoyancy, $b$,
 
 b_boundary_conditions = TracerBoundaryConditions(grid, top = TracerBoundaryCondition(Flux, :z, Qᵇ),
                                                        bottom = BoundaryCondition(Gradient, N²))
 nothing # hide
-
-# ### Coriolis parameter
-
-f = 1e-4 # s⁻¹
 
 # # Sponge layer specification
 
@@ -112,8 +154,13 @@ model = IncompressibleModel(        architecture = GPU(),
                                         buoyancy = BuoyancyTracer(),
                                         coriolis = FPlane(f=f),
                                          closure = AnisotropicMinimumDissipation(C=Cᴬᴹᴰ),
-                             boundary_conditions = (u=u_boundary_conditions, 
-                                                    b=b_boundary_conditions),
+                                         
+                             boundary_conditions = (
+                                                    u = u_boundary_conditions, 
+                                                    v = v_boundary_conditions, 
+                                                    b = b_boundary_conditions
+                                                   ),
+
                                          forcing = ModelForcing(u=u_forcing, v=v_forcing, w=w_forcing, b=b_forcing)
                             )
 
@@ -137,8 +184,6 @@ nothing # hide
 
 # Now we create the simulation,
 
-using Oceananigans.Utils: hour # correpsonds to "1 hour", in units of seconds
-
 simulation = Simulation(model,
                         Δt = wizard,
         progress_frequency = 100,
@@ -155,7 +200,7 @@ using Oceananigans.OutputWriters
 using Oceananigans.Utils: minute
 using LESbrary.Statistics
 
-prefix = "convection_then_wind_Nx$(grid.Nx)"
+prefix = "convection_then_$(wind_strength)_$(winds_time_dependence)_wind_Nx$(grid.Nx)"
 
 fields = merge(model.velocities, model.tracers)
 
@@ -170,7 +215,7 @@ averages_writer = JLD2OutputWriter(model, LESbrary.Statistics.horizontal_average
 
 slices_writer = JLD2OutputWriter(model, XZSlices(model.velocities, y=128);
                                       force = true,
-                                   interval = minute / 4,
+                                   interval = minute / 2,
                                      prefix = prefix * "_xz_slices")
 
   simulation.output_writers[:slices] = slices_writer
