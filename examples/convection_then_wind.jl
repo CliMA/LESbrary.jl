@@ -49,7 +49,11 @@ const tᵖ = 1.2tᶜ
 const Tᵖ = 12hour
 
 @inline wind_pulse(t, T, τ) = - τ * t / T * exp(- t^2 / (2 * T^2))
+
 @inline Qᵘ(x, y, t) = ifelse(t < tᵖ, 0.0, - τᵐᵃˣ) #wind_pulse(t - tᵖ, Tᵖ, τᵐᵃˣ))
+
+## Uncomment to run convection followed by a wind *pulse*, rather than constant wind
+#@inline Qᵘ(x, y, t) = ifelse(t < tᵖ, 0.0, wind_pulse(t - tᵖ, Tᵖ, τᵐᵃˣ))
 
 # Oceananigans uses "positive upward" conventions for all fluxes. In consequence,
 # a negative flux at the surface drives positive velocities, and a positive flux of
@@ -138,10 +142,10 @@ using Oceananigans.Utils: hour # correpsonds to "1 hour", in units of seconds
 simulation = Simulation(model,
                         Δt = wizard,
         progress_frequency = 100,
-                 stop_time = 8day,
+                 stop_time = 120hour,
                   progress = SimulationProgressMessenger(model, wizard)
 )
-                        
+
 # ## Output
 #
 # We set up an output writer for the simulation that saves all velocity fields, 
@@ -151,8 +155,7 @@ using Oceananigans.OutputWriters
 using Oceananigans.Utils: minute
 using LESbrary.Statistics
 
-#prefix = "convection_then_wind_pulse_n$(grid.Nx)"
-prefix = "convection_then_weak_constant_wind_n$(grid.Nx)"
+prefix = "convection_then_wind_Nx$(grid.Nx)"
 
 fields = merge(model.velocities, model.tracers)
 
