@@ -6,7 +6,7 @@ using Oceananigans: @hascuda
 
 using LESbrary.Utils
 
-@hascuda select_device!(1)
+@hascuda select_device!(2)
 
 # ## Model set-up
 #
@@ -179,7 +179,7 @@ set!(model, b=bᵢ)
 # We use the `TimeStepWizard` for adaptive time-stepping
 # with a Courant-Freidrichs-Lewy (CFL) number of 0.2,
 
-wizard = TimeStepWizard(cfl=0.2, Δt=5.0, max_change=1.1, max_Δt=20.0)
+wizard = TimeStepWizard(cfl=0.2, Δt=5.0, max_change=1.1, max_Δt=10.0)
 nothing # hide
 
 # Now we create the simulation,
