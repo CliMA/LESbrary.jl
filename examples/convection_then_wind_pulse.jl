@@ -6,7 +6,7 @@ using Oceananigans: @hascuda
 
 using LESbrary.Utils
 
-@hascuda select_device!(0)
+@hascuda select_device!(3)
 
 # ## Model set-up
 #
@@ -37,21 +37,19 @@ const tᶜ = target_depth^2 * N² / (3 * cooling_flux) # the 3 is empirical
 
 @inline Qᵇ(x, y, t) = ifelse(t < tᶜ, cooling_flux, 0.0)
 
-using Oceananigans.Utils: hour
+using Oceananigans.Utils: hour, day
 
 @info @sprintf("Convection time: %.2f hours", tᶜ / hour)
 
 # A bit after convection has done its work, we impose a strong pulse of wind
 # for 8 hours,
 
-const τᵐᵃˣ = 1e-3 # m² s⁻²
+const τᵐᵃˣ = 1e-4 # m² s⁻²
 const tᵖ = 1.2tᶜ
 const Tᵖ = 12hour
 
-@inline wind_pulse(t, T, τ) = - τ * t / T * exp( - t^2 / (2 * T^2))
-
-@inline Qᵘ(x, y, t) = ifelse(t < tᵖ, 0.0, wind_pulse(t - tᵖ, Tᵖ, τᵐᵃˣ))
-                             
+@inline wind_pulse(t, T, τ) = - τ * t / T * exp(- t^2 / (2 * T^2))
+@inline Qᵘ(x, y, t) = ifelse(t < tᵖ, 0.0, - τᵐᵃˣ) #wind_pulse(t - tᵖ, Tᵖ, τᵐᵃˣ))
 
 # Oceananigans uses "positive upward" conventions for all fluxes. In consequence,
 # a negative flux at the surface drives positive velocities, and a positive flux of
@@ -73,6 +71,29 @@ nothing # hide
 
 f = 1e-4 # s⁻¹
 
+# # Sponge layer specification
+
+using Oceananigans.Forcing
+
+using LESbrary.SpongeLayers: Fu, Fv, Fw, Fb
+
+τ = 120  # [s] Sponge layer damping time-scale
+δ = 8   # [m] Sponge layer width
+
+u_forcing = ParameterizedForcing(Fu, (δ=δ, τ=τ))
+v_forcing = ParameterizedForcing(Fv, (δ=δ, τ=τ))
+w_forcing = ParameterizedForcing(Fw, (δ=δ, τ=τ))
+b_forcing = ParameterizedForcing(Fb, (δ=δ, τ=τ, dbdz=N²))
+
+# We use a wall-aware AMD model constant which is 'enhanced' near the upper boundary.
+# This is necessary to obtain smooth buoyancy profiles near the boundary.
+
+using LESbrary.NearSurfaceTurbulenceModels: SurfaceEnhancedModelConstant
+
+Δz = grid.Lz / grid.Nz
+
+Cᴬᴹᴰ = SurfaceEnhancedModelConstant(Δz, C₀=1/12, enhancement=3, decay_scale=4Δz)
+
 # ## Model instantiation
 #
 # Finally, we are ready to build the model. We use the AnisotropicMinimumDissipation
@@ -86,9 +107,10 @@ model = IncompressibleModel(        architecture = GPU(),
                                          tracers = :b,
                                         buoyancy = BuoyancyTracer(),
                                         coriolis = FPlane(f=f),
-                                         closure = AnisotropicMinimumDissipation(),
+                                         closure = AnisotropicMinimumDissipation(C=Cᴬᴹᴰ),
                              boundary_conditions = (u=u_boundary_conditions, 
                                                     b=b_boundary_conditions),
+                                         forcing = ModelForcing(u=u_forcing, v=v_forcing, w=w_forcing, b=b_forcing)
                             )
 
 # ## Initial conditions
@@ -97,7 +119,7 @@ model = IncompressibleModel(        architecture = GPU(),
 
 Ξ(z) = randn() * exp(z / 8)
 
-bᵢ(x, y, z) = N² * z + 1e-3 * Ξ(z) * N² * model.grid.Lz
+bᵢ(x, y, z) = N² * z + 1e-6 * Ξ(z) * N² * model.grid.Lz
 
 set!(model, b=bᵢ)
 
@@ -113,10 +135,10 @@ nothing # hide
 
 using Oceananigans.Utils: hour # correpsonds to "1 hour", in units of seconds
 
-simulation = Simulation(model, 
+simulation = Simulation(model,
                         Δt = wizard,
         progress_frequency = 100,
-                 stop_time = 36hour,
+                 stop_time = 8day,
                   progress = SimulationProgressMessenger(model, wizard)
 )
                         
@@ -127,12 +149,14 @@ simulation = Simulation(model,
 
 using Oceananigans.OutputWriters
 using Oceananigans.Utils: minute
+using LESbrary.Statistics
 
-prefix = "convection_then_wind_pulse"
+#prefix = "convection_then_wind_pulse_n$(grid.Nx)"
+prefix = "convection_then_weak_constant_wind_n$(grid.Nx)"
 
 fields = merge(model.velocities, model.tracers)
 
-fields_writer = JLD2OutputWriter(model, FieldOutputs(fields), interval = 2hour,
+fields_writer = JLD2OutputWriter(model, FieldOutputs(fields), interval = 4hour,
                                                                  force = true,
                                                                 prefix = prefix * "_fields")
 
@@ -141,96 +165,17 @@ averages_writer = JLD2OutputWriter(model, LESbrary.Statistics.horizontal_average
                                    interval = 15minute,
                                      prefix = prefix * "_averages")
 
-slices_writer = JLD2OutputWriter(model, LESbrary.Statistics.XZSlices(fields, y=128);
+slices_writer = JLD2OutputWriter(model, XZSlices(model.velocities, y=128);
                                       force = true,
-                                   interval = 2minute,
+                                   interval = minute / 4,
                                      prefix = prefix * "_xz_slices")
 
-simulation.output_writers[:fields] = fields_writer
+  simulation.output_writers[:slices] = slices_writer
+  simulation.output_writers[:fields] = fields_writer
 simulation.output_writers[:averages] = averages_writer
-simulation.output_writers[:slices] = slices_writer
 
-# ## Running the simulation
-#
-# This part is easy,
+# # Run the simulation
 
 run!(simulation)
 
-# # Making a neat movie
-#
-# Making the coordinate arrays takes a few lines of code,
-
-xw, yw, zw = nodes(model.velocities.w)
-xu, yu, zu = nodes(model.velocities.u)
-
-xw, yw, zw = xw[:], yw[:], zw[:]
-xu, yu, zu = xu[:], yu[:], zu[:]
-nothing # hide
-
-# Next, we open the JLD2 file, and extract the iterations we ended up saving at,
-
-using JLD2, Plots
-
-file = jldopen(simulation.output_writers[:slices].filepath)
-
-iterations = parse.(Int, keys(file["timeseries/t"]))
-
-# This utility is handy for calculating nice contour intervals:
-
-function nice_divergent_levels(c, clim)
-    levels = range(-clim, stop=clim, length=10)
-
-    cmax = maximum(abs, c)
-
-    if clim < cmax # add levels on either end
-        levels = vcat([-cmax], range(-clim, stop=clim, length=10), [cmax])
-    end
-
-    return levels
-end
-
-# Finally, we're ready to animate.
-
-@info "Making an animation from the saved data..."
-
-anim = @animate for (i, iter) in enumerate(iterations)
-
-    @info "Drawing frame $i from iteration $iter \n"
-
-    ## Load slices from file, omitting halo regions
-    wxz = file["timeseries/w/$iter"][2:end-1, 1, 2:end-1]
-    uxz = file["timeseries/u/$iter"][2:end-1, 1, 2:end-1]
-
-    wlim = 0.05
-    ulim = 0.1
-    wlevels = nice_divergent_levels(wxz, wlim)
-    ulevels = nice_divergent_levels(uxz, ulim)
-
-    wxz_plot = heatmap(xw, zw, wxz';
-                              color = :balance,
-                        aspectratio = :equal,
-                              clims = (-wlim, wlim),
-                             levels = wlevels,
-                              xlims = (0, grid.Lx),
-                              ylims = (-grid.Lz, 0),
-                             xlabel = "x (m)",
-                             ylabel = "z (m)")
-
-    uxz_plot = heatmap(xu, zu, uxz';
-                              color = :balance,
-                        aspectratio = :equal,
-                              clims = (-ulim, ulim),
-                             levels = ulevels,
-                              xlims = (0, grid.Lx),
-                              ylims = (-grid.Lz, 0),
-                             xlabel = "x (m)",
-                             ylabel = "z (m)")
-                        
-    t = @sprintf("%.2f hrs", file["timeseries/t/$iter"] / hour)
-    plot(wxz_plot, uxz_plot, layout=(1, 2), size=(1000, 400),
-         title = ["w(x, y=0, z, t=$t) (m/s)" "u(x, y = 0, z, t=$t) (m/s)"])
-
-    iter == iterations[end] && close(file)
-end
-
-mp4(anim, "convection_then_wind_pulse.mp4", fps = 15) # hide
+exit() # don't hang onto GPU memory
