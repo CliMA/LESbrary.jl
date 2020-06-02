@@ -41,13 +41,12 @@ using Oceananigans
 using CUDAapi: has_cuda
 
 model = IncompressibleModel(architecture = has_cuda() ? GPU() : CPU(),
-                            grid = grid,
-                            tracers = (:T,),
-                            buoyancy = buoyancy,
-                            coriolis = FPlane(f=1e-4),
-                            closure = AnisotropicMinimumDissipation(C=Cᴬᴹᴰ),
-                            boundary_conditions = (T=θ_bcs,),
-                           )
+                                    grid = grid,
+                                 tracers = (:T,),
+                                buoyancy = buoyancy,
+                                coriolis = FPlane(f=1e-4),
+                                 closure = AnisotropicMinimumDissipation(C=Cᴬᴹᴰ),
+                     boundary_conditions = (T=θ_bcs,))
 
 # # Initial condition
 
@@ -59,7 +58,7 @@ set!(model, T=θᵢ)
 
 # # Prepare the simulation
 
-using Oceananigans.Utils: hour
+using Oceananigans.Utils: hour, minute
 using LESbrary.Utils: SimulationProgressMessenger
 
 # Adaptive time-stepping
@@ -70,6 +69,8 @@ simulation = Simulation(model, Δt=wizard, stop_time=12hour, progress_frequency=
 
 # Prepare Output
 
+using Oceananigans.Utils: GiB
+using Oceananigans.OutputWriters: FieldOutputs, JLD2OutputWriter
 using LESbrary.Statistics: horizontal_averages
 
 prefix = @sprintf("free_convection_Qb%.1e_Nsq%.1e_N%d", Qᵇ, N², grid.Nz)
@@ -97,7 +98,7 @@ simulation.output_writers[:averages] =
                         force = true, 
                      interval = 10minute,
                           dir = data_directory,
-                       prefix = prefix*"_averages")
+                       prefix = prefix * "_averages")
 
 # # Run
 

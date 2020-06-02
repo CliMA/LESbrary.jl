@@ -5,7 +5,13 @@ function velocity_variances(model; scratch = CellField(model.architecture, model
     V² = HorizontalAverage(v^2, scratch)
     W² = HorizontalAverage(w^2, scratch)
 
-    return U², V², W²
+    variances = (
+                 U² = model -> U²(model),
+                 V² = model -> V²(model),
+                 W² = model -> W²(model),
+                )
+                            
+    return variances
 end
 
 function horizontal_averages(model)
@@ -15,30 +21,26 @@ function horizontal_averages(model)
 
     # Extract short field names
     u, v, w = model.velocities
-    U², V², W² = velocity_variances(model, scratch=scratch)
 
     # Define horizontal averages
     U = HorizontalAverage(u)
     V = HorizontalAverage(v)
-    #e = TurbulentKineticEnergy(model)
+    e = TurbulentKineticEnergy(model)
 
     W³ = HorizontalAverage(w^3, scratch)
     wu = HorizontalAverage(w*u, scratch)
     wv = HorizontalAverage(w*v, scratch)
 
     primitive_averages = (
-                  U = model -> U(model),
-                  V = model -> V(model),
-                  #E = model -> e(model),
+                           U = model -> U(model),
+                           V = model -> V(model),
+                           E = model -> e(model),
+                          W³ = model -> W³(model),
+                          wu = model -> wu(model),
+                          wv = model -> wv(model),
+                         )
 
-                 U² = model -> U²(model),
-                 V² = model -> V²(model),
-                 W² = model -> W²(model),
-                 W³ = model -> W³(model),
-
-                 wu = model -> wu(model),
-                 wv = model -> wv(model),
-               )
+    vel_variances = velocity_variances(model; scratch=scratch)    
 
     # Add subfilter stresses (if they exist)
     average_stresses = Dict()
@@ -101,5 +103,10 @@ function horizontal_averages(model)
     average_fluxes = (; zip(keys(average_fluxes), values(average_fluxes))...)
     average_diffusivities = (; zip(keys(average_diffusivities), values(average_diffusivities))...)
 
-    return merge(primitive_averages, average_tracers, average_stresses, average_fluxes, average_diffusivities)
+    return merge(primitive_averages, 
+                 vel_variances,
+                 average_tracers,
+                 average_stresses,
+                 average_fluxes,
+                 average_diffusivities)
 end
