@@ -16,7 +16,7 @@ using LESbrary.Utils
 
 using Oceananigans.Grids
 
-N = 128 # isotropic resolution...
+N = 256 # isotropic resolution...
 
 # ... anistropic grid spacing
 grid = RegularCartesianGrid(size=(N, N, N), extent=(512, 512, 256))
@@ -54,7 +54,7 @@ const t_convection = target_depth^2 * N² / (3 * cooling_flux)
 # A bit after convection has done its work, the wind picks up.
 
 wind_strength = "strong"
-const wind_stress = 1e-4 # m² s⁻²
+const wind_stress = 1e-3 # m² s⁻²
 
 const t_wind = 1.2t_convection # time at which wind forcing starts.
 
@@ -179,7 +179,7 @@ set!(model, b=bᵢ)
 # We use the `TimeStepWizard` for adaptive time-stepping
 # with a Courant-Freidrichs-Lewy (CFL) number of 0.2,
 
-wizard = TimeStepWizard(cfl=0.2, Δt=5.0, max_change=1.1, max_Δt=20.0)
+wizard = TimeStepWizard(cfl=0.2, Δt=5.0, max_change=1.1, max_Δt=10.0)
 nothing # hide
 
 # Now we create the simulation,
