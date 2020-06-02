@@ -6,7 +6,7 @@ using Oceananigans: @hascuda
 
 using LESbrary.Utils
 
-@hascuda select_device!(1)
+@hascuda select_device!(0)
 
 # ## Model set-up
 #
