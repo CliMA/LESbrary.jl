@@ -22,7 +22,11 @@ using Oceananigans,
 
 using Oceananigans.Utils: @loop_xyz, datatuple
 
+using Oceananigans.Architectures: device
+
 using GPUifyLoops: @loop, @launch
+
+using CUDA
 
 include("turbulent_kinetic_energy.jl")
 include("horizontal_averages.jl")
