@@ -46,7 +46,7 @@ c_forcing = Relaxation(; rate=1/hour, target=(x, y, z, t) -> 1)
 # ## Model instantiation
 
 using Oceananigans
-using CUDAapi: has_cuda
+using CUDA: has_cuda
 
 model = IncompressibleModel(architecture = has_cuda() ? GPU() : CPU(),
                                     grid = grid,

@@ -708,8 +708,8 @@ version = "0.1.3"
 
 [[Oceananigans]]
 deps = ["Adapt", "CUDA", "Dates", "FFTW", "GPUifyLoops", "JLD2", "LinearAlgebra", "Logging", "NCDatasets", "OffsetArrays", "OrderedCollections", "Printf", "Random", "SeawaterPolynomials", "Statistics"]
-git-tree-sha1 = "67422342abb40b3069855cb2a34e0efdc693420a"
-repo-rev = "master"
+git-tree-sha1 = "767973652190ad106dc850ad649b262be2d4f346"
+repo-rev = "glw/simple-forcing-bug"
 repo-url = "https://github.com/CliMA/Oceananigans.jl.git"
 uuid = "9e8cae18-63c1-5223-a75c-80ca9d6e9a09"
 version = "0.30.0"
