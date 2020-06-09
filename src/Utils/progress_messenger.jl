@@ -6,7 +6,7 @@ mutable struct SimulationProgressMessenger{T, U, V, W, N, A, D, Z} <: Function
          νmax :: N
       adv_cfl :: A
       dif_cfl :: D
-       wizard :: Z
+           Δt :: Z
 end
 
 SimulationProgressMessenger(model, Δt) =
@@ -21,6 +21,9 @@ SimulationProgressMessenger(model, Δt) =
                       Δt
                      )
 
+get_Δt(Δt) = Δt
+get_Δt(wizard::TimeStepWizard) = wizard.Δt
+
 function (pm::SimulationProgressMessenger)(simulation)
     model = simulation.model
 
@@ -32,7 +35,7 @@ function (pm::SimulationProgressMessenger)(simulation)
     pm.wall_time = time_ns()
 
     msg1 = @sprintf("[%06.2f%%] i: % 6d, sim time: % 10s, Δt: % 10s, wall time: % 8s,",
-                    progress, i, prettytime(t), prettytime(simulation.Δt.Δt), prettytime(elapsed_wall_time))
+                    progress, i, prettytime(t), prettytime(get_Δt(pm.Δt)), prettytime(elapsed_wall_time))
 
     msg2 = @sprintf("umax: (%.2e, %.2e, %.2e) m/s, CFL: %.2e, νmax: %.2e m² s⁻¹, νCFL: %.2e,\n",
                     pm.umax(model), pm.vmax(model), pm.wmax(model), pm.adv_cfl(model), pm.νmax(model),

@@ -13,9 +13,9 @@ using Printf
 
 using CUDAapi: has_cuda
 
-using 
-    Oceananigans.Diagnostics,
-    Oceananigans.Utils
+using Oceananigans.Simulations
+using Oceananigans.Diagnostics
+using Oceananigans.Utils
 
 using Oceananigans: @hascuda
 
