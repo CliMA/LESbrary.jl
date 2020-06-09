@@ -6,10 +6,14 @@
 using LESbrary, Random, Printf, Statistics
 
 # # Set up the model
+#
+# ## Grid
 
 using Oceananigans.Grids
 
 grid = RegularCartesianGrid(size=(64, 64, 64), x=(0, 128), y=(0, 128), z=(-64, 0))
+
+# ## Buoyancy
 
 using Oceananigans.Buoyancy, Oceananigans.BoundaryConditions
 
@@ -22,6 +26,8 @@ buoyancy = SeawaterBuoyancy(equation_of_state=LinearEquationOfState(α=2e-4), co
   Qᶿ = Qᵇ / (α * g)
 dθdz = N² / (α * g)
 
+# ## Boudnary conditions
+
 θ_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᶿ),
                                        bottom = BoundaryCondition(Gradient, dθdz))
 
@@ -29,6 +35,15 @@ c_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Value, 0),
                                        bottom = BoundaryCondition(Value, 1))
 
 u_bcs = UVelocityBoundaryConditions(grid, top = BoundaryCondition(Flux, -1e-4))
+
+# ## Tracer forcing
+
+using Oceananigans.Utils: hour, minute
+using Oceananigans.Forcing: Relaxation
+
+c_forcing = Relaxation(; rate=1/hour, target=(x, y, z, t) -> 1)
+
+# ## Model instantiation
 
 using Oceananigans
 using CUDAapi: has_cuda
@@ -39,7 +54,10 @@ model = IncompressibleModel(architecture = has_cuda() ? GPU() : CPU(),
                                 buoyancy = buoyancy,
                                 coriolis = FPlane(f=1e-4),
                                  closure = AnisotropicMinimumDissipation(),
-                     boundary_conditions = (T=θ_bcs, u=u_bcs))
+                     boundary_conditions = (T=θ_bcs, u=u_bcs),
+                                 forcing = ModelForcing(c=c_forcing))
+
+# ## Initial condition
 
 set!(model,
      c = 1,
@@ -56,43 +74,21 @@ wizard = TimeStepWizard(cfl=0.2, Δt=1e-1, max_change=1.1, max_Δt=10.0)
 simulation = Simulation(model, Δt=wizard, stop_time=12hour, progress_frequency=100,
                         progress=SimulationProgressMessenger(model, wizard))
 
-# Prepare Output
+# ## Checkpointer
 
 using Oceananigans.Utils: GiB
-using Oceananigans.OutputWriters: FieldOutputs, JLD2OutputWriter
-using LESbrary.Statistics: horizontal_averages
+using Oceananigans.OutputWriters: Checkpointer
 
-prefix = @sprintf("windy_convection_Qu%.1e_Qb%.1e_Nsq%.1e_N%d",
-                  abs(u_bcs.z.top.condition), Qᵇ, N², grid.Nz)
+prefix = @sprintf("windy_convection_Qu%.1e_Qb%.1e_Nsq%.1e_N%d", abs(u_bcs.z.top.condition), Qᵇ, N², grid.Nz)
 
 data_directory = joinpath(@__DIR__, "..", "data", prefix) # save data in /data/prefix
 
-# Copy this file into the directory with data
-mkpath(data_directory)
-cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
-
-# Three-dimensional field output
-fields_to_output = merge(model.velocities, model.tracers)
-
-simulation.output_writers[:fields] =
-    JLD2OutputWriter(model, FieldOutputs(merge(model.velocities, model.tracers));
-                            force = true,
-                         interval = 2hour, # every quarter period
-                     max_filesize = 1GiB,
-                              dir = data_directory,
-                           prefix = prefix * "_fields")
-
-# Horizontal averages
-simulation.output_writers[:averages] =
-    JLD2OutputWriter(model, LESbrary.Statistics.horizontal_averages(model);
-                        force = true,
-                     interval = 15minute,
-                          dir = data_directory,
-                       prefix = prefix * "_averages")
+simulation.output_writers[:checkpointer] = Checkpointer(model, force = true,
+                                                            interval = 21hour, # every quarter period
+                                                                 dir = data_directory,
+                                                              prefix = prefix * "_fields")
 
 # # Run
-
-LESbrary.Utils.print_banner(simulation)
 
 run!(simulation)
 
