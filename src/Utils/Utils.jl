@@ -11,7 +11,7 @@ export
 
 using Printf    
 
-using CUDAapi: has_cuda
+using CUDA: has_cuda
 
 using Oceananigans.Simulations
 using Oceananigans.Diagnostics
@@ -20,11 +20,11 @@ using Oceananigans.Utils
 using Oceananigans: @hascuda
 
 @hascuda begin
-    using CUDAnative, CUDAdrv
+    using CUDA
 
     function select_device!(ndev)
         @show dev = CuDevice(ndev)
-        CUDAnative.device!(dev)
+        CUDA.device!(dev)
         return nothing
     end
 end

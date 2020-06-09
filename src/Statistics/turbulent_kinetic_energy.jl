@@ -1,3 +1,4 @@
+
 struct TurbulentKineticEnergy{E, U, V, W, Ua, Va, Ea}
             e :: E # CellField...
             u :: U
@@ -23,7 +24,10 @@ end
 
 function _compute_turbulent_kinetic_energy!(tke, grid, u, v, w, U, V)
     @loop_xyz i j k grid begin
-        @inbounds tke[i, j, k] = ((u[i, j, k] - U[k+grid.Hz])^2 + (v[i, j, k] - V[k+grid.Hz])^2 + ℑzᵃᵃᶜ(i, j, k, grid, w², w)) / 2
+        @inbounds tke[i, j, k] = (   (u[i, j, k] - U[k + grid.Hz])^2 
+                                   + (v[i, j, k] - V[k + grid.Hz])^2 
+                                   + ℑzᵃᵃᶜ(i, j, k, grid, w², w)
+                                 ) / 2
     end
     return nothing
 end
