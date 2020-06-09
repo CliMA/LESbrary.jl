@@ -11,7 +11,7 @@ using LESbrary, Random, Printf, Statistics
 
 using Oceananigans.Grids
 
-grid = RegularCartesianGrid(size=(64, 64, 64), x=(0, 128), y=(0, 128), z=(-64, 0))
+grid = RegularCartesianGrid(size=(128, 128, 128), x=(0, 128), y=(0, 128), z=(-64, 0))
 
 # ## Buoyancy
 
