@@ -38,7 +38,7 @@ Cᴬᴹᴰ = SurfaceEnhancedModelConstant(grid.Δz, C₀ = 1/12, enhancement = 7
 
 using Oceananigans
 
-using CUDAapi: has_cuda
+using CUDA: has_cuda
 
 model = IncompressibleModel(architecture = has_cuda() ? GPU() : CPU(),
                                     grid = grid,

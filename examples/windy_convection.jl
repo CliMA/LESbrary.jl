@@ -17,7 +17,6 @@ grid = RegularCartesianGrid(
                                y = (0, 128),
                                z = (-64, 0)
                             )
-
 # ## Boundary conditions
 
 using Oceananigans.BoundaryConditions
