@@ -88,7 +88,7 @@ simulation = Simulation(model, Δt=wizard, stop_time=12hour, progress_frequency=
 # ## Checkpointer
 
 using Oceananigans.Utils: GiB
-using Oceananigans.OutputWriters: Checkpointer
+using Oceananigans.OutputWriters: Checkpointer, JLD2OutputWriter
 
 prefix = @sprintf("windy_convection_Qu%.1e_Qb%.1e_Nsq%.1e_N%d",
                   abs(model.velocities.u.boundary_conditions.z.top.condition),
@@ -98,13 +98,20 @@ prefix = @sprintf("windy_convection_Qu%.1e_Qb%.1e_Nsq%.1e_N%d",
 
 data_directory = joinpath(@__DIR__, "..", "data", prefix) # save data in /data/prefix
 
+statistics = LESbrary.Statistics.first_through_third_order(model)
+
 simulation.output_writers[:checkpointer] = Checkpointer(model, force = true,
                                                             interval = 6hour, # every quarter period
                                                                  dir = data_directory,
                                                               prefix = prefix * "_checkpoint")
 
-# # Run
+simulation.output_writers[:statistics] = JLD2OutputWriter(model, statistics,
+                                                              force = true,
+                                                           interval = 15minute,
+                                                                dir = data_directory,
+                                                             prefix = prefix * "_statistics")
 
+# # Run
 run!(simulation)
 
 exit() # Release GPU memory

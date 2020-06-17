@@ -4,16 +4,33 @@ using Oceananigans, Oceananigans.OutputWriters, Oceananigans.Grids, Oceananigans
 
 using PyPlot
 
-prefix = "windy_convection_Qu1.0e-04_Qb1.0e-08_Nsq1.0e-06_N64"
+using LESbrary
+
+prefix = "windy_convection_Qu1.0e-04_Qb1.0e-08_Nsq1.0e-05_N64"
 
 data = joinpath(@__DIR__, "..", "data", prefix)
 
-iteration = 12577
-filename = "windy_convection_Qu1.0e-04_Qb1.0e-08_Nsq1.0e-06_N64_checkpoint_iteration$iteration.jld2"
-checkpoint = joinpath(data, filename) 
+iteration = 17932
+filename = "windy_convection_Qu1.0e-04_Qb1.0e-08_Nsq1.0e-05_N64_checkpoint_iteration$iteration.jld2"
+checkpoint = joinpath(data, filename)
 
 model = restore_from_checkpoint(checkpoint)
 
+statistics = LESbrary.Statistics.first_through_third_order(model)
+
+simulation = Simulation(model, Δt=1e-2, stop_iteration=model.clock.iteration+3)
+
+simulation.output_writers[:statistics] = JLD2OutputWriter(model, statistics,
+                                                               force = true,
+                                                           frequency = 1,
+                                                                 dir = dirname(@__FILE__),
+                                                              prefix = "restart_windy_convection")
+
+print(model.clock.iteration)
+
+run!(simulation)
+
+#=
 time_step!(model, 1e-6)
 
 total_pressure = CellField(CPU(), model.grid)
@@ -63,7 +80,7 @@ Ph = HorizontalAverage(ph)
 Pn = HorizontalAverage(pn)
 
 # Vertical momentum balance:
-# 
+#
 # ∂t w + u ⋅ ∇ w + ∂z p - b = ...
 #
 # ∂t w + ∇ ⋅ (u w) + ∂z p - b = ∇ ⋅ τ₃
@@ -76,7 +93,7 @@ Pn = HorizontalAverage(pn)
 #
 # ∂z P_h - B = 0
 #
-# and 
+# and
 #
 # ∂z (w w) + ∂z P_n = ∂z τ₃₃
 #
@@ -169,3 +186,4 @@ plot(     B(model)[3:end], zF[2:end], label=L"B")
 plot( .- ∂z_T₃₃(model)[3:end], zF[2:end], label=L"-\partial_z \tau_{zz}")
 
 legend()
+=#

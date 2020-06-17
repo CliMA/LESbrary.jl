@@ -20,15 +20,9 @@ using Oceananigans,
       Oceananigans.Fields,
       Oceananigans.Operators
 
-using Oceananigans.Utils: @loop_xyz, datatuple
 
-using Oceananigans.Architectures: device
+#include("turbulent_kinetic_energy.jl")
 
-using GPUifyLoops: @loop, @launch
-
-using CUDA
-
-include("turbulent_kinetic_energy.jl")
 include("horizontal_averages.jl")
 include("two_dimensional_slices.jl")
 

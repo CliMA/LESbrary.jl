@@ -1,3 +1,10 @@
+using GPUifyLoops: @loop, @launch
+
+using Oceananigans.Utils: @loop_xyz, datatuple
+
+using Oceananigans.Architectures: device
+
+using CUDA
 
 struct TurbulentKineticEnergy{E, U, V, W, Ua, Va, Ea}
             e :: E # CellField...
@@ -24,8 +31,8 @@ end
 
 function _compute_turbulent_kinetic_energy!(tke, grid, u, v, w, U, V)
     @loop_xyz i j k grid begin
-        @inbounds tke[i, j, k] = (   (u[i, j, k] - U[k + grid.Hz])^2 
-                                   + (v[i, j, k] - V[k + grid.Hz])^2 
+        @inbounds tke[i, j, k] = (   (u[i, j, k] - U[k + grid.Hz])^2
+                                   + (v[i, j, k] - V[k + grid.Hz])^2
                                    + ℑzᵃᵃᶜ(i, j, k, grid, w², w)
                                  ) / 2
     end
@@ -41,10 +48,9 @@ function (tke::TurbulentKineticEnergy)(model)
     Tx, Ty = 16, 16 # CUDA threads per block
     Bx, By, Bz = floor(Int, model.grid.Nx/Tx), floor(Int, model.grid.Ny/Ty), model.grid.Nz  # Blocks in grid
 
-    @launch(device(model.architecture), threads=(Tx, Ty), blocks=(Bx, By, Bz), 
+    @launch(device(model.architecture), threads=(Tx, Ty), blocks=(Bx, By, Bz),
             _compute_turbulent_kinetic_energy!(tke.e.data, model.grid, u, v, w, tke.U_average.result, tke.V_average.result))
 
     # Compute horizontally-averaged turbulent kinetic energy
     return tke.e_average(model)
 end
-

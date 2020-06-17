@@ -36,21 +36,22 @@ function horizontally_averaged_tracers(model)
     return averages
 end
 
-function velocity_covariances(model; scratch = CellField(model.architecture, model.grid),
+function velocity_covariances(model, scratch = CellField(model.architecture, model.grid);
                                      b = buoyancy(model))
 
     u, v, w = model.velocities
 
     uu = HorizontalAverage(u * u, scratch)
-    uv = HorizontalAverage(u * v, scratch)
     vv = HorizontalAverage(v * v, scratch)
     ww = HorizontalAverage(w * w, scratch)
-    wv = HorizontalAverage(w * v, scratch)
-    uw = HorizontalAverage(w * u, scratch)
 
-    ub = HorizontalAverage(b * u, scratch)
-    vb = HorizontalAverage(b * v, scratch)
-    wb = HorizontalAverage(b * w, scratch)
+    uv = HorizontalAverage(u * v, scratch)
+    wv = HorizontalAverage(w * v, scratch)
+    wu = HorizontalAverage(w * u, scratch)
+
+    ub = HorizontalAverage(u * b, scratch)
+    vb = HorizontalAverage(v * b, scratch)
+    wb = HorizontalAverage(w * b, scratch)
 
     covariances = Dict(
                        :uv => model -> uv(model),
@@ -67,7 +68,7 @@ function velocity_covariances(model; scratch = CellField(model.architecture, mod
     return covariances
 end
 
-function tracer_covariances(model; scratch = CellField(model.architecture, model.grid),
+function tracer_covariances(model, scratch = CellField(model.architecture, model.grid),
                                    b = buoyancy(model))
 
     u, v, w = model.velocities
@@ -98,14 +99,14 @@ function tracer_covariances(model; scratch = CellField(model.architecture, model
 end
 
 """
-    third_order_velocity_statistics(model; scratch = CellField(model.architecture, model.grid))
+    third_order_velocity_statistics(model, scratch = CellField(model.architecture, model.grid))
 
 Returns a dictionary of functions that calculate horizontally-averaged third-order statistics
 that involve the velocity field.
 
 Includes statistics associated with pressure.
 """
-function third_order_velocity_statistics(model; scratch = CellField(model.architecture, model.grid))
+function third_order_velocity_statistics(model, scratch = CellField(model.architecture, model.grid))
 
     u, v, w = model.velocities
 
@@ -116,8 +117,8 @@ function third_order_velocity_statistics(model; scratch = CellField(model.archit
     uuv = HorizontalAverage(u * u * v, scratch)
     uvv = HorizontalAverage(u * v * v, scratch)
 
-    wuu = HorizontalAverage(w * u * u, scratch)
-    wwu = HorizontalAverage(w * w * u, scratch)
+    uuw = HorizontalAverage(u * u * w, scratch)
+    uww = HorizontalAverage(u * w * w, scratch)
 
     vvw = HorizontalAverage(v * v * w, scratch)
     vww = HorizontalAverage(v * w * w, scratch)
@@ -131,13 +132,13 @@ function third_order_velocity_statistics(model; scratch = CellField(model.archit
     Σˣᶻ = (∂z(u) + ∂x(w)) / 2
     Σʸᶻ = (∂z(v) + ∂y(w)) / 2
 
-    pu = HorizontalAverage(p * u)
-    pv = HorizontalAverage(p * v)
-    pw = HorizontalAverage(p * w)
+    pu = HorizontalAverage(p * u, scratch)
+    pv = HorizontalAverage(p * v, scratch)
+    pw = HorizontalAverage(p * w, scratch)
 
-    pΣˣʸ = HorizontalAverage(p * Σˣʸ)
-    pΣʸᶻ = HorizontalAverage(p * Σʸᶻ)
-    pΣˣᶻ = HorizontalAverage(p * Σˣᶻ)
+    pΣˣʸ = HorizontalAverage(p * Σˣʸ, scratch)
+    pΣʸᶻ = HorizontalAverage(p * Σʸᶻ, scratch)
+    pΣˣᶻ = HorizontalAverage(p * Σˣᶻ, scratch)
 
     third_order_statistics = Dict(
                                    :uuu => model -> uuu(model),
@@ -145,10 +146,10 @@ function third_order_velocity_statistics(model; scratch = CellField(model.archit
                                    :www => model -> www(model),
                                    :uuv => model -> uuv(model),
                                    :uvv => model -> uvv(model),
-                                   :wuu => model -> wwu(model),
-                                   :wwu => model -> wwu(model),
-                                   :wvv => model -> wvv(model),
-                                   :wwv => model -> wwv(model),
+                                   :uuw => model -> uuw(model),
+                                   :uww => model -> uww(model),
+                                   :vvw => model -> vvw(model),
+                                   :vww => model -> vww(model),
                                    :wvu => model -> wvu(model),
 
                                     :pu => model -> pu(model),
@@ -163,7 +164,7 @@ function third_order_velocity_statistics(model; scratch = CellField(model.archit
     return third_order_statistics
 end
 
-function third_order_tracer_statistics(model; scratch = CellField(model.architecture, model.grid))
+function third_order_tracer_statistics(model, scratch = CellField(model.architecture, model.grid))
 
     u, v, w = model.velocities
 
@@ -188,13 +189,9 @@ function third_order_tracer_statistics(model; scratch = CellField(model.architec
         third_order_statistics[Symbol(tracer, :px)] = model -> cpx(model)
         third_order_statistics[Symbol(tracer, :py)] = model -> cpy(model)
         third_order_statistics[Symbol(tracer, :pz)] = model -> cpz(model)
-
-        covariances[Symbol(:u, tracer)] = model -> uc(model)
-        covariances[Symbol(:v, tracer)] = model -> vc(model)
-        covariances[Symbol(:w, tracer)] = model -> wc(model)
     end
 
-
+    return third_order_statistics
 end
 
 function subfilter_viscous_dissipation(model)
@@ -210,45 +207,59 @@ function subfilter_viscous_dissipation(model)
     Σˣᶻ = (∂z(u) + ∂x(w)) / 2
     Σʸᶻ = (∂z(v) + ∂y(w)) / 2
 
-    ϵ = 2 * νₑ * ( Σˣˣ^2 + Σʸʸ^2 + Σᶻᶻ^2 +
-                   Σˣʸ^2 + Σˣᶻ^2 + Σʸᶻ^2 )
+    ϵ = 2 * νₑ * ( Σˣˣ^2 + Σʸʸ^2 + Σᶻᶻ^2 + Σˣʸ^2 + Σˣᶻ^2 + Σʸᶻ^2 )
 
     return ϵ
 end
 
-#=
-function subfilter_stress_and_dissipation(model; scratch = CellField(model.architecture, model.grid))
+function first_order_statistics(model, scratch = CellField(model.architecture, model.grid))
 
-    u, v, w = model.velocities
+    output = merge(
+                   horizontally_averaged_velocities(model),
+                   horizontally_averaged_tracers(model),
+                   )
 
-    # Add subfilter stresses (if they exist)
-    average_stresses = Dict()
+    p = pressure(model)
+    P = HorizontalAverage(p, scratch)
 
-    νₑ = model.diffusivities.νₑ
+    output[:P] = model -> P(model)
 
-    NU = HorizontalAverage(νₑ)
-
-    ϵ = @at(Cell, Cell, Cell) νₑ * (
-
-    )
-
-    τ₁₃ = @at (Face, Cell, Face) νₑ * (-∂z(u) - ∂x(w))
-    τ₂₃ = @at (Cell, Face, Face) νₑ * (-∂z(v) - ∂y(w))
-    τ₃₃ = @at (Cell, Cell, Face) νₑ * (-∂z(w) - ∂z(w))
-
-    T₁₃ = HorizontalAverage(τ₁₃, scratch)
-    T₂₃ = HorizontalAverage(τ₂₃, scratch)
-    T₃₃ = HorizontalAverage(τ₃₃, scratch)
-
-    average_stresses[:τ₁₃] = model -> T₁₃(model)
-    average_stresses[:τ₂₃] = model -> T₂₃(model)
-    average_stresses[:τ₃₃] = model -> T₃₃(model)
-    average_stresses[:νₑ] = model -> NU(model)
-
-    return subfilter_stress_terms
+    return output
 end
-=#
 
+function second_order_statistics(model, scratch = CellField(model.architecture, model.grid))
+
+    output = merge(
+                   velocity_covariances(model, scratch),
+                   tracer_covariances(model, scratch),
+                   )
+
+    return output
+end
+
+function third_order_statistics(model, scratch = CellField(model.architecture, model.grid))
+
+    output = merge(
+                   third_order_velocity_statistics(model, scratch),
+                   third_order_tracer_statistics(model, scratch),
+                   )
+
+    ϵ = HorizontalAverage(subfilter_viscous_dissipation(model), scratch)
+    output[:ϵ] = model -> ϵ(model)
+
+    return output
+end
+
+function first_through_third_order(model, scratch = CellField(model.architecture, model.grid))
+
+    output = merge(
+                   first_order_statistics(model, scratch),
+                   second_order_statistics(model, scratch),
+                   third_order_statistics(model, scratch),
+                   )
+
+    return output
+end
 
 function horizontal_averages(model)
 

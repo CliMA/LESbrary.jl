@@ -597,9 +597,9 @@ version = "0.8.4"
 
 [[METIS_jll]]
 deps = ["Libdl", "Pkg"]
-git-tree-sha1 = "58ddd4e4cdd24ead2949d2bd4114208d70c49da5"
+git-tree-sha1 = "3f52ed323683398498ef163a45ce998f1ceca363"
 uuid = "d00139f3-1899-568f-a2f0-47f597d42d70"
-version = "5.1.0+3"
+version = "5.1.0+4"
 
 [[MKL_jll]]
 deps = ["IntelOpenMP_jll", "Libdl", "Pkg"]
@@ -708,8 +708,8 @@ version = "0.1.3"
 
 [[Oceananigans]]
 deps = ["Adapt", "CUDA", "Dates", "FFTW", "GPUifyLoops", "JLD2", "LinearAlgebra", "Logging", "NCDatasets", "OffsetArrays", "OrderedCollections", "Printf", "Random", "SeawaterPolynomials", "Statistics"]
-git-tree-sha1 = "767973652190ad106dc850ad649b262be2d4f346"
-repo-rev = "glw/simple-forcing-bug"
+git-tree-sha1 = "4c165e8089b79ea09503404b1e0293b161249934"
+repo-rev = "master"
 repo-url = "https://github.com/CliMA/Oceananigans.jl.git"
 uuid = "9e8cae18-63c1-5223-a75c-80ca9d6e9a09"
 version = "0.30.0"
