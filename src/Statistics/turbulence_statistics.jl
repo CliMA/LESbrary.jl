@@ -128,13 +128,17 @@ function third_order_velocity_statistics(model, scratch = CellField(model.archit
     # Pressure-strain terms
     p = pressure(model)
 
-    Σˣʸ = (∂y(u) + ∂x(v)) / 2
-    Σˣᶻ = (∂z(u) + ∂x(w)) / 2
-    Σʸᶻ = (∂z(v) + ∂y(w)) / 2
+    Σˣʸ = (∂y(u) + ∂x(v)) / 2 # FFC
+    Σˣᶻ = (∂z(u) + ∂x(w)) / 2 # FCF
+    Σʸᶻ = (∂z(v) + ∂y(w)) / 2 # CFF
 
-    pu = HorizontalAverage(p * u, scratch)
-    pv = HorizontalAverage(p * v, scratch)
-    pw = HorizontalAverage(p * w, scratch)
+    up = HorizontalAverage(u * p, scratch)
+    vp = HorizontalAverage(v * p, scratch)
+    wp = HorizontalAverage(w * p, scratch)
+
+    pΣˣˣ = HorizontalAverage(p * ∂x(u), scratch)
+    pΣʸʸ = HorizontalAverage(p * ∂y(v), scratch)
+    pΣᶻᶻ = HorizontalAverage(p * ∂z(w), scratch)
 
     pΣˣʸ = HorizontalAverage(p * Σˣʸ, scratch)
     pΣʸᶻ = HorizontalAverage(p * Σʸᶻ, scratch)
@@ -152,9 +156,13 @@ function third_order_velocity_statistics(model, scratch = CellField(model.archit
                                    :vww => model -> vww(model),
                                    :wvu => model -> wvu(model),
 
-                                    :pu => model -> pu(model),
-                                    :pv => model -> pv(model),
-                                    :pw => model -> pw(model),
+                                    :up => model -> up(model),
+                                    :vp => model -> vp(model),
+                                    :wp => model -> wp(model),
+
+                                  :pΣˣˣ => model -> pΣˣˣ(model),
+                                  :pΣʸʸ => model -> pΣʸʸ(model),
+                                  :pΣᶻᶻ => model -> pΣᶻᶻ(model),
 
                                   :pΣˣʸ => model -> pΣˣʸ(model),
                                   :pΣʸᶻ => model -> pΣʸᶻ(model),

@@ -23,7 +23,7 @@ using Oceananigans,
 
 #include("turbulent_kinetic_energy.jl")
 
-include("horizontal_averages.jl")
+include("turbulence_statistics.jl")
 include("two_dimensional_slices.jl")
 
 end # module
