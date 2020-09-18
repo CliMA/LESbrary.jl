@@ -1,5 +1,6 @@
 # LESbrary.jl
-Modeling framework to build a large library of large eddy simulations (LES) of ocean surface boundary layer turbulence — the _LESbrary_ — with [Oceananigans.jl](https://github.com/climate-machine/Oceananigans.jl).
+
+This package is a framework for building a library of large eddy simulations (LES) of ocean surface boundary layer turbulence — the _LESbrary_ — with [Oceananigans.jl](https://github.com/climate-machine/Oceananigans.jl).
 The LESbrary will archive turbulence data for both idealized and realistic oceanic scenarios.
 
 # Python conda environment
