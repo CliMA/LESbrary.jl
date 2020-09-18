@@ -19,9 +19,8 @@ using Oceananigans: @hascuda, Face, Cell
 using Oceananigans.Fields: xnodes, ynodes, znodes
 
 include("Utils/Utils.jl")
-include("SpongeLayers.jl")
 include("FileManagement.jl")
-include("Statistics/Statistics.jl")
+include("TurbulenceStatistics/TurbulenceStatistics.jl")
 include("NearSurfaceTurbulenceModels.jl")
 
 end # module

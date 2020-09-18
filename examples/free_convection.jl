@@ -3,7 +3,7 @@
 # This script runs a simulation of convection driven by cooling at the 
 # surface of an idealized, stratified, rotating ocean surface boundary layer.
 
-using LESbrary, Random, Printf, Statistics
+using LESbrary, Printf, Statistics
 
 # Domain
 
@@ -38,11 +38,10 @@ Cᴬᴹᴰ = SurfaceEnhancedModelConstant(grid.Δz, C₀ = 1/12, enhancement = 7
 
 using Oceananigans
 
-using CUDA: has_cuda
-
-model = IncompressibleModel(architecture = has_cuda() ? GPU() : CPU(),
+model = IncompressibleModel(architecture = CPU(),
+                             timestepper = :RungeKutta3,
                                     grid = grid,
-                                 tracers = (:T,),
+                                 tracers = :T,
                                 buoyancy = buoyancy,
                                 coriolis = FPlane(f=1e-4),
                                  closure = AnisotropicMinimumDissipation(C=Cᴬᴹᴰ),
@@ -50,7 +49,7 @@ model = IncompressibleModel(architecture = has_cuda() ? GPU() : CPU(),
 
 # # Initial condition
 
-Ξ(z) = randn() * exp(z / 8)
+Ξ(z) = rand() * exp(z / 8)
 
 θᵢ(x, y, z) = dθdz * z + 1e-6 * Ξ(z) * dθdz * grid.Lz
 
@@ -62,18 +61,17 @@ using Oceananigans.Utils: hour, minute
 using LESbrary.Utils: SimulationProgressMessenger
 
 # Adaptive time-stepping
-wizard = TimeStepWizard(cfl=0.2, Δt=1e-1, max_change=1.1, max_Δt=10.0)
+wizard = TimeStepWizard(cfl=0.5, Δt=2.0, max_change=1.1, max_Δt=30.0)
 
-simulation = Simulation(model, Δt=wizard, stop_time=12hour, progress_frequency=100, 
+simulation = Simulation(model, Δt=wizard, stop_time=8hour, iteration_interval=100, 
                         progress=SimulationProgressMessenger(model, wizard))
 
 # Prepare Output
 
 using Oceananigans.Utils: GiB
-using Oceananigans.OutputWriters: FieldOutputs, JLD2OutputWriter
-using LESbrary.Statistics: horizontal_averages
+using Oceananigans.OutputWriters: JLD2OutputWriter
 
-prefix = @sprintf("free_convection_Qb%.1e_Nsq%.1e_N%d", Qᵇ, N², grid.Nz)
+prefix = @sprintf("free_convection_Qb%.1e_Nsq%.1e_Nh%d_Nz%d", Qᵇ, N², grid.Nx, grid.Nz)
 
 data_directory = joinpath(@__DIR__, "..", "data", prefix) # save data in /data/prefix
 
@@ -81,24 +79,24 @@ data_directory = joinpath(@__DIR__, "..", "data", prefix) # save data in /data/p
 mkpath(data_directory)
 cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
 
-# Three-dimensional field output
-fields_to_output = merge(model.velocities, model.tracers)
+simulation.output_writers[:fields] = JLD2OutputWriter(model, merge(model.velocities, model.tracers); 
+                                                      time_interval = 4hour, # every quarter period
+                                                             prefix = prefix * "_fields",
+                                                                dir = data_directory,
+                                                       max_filesize = 2GiB,
+                                                              force = true)
+    
+# Horizontally-averaged turbulence statistics
+turbulence_statistics = LESbrary.TurbulenceStatistics.first_through_second_order(model)
+tke_budget_statistics = LESbrary.TurbulenceStatistics.turbulent_kinetic_energy_budget(model)
 
-simulation.output_writers[:fields] =
-    JLD2OutputWriter(model, FieldOutputs(merge(model.velocities, model.tracers)); 
-                            force = true,
-                         interval = 4hour, # every quarter period
-                     max_filesize = 2GiB,
-                              dir = data_directory,
-                           prefix = prefix * "_fields")
-
-# Horizontal averages
-simulation.output_writers[:averages] =
-    JLD2OutputWriter(model, LESbrary.Statistics.horizontal_averages(model); 
-                        force = true, 
-                     interval = 10minute,
-                          dir = data_directory,
-                       prefix = prefix * "_averages")
+simulation.output_writers[:statistics] =
+    JLD2OutputWriter(model, merge(turbulence_statistics, tke_budget_statistics),
+                     time_averaging_window = 5minute,
+                             time_interval = 1hour,
+                                    prefix = prefix * "_statistics",
+                                       dir = data_directory,
+                                     force = true)
 
 # # Run
 
@@ -106,4 +104,43 @@ LESbrary.Utils.print_banner(simulation)
 
 run!(simulation)
 
-exit() # Release GPU memory
+# # Load and plot data
+
+using JLD2, Plots
+
+file = jldopen(simulation.output_writers[:statistics].filepath)
+
+iterations = parse.(Int, keys(file["timeseries/t"]))
+
+z = znodes(Cell, grid)
+
+linewidth = 3
+
+E = file["timeseries/turbulent_kinetic_energy/$(iterations[end])"][1, 1, :]
+
+tke_plot = plot(E, z,
+                size = (1000, 1000),
+                linewidth = linewidth,
+                xlabel = "Turbulent kinetic energy / TKE (m² s⁻²)",
+                ylabel = "z (m)",
+                label = nothing)
+
+# Terms in the TKE budget
+      buoyancy_flux = file["timeseries/buoyancy_flux/$(iterations[end])"][1, 1, :]
+   shear_production = file["timeseries/shear_production/$(iterations[end])"][1, 1, :]
+        dissipation = file["timeseries/dissipation/$(iterations[end])"][1, 1, :]
+ pressure_transport = file["timeseries/pressure_transport/$(iterations[end])"][1, 1, :]
+advective_transport = file["timeseries/advective_transport/$(iterations[end])"][1, 1, :]
+
+transport = pressure_transport .+ advective_transport
+
+tke_budget_plot = plot([buoyancy_flux dissipation transport], z,
+                             size = (1000, 1000),
+                        linewidth = linewidth,
+                           xlabel = "TKE budget terms",
+                           ylabel = "z (m)",
+                            label = ["buoyancy flux" "shear production" "dissipation" "transport"])
+
+plot(tke_plot, tke_budget_plot, layout=(1, 2), label="Turbulence statistics")
+
+# exit() # release GPU memory
