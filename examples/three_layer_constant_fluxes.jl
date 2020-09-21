@@ -1,7 +1,89 @@
-# # Free convection
+# # Turbulent mixing of a three layer boundary layer driven by constant surface fluxes
 
-# This script runs a simulation of convection driven by cooling at the 
-# surface of an idealized, stratified, rotating ocean surface boundary layer.
+# This script runs a simulation of a turbulent oceanic boundary layer with an initial
+# three-layer temperature stratification. Turbulent mixing is driven by constant fluxes
+# of momentum and heat at the surface.
+
+using ArgParse
+
+"Returns a dictionary of command line arguments."
+function parse_command_line_arguments()
+    settings = ArgParseSettings()
+
+    @add_arg_table! settings begin
+        "--Nh"
+            help = "The number of grid points in x, y."
+            default = 32
+            arg_type = Int
+
+        "--Nz"
+            help = "The number of grid points in z."
+            default = 32
+            arg_type = Int
+
+        "--buoyancy-flux",
+            help = """The surface buoyancy flux in units of m² s⁻³.
+                      A positive buoyancy flux implies cooling.
+
+                      Note:
+                          buoyancy-flux = + 1e-7 corresponds to cooling at 208 W / m²
+                          buoyancy-flux = - 1e-7 corresponds to heating at 208 W / m²
+                   """
+            default = 1e-7
+            arg_type = Float64
+
+        "--momentum-flux",
+            help = """The surface x-momentum flux divided by density in units of m² s⁻².
+                      A negative flux drives currents in the positive x-direction.
+
+                      Note:
+                        momentum-flux = - 1e-4 corresponds to U₁₀ = +6 m/s, roughly speaking
+                        momentum-flux = - 1e-3 corresponds to U₁₀ = +19 m/s, roughly speaking
+                      """
+
+            default = -1e-4
+            arg_type = Float64
+
+        "--surface-temperature",
+            help = """The temperature at the surface in ᵒC."""
+            default = 20
+            arg_type = Float64
+
+        "--surface-layer-depth",
+            help = """The depth of the surface layer in units of m."""
+            default = 48
+            arg_type = Float64
+
+        "--thermocline-width",
+            help = """The width of the thermocline in units of m."""
+            default = 32
+            arg_type = Float64
+
+        "--surface-layer-buoyancy-gradient",
+            help = """The buoyancy gradient in the surface layer in units s⁻²."""
+            default = 1e-7
+            arg_type = Float64
+
+        "--thermocline-buoyancy-gradient",
+            help = """The buoyancy gradient in the thermocline in units s⁻²."""
+            default = 1e-5
+            arg_type = Float64
+
+        "--deep-buoyancy-gradient",
+            help = """The buoyancy gradient below the thermocline in units s⁻²."""
+            default = 1e-6
+            arg_type = Float64
+
+        "--device", "-d"
+            help = "The CUDA device index on which to run the simulation."
+            default = 0
+            arg_type = Int
+    end
+
+    return parse_args(settings)
+end
+
+args = parse_command_line_arguments()
 
 using LESbrary, Printf, Statistics
 
@@ -9,24 +91,24 @@ using LESbrary, Printf, Statistics
 
 using Oceananigans.Grids
 
-grid = RegularCartesianGrid(size=(64, 64, 64), x=(0, 512), y=(0, 512), z=(-256, 0))
+Nh, Nz = args["Nh"], args["Nz"]
+
+grid = RegularCartesianGrid(size=(Nh, Nh, Nz), x=(0, 512), y=(0, 512), z=(-256, 0))
 
 # Buoyancy and boundary conditions
 
 using Oceananigans.Buoyancy, Oceananigans.BoundaryConditions
 
-#Qᵘ = - 1e-4 # U₁₀ = 6 m/s, roughly speaking
-Qᵘ = - 1e-3 # U₁₀ = 19 m/s, roughly speaking
+Qᵘ = args["momentum_flux"]
+Qᵇ = args["buoyancy_flux"]
 
-Qᵇ = + 1e-7 # cooling at 208 W / m²
-#Qᵇ = - 1e-7 # heating at 208 W / m²
+thermocline_width = args["thermocline_width"]
+surface_layer_depth = args["surface_layer_depth"]
+thermocline_base = surface_layer_depth + thermocline_width
 
-z_transition = -48
-z_deep = -80
-
-N²_shallow    = 1e-7
-N²_transition = 1e-5
-N²_deep       = 1e-6
+N²_surface_layer = args["surface_layer_buoyancy_gradient"]
+N²_thermocline = args["thermocline_buoyancy_gradient"]
+N²_deep = args["deep_buoyancy_gradient"]
 
 buoyancy = SeawaterBuoyancy(equation_of_state=LinearEquationOfState(α=2e-4), constant_salinity=35.0)
 
@@ -34,9 +116,9 @@ buoyancy = SeawaterBuoyancy(equation_of_state=LinearEquationOfState(α=2e-4), co
 g = buoyancy.gravitational_acceleration
 
 Qᶿ = Qᵇ / (α * g)
-dθdz_shallow    = N²_shallow    / (α * g)
-dθdz_transition = N²_transition / (α * g)
-dθdz_deep       = N²_deep       / (α * g)
+dθdz_surface_layer = N²_surface_layer / (α * g)
+dθdz_thermocline = N²_thermocline / (α * g)
+dθdz_deep = N²_deep / (α * g)
 
 θ_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᶿ),
                                        bottom = BoundaryCondition(Gradient, dθdz_deep))
@@ -86,16 +168,23 @@ model = IncompressibleModel(architecture = CPU(),
 
 Ξ(z) = rand() * exp(z / 8)
 
-θ_surface = 20
+θ_surface = args["surface_temperature"]
 
 function initial_temperature(x, y, z)
-    if z > z_transition
-        return θ_surface + dθdz_shallow * z + 1e-6 * Ξ(z) * dθdz_shallow * grid.Lz
-    elseif z > z_deep
-        θ_transition = θ_surface + z_transition * dθdz_shallow
-        return θ_transition + dθdz_transition * z
+    if z > -surface_layer_depth
+        return θ_surface + dθdz_surface_layer * z + 1e-6 * Ξ(z) * dθdz_surface_layer * grid.Lz
+
+    elseif z > -surface_layer_depth - thermocline_width
+
+        θ_transition = θ_surface + surface_layer_depth * dθdz_surface_layer
+        return θ_transition + dθdz_thermocline * z
+
     else
-        θ_deep = θ_surface + z_transition * dθdz_shallow + (z_deep - z_transition) * dθdz_transition
+
+        θ_deep = (θ_surface 
+                    + surface_layer_depth * dθdz_surface_layer 
+                    + thermocline_width * dθdz_thermocline)
+
         return θ_deep + dθdz_deep * z
     end
 end
