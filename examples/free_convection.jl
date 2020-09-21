@@ -9,7 +9,7 @@ using LESbrary, Printf, Statistics
 
 using Oceananigans.Grids
 
-grid = RegularCartesianGrid(size=(64, 64, 64), x=(0, 128), y=(0, 128), z=(-64, 0))
+grid = RegularCartesianGrid(size=(32, 32, 32), x=(0, 128), y=(0, 128), z=(-64, 0))
 
 # Buoyancy and boundary conditions
 
@@ -80,7 +80,7 @@ prefix = @sprintf("free_convection_Qb%.1e_Nsq%.1e_Nh%d_Nz%d", Qᵇ, N², grid.Nx
 data_directory = joinpath(@__DIR__, "..", "data", prefix) # save data in /data/prefix
 
 # Copy this file into the directory with data
-mkpath(data_directory)
+mkpath(datmixing length calculationa_directory)
 cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
 
 simulation.output_writers[:fields] = JLD2OutputWriter(model, merge(model.velocities, model.tracers); 
@@ -141,58 +141,54 @@ advective_transport = - file["timeseries/advective_transport/$iter"][1, 1, :]
 
 total_transport = pressure_transport .+ advective_transport
 
+## For mixing length calculation
+wT = file["timeseries/wT/$iter"][1, 1, 2:end-1]
+
 close(file)
 
 ## Post-process the data to determine the mixing length
 
 ## Mixing length, computed at cell interfaces and omitting boundaries
-wT = file["timeseries/wT/$iter"][1, 1, 2:end-1]
 Tz = @. (T[2:end] - T[1:end-1]) / grid.Δz
 bz = @. α * g * Tz
 tkeᶠ = @. (tke[1:end-1] + tke[2:end]) / 2
 
 ## Mixing length model: wT ∝ - ℓᵀ √tke ∂z T ⟹  ℓᵀ = wT / (√tke ∂z T)
 ℓ_measured = @. - wT / (√(tkeᶠ) * Tz)
-ℓ_estimated = @. min(-zF[2:end-1], sqrt(tkeᶠ / max(0, Bz)))
+ℓ_estimated = @. min(-zF[2:end-1], sqrt(tkeᶠ / max(0, bz)))
 
 # Plot data
 
-temperature = plot(T, zC,
-                        size = plot_size,
-                   linewidth = linewidth,
-                      xlabel = "Temperature (ᵒC)",
-                      ylabel = "z (m)",
-                        ylim = ylim,
-                       label = nothing)
+temperature = plot(T, zC, size = plot_size,
+                     linewidth = linewidth,
+                        xlabel = "Temperature (ᵒC)",
+                        ylabel = "z (m)",
+                          ylim = ylim,
+                         label = nothing)
 
-variances = plot(tke, zC,
-                      size = plot_size,
-                 linewidth = linewidth,
-                    xlabel = "Velocity variances (m² s⁻²)",
-                    ylabel = "z (m)",
-                      ylim = ylim,
-                     label = "(u² + v² + w²) / 2")
+variances = plot(tke, zC, size = plot_size,
+                     linewidth = linewidth,
+                        xlabel = "Velocity variances (m² s⁻²)",
+                        ylabel = "z (m)",
+                          ylim = ylim,
+                         label = "(u² + v² + w²) / 2")
 
-plot!(variances, 1/2 .* w², zF,
-      linewidth = linewidth,
-      label = "w² / 2")
+plot!(variances, 1/2 .* w², zF, linewidth = linewidth,
+                                    label = "w² / 2")
 
-
-budget = plot([buoyancy_flux dissipation total_transport], zC,
-                   size = plot_size,
+budget = plot([buoyancy_flux dissipation total_transport], zC, size = plot_size,
               linewidth = linewidth,
                  xlabel = "TKE budget terms",
                  ylabel = "z (m)",
                    ylim = ylim,
                   label = ["buoyancy flux" "dissipation" "kinetic energy transport"])
 
-mixing_length = plot([ℓ_measured ℓ_estimated], zF[2:end-1],
-                   size = plot_size,
-              linewidth = linewidth,
-                 xlabel = "Mixing length (m)",
-                 ylabel = "z (m)",
-                   xlim = (-1, 15),
-                   ylim = ylim,
-                  label = ["measured" "estimated"])
+mixing_length = plot([ℓ_measured ℓ_estimated], zF[2:end-1], size = plot_size,
+                                                       linewidth = linewidth,
+                                                          xlabel = "Mixing length (m)",
+                                                          ylabel = "z (m)",
+                                                            xlim = (-5, 20),
+                                                            ylim = ylim,
+                                                           label = ["measured" "estimated"])
 
-plot(temperature_plot, variances, budget, mixing_length, layout=(1, 4))
+plot(temperature, variances, budget, mixing_length, layout=(1, 4))
