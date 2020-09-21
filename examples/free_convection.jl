@@ -20,8 +20,12 @@ N² = 1e-5
 
 buoyancy = SeawaterBuoyancy(equation_of_state=LinearEquationOfState(α=2e-4), constant_salinity=35.0)
 
-  Qᶿ = Qᵇ / (buoyancy.gravitational_acceleration * buoyancy.equation_of_state.α)
-dθdz = N² / (buoyancy.gravitational_acceleration * buoyancy.equation_of_state.α)
+α = buoyancy.equation_of_state.α
+g = buoyancy.gravitational_acceleration
+
+## Compute temperature flux and gradient from buoyancy flux and gradient
+Qᶿ = Qᵇ / (α * g)
+dθdz = N² / (α * g)
 
 θ_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᶿ),
                                        bottom = BoundaryCondition(Gradient, dθdz))
@@ -92,7 +96,7 @@ tke_budget_statistics = LESbrary.TurbulenceStatistics.turbulent_kinetic_energy_b
 
 simulation.output_writers[:statistics] =
     JLD2OutputWriter(model, merge(turbulence_statistics, tke_budget_statistics),
-                     time_averaging_window = 5minute,
+                     time_averaging_window = 15minute,
                              time_interval = 1hour,
                                     prefix = prefix * "_statistics",
                                        dir = data_directory,
@@ -104,43 +108,91 @@ LESbrary.Utils.print_banner(simulation)
 
 run!(simulation)
 
-# # Load and plot data
+# # Load and plot turbulence statistics
 
 using JLD2, Plots
 
+## Some plot parameters
+linewidth = 3
+ylim = (-64, 0)
+plot_size = (1000, 500)
+zC = znodes(Cell, grid)
+zF = znodes(Face, grid)
+
+## Load data
 file = jldopen(simulation.output_writers[:statistics].filepath)
 
 iterations = parse.(Int, keys(file["timeseries/t"]))
+iter = iterations[end] # plot final iteration
 
-z = znodes(Cell, grid)
+## Temperature
+T = file["timeseries/T/$iter"][1, 1, :]
 
-linewidth = 3
+## Velocity variances
+w²  = file["timeseries/ww/$iter"][1, 1, :]
+tke = file["timeseries/turbulent_kinetic_energy/$iter"][1, 1, :]
 
-E = file["timeseries/turbulent_kinetic_energy/$(iterations[end])"][1, 1, :]
+## Terms in the TKE budget
+      buoyancy_flux =   file["timeseries/buoyancy_flux/$iter"][1, 1, :]
+   shear_production =   file["timeseries/shear_production/$iter"][1, 1, :]
+        dissipation = - file["timeseries/dissipation/$iter"][1, 1, :]
+ pressure_transport = - file["timeseries/pressure_transport/$iter"][1, 1, :]
+advective_transport = - file["timeseries/advective_transport/$iter"][1, 1, :]
 
-tke_plot = plot(E, z,
-                size = (1000, 1000),
-                linewidth = linewidth,
-                xlabel = "Turbulent kinetic energy / TKE (m² s⁻²)",
-                ylabel = "z (m)",
-                label = nothing)
+total_transport = pressure_transport .+ advective_transport
 
-# Terms in the TKE budget
-      buoyancy_flux = file["timeseries/buoyancy_flux/$(iterations[end])"][1, 1, :]
-   shear_production = file["timeseries/shear_production/$(iterations[end])"][1, 1, :]
-        dissipation = file["timeseries/dissipation/$(iterations[end])"][1, 1, :]
- pressure_transport = file["timeseries/pressure_transport/$(iterations[end])"][1, 1, :]
-advective_transport = file["timeseries/advective_transport/$(iterations[end])"][1, 1, :]
+close(file)
 
-transport = pressure_transport .+ advective_transport
+## Post-process the data to determine the mixing length
 
-tke_budget_plot = plot([buoyancy_flux dissipation transport], z,
-                             size = (1000, 1000),
-                        linewidth = linewidth,
-                           xlabel = "TKE budget terms",
-                           ylabel = "z (m)",
-                            label = ["buoyancy flux" "shear production" "dissipation" "transport"])
+## Mixing length, computed at cell interfaces and omitting boundaries
+wT = file["timeseries/wT/$iter"][1, 1, 2:end-1]
+Tz = @. (T[2:end] - T[1:end-1]) / grid.Δz
+bz = @. α * g * Tz
+tkeᶠ = @. (tke[1:end-1] + tke[2:end]) / 2
 
-plot(tke_plot, tke_budget_plot, layout=(1, 2), label="Turbulence statistics")
+## Mixing length model: wT ∝ - ℓᵀ √tke ∂z T ⟹  ℓᵀ = wT / (√tke ∂z T)
+ℓ_measured = @. - wT / (√(tkeᶠ) * Tz)
+ℓ_estimated = @. min(-zF[2:end-1], sqrt(tkeᶠ / max(0, Bz)))
 
-# exit() # release GPU memory
+# Plot data
+
+temperature = plot(T, zC,
+                        size = plot_size,
+                   linewidth = linewidth,
+                      xlabel = "Temperature (ᵒC)",
+                      ylabel = "z (m)",
+                        ylim = ylim,
+                       label = nothing)
+
+variances = plot(tke, zC,
+                      size = plot_size,
+                 linewidth = linewidth,
+                    xlabel = "Velocity variances (m² s⁻²)",
+                    ylabel = "z (m)",
+                      ylim = ylim,
+                     label = "(u² + v² + w²) / 2")
+
+plot!(variances, 1/2 .* w², zF,
+      linewidth = linewidth,
+      label = "w² / 2")
+
+
+budget = plot([buoyancy_flux dissipation total_transport], zC,
+                   size = plot_size,
+              linewidth = linewidth,
+                 xlabel = "TKE budget terms",
+                 ylabel = "z (m)",
+                   ylim = ylim,
+                  label = ["buoyancy flux" "dissipation" "kinetic energy transport"])
+
+mixing_length = plot([ℓ_measured ℓ_estimated], zF[2:end-1],
+                   size = plot_size,
+              linewidth = linewidth,
+                 xlabel = "Mixing length (m)",
+                 ylabel = "z (m)",
+                   xlim = (-1, 15),
+                   ylim = ylim,
+                  label = ["measured" "estimated"])
+
+plot(temperature_plot, variances, budget, mixing_length, layout=(1, 4))
