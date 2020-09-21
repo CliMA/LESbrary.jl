@@ -21,56 +21,53 @@ function parse_command_line_arguments()
             default = 32
             arg_type = Int
 
-        "--buoyancy-flux",
+        "--buoyancy-flux"
             help = """The surface buoyancy flux in units of m² s⁻³.
                       A positive buoyancy flux implies cooling.
 
                       Note:
                           buoyancy-flux = + 1e-7 corresponds to cooling at 208 W / m²
-                          buoyancy-flux = - 1e-7 corresponds to heating at 208 W / m²
-                   """
+                          buoyancy-flux = - 1e-7 corresponds to heating at 208 W / m²"""
             default = 1e-7
             arg_type = Float64
 
-        "--momentum-flux",
+        "--momentum-flux"
             help = """The surface x-momentum flux divided by density in units of m² s⁻².
                       A negative flux drives currents in the positive x-direction.
 
                       Note:
                         momentum-flux = - 1e-4 corresponds to U₁₀ = +6 m/s, roughly speaking
-                        momentum-flux = - 1e-3 corresponds to U₁₀ = +19 m/s, roughly speaking
-                      """
-
+                        momentum-flux = - 1e-3 corresponds to U₁₀ = +19 m/s, roughly speaking"""
             default = -1e-4
             arg_type = Float64
 
-        "--surface-temperature",
+        "--surface-temperature"
             help = """The temperature at the surface in ᵒC."""
-            default = 20
+            default = 20.0
             arg_type = Float64
 
-        "--surface-layer-depth",
-            help = """The depth of the surface layer in units of m."""
-            default = 48
+        "--surface-layer-depth"
+            help = "The depth of the surface layer in units of m."
+            default = 48.0
             arg_type = Float64
 
-        "--thermocline-width",
-            help = """The width of the thermocline in units of m."""
-            default = 32
+        "--thermocline-width"
+            help = "The width of the thermocline in units of m."
+            default = 32.0
             arg_type = Float64
 
-        "--surface-layer-buoyancy-gradient",
-            help = """The buoyancy gradient in the surface layer in units s⁻²."""
+        "--surface-layer-buoyancy-gradient"
+            help = "The buoyancy gradient in the surface layer in units s⁻²."
             default = 1e-7
             arg_type = Float64
 
-        "--thermocline-buoyancy-gradient",
-            help = """The buoyancy gradient in the thermocline in units s⁻²."""
+        "--thermocline-buoyancy-gradient"
+            help = "The buoyancy gradient in the thermocline in units s⁻²."
             default = 1e-5
             arg_type = Float64
 
-        "--deep-buoyancy-gradient",
-            help = """The buoyancy gradient below the thermocline in units s⁻²."""
+        "--deep-buoyancy-gradient"
+            help = "The buoyancy gradient below the thermocline in units s⁻²."
             default = 1e-6
             arg_type = Float64
 
@@ -91,7 +88,8 @@ using LESbrary, Printf, Statistics
 
 using Oceananigans.Grids
 
-Nh, Nz = args["Nh"], args["Nz"]
+Nh = args["Nh"]
+Nz = args["Nz"]
 
 grid = RegularCartesianGrid(size=(Nh, Nh, Nz), x=(0, 512), y=(0, 512), z=(-256, 0))
 
@@ -99,16 +97,16 @@ grid = RegularCartesianGrid(size=(Nh, Nh, Nz), x=(0, 512), y=(0, 512), z=(-256, 
 
 using Oceananigans.Buoyancy, Oceananigans.BoundaryConditions
 
-Qᵘ = args["momentum_flux"]
-Qᵇ = args["buoyancy_flux"]
+Qᵇ = args["buoyancy-flux"]
+Qᵘ = args["momentum-flux"]
 
-thermocline_width = args["thermocline_width"]
-surface_layer_depth = args["surface_layer_depth"]
+thermocline_width = args["thermocline-width"]
+surface_layer_depth = args["surface-layer-depth"]
 thermocline_base = surface_layer_depth + thermocline_width
 
-N²_surface_layer = args["surface_layer_buoyancy_gradient"]
-N²_thermocline = args["thermocline_buoyancy_gradient"]
-N²_deep = args["deep_buoyancy_gradient"]
+N²_surface_layer = args["surface-layer-buoyancy-gradient"]
+N²_thermocline = args["thermocline-buoyancy-gradient"]
+N²_deep = args["deep-buoyancy-gradient"]
 
 buoyancy = SeawaterBuoyancy(equation_of_state=LinearEquationOfState(α=2e-4), constant_salinity=35.0)
 
@@ -129,6 +127,9 @@ c_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Value, 1.0),
                                        bottom = BoundaryCondition(Value, 0.0))
 
 # Tracer forcing
+
+using Oceananigans.Forcing
+using Oceananigans.Utils: hour
 
 struct SymmetricExponentialTarget{C}
          center :: C
@@ -168,7 +169,7 @@ model = IncompressibleModel(architecture = CPU(),
 
 Ξ(z) = rand() * exp(z / 8)
 
-θ_surface = args["surface_temperature"]
+θ_surface = args["surface-temperature"]
 
 function initial_temperature(x, y, z)
     if z > -surface_layer_depth
@@ -189,7 +190,7 @@ function initial_temperature(x, y, z)
     end
 end
 
-set!(model, T = initial_temperature, c = (x, y, z) -> c_forcing.target(x, y, z, 0))
+set!(model, T = initial_temperature, c = (x, y, z) -> c_forcing.forcing.target(x, y, z, 0))
 
 # # Prepare the simulation
 
@@ -223,11 +224,11 @@ simulation.output_writers[:fields] = JLD2OutputWriter(model, merge(model.velocit
                                                               force = true)
     
 # Horizontally-averaged turbulence statistics
-#turbulence_statistics = LESbrary.TurbulenceStatistics.first_through_third_order(model)
+turbulence_statistics = LESbrary.TurbulenceStatistics.first_through_third_order(model)
 tke_budget_statistics = LESbrary.TurbulenceStatistics.turbulent_kinetic_energy_budget(model)
 
-simulation.output_writers[:statistics] = JLD2OutputWriter(model, tke_budget_statistics,
-                                                          time_averaging_window = 5minute,
+simulation.output_writers[:statistics] = JLD2OutputWriter(model, merge(turbulence_statistics, tke_budget_statistics),
+                                                          time_averaging_window = 15minute,
                                                                   time_interval = 1hour,
                                                                          prefix = prefix * "_statistics",
                                                                             dir = data_directory,
