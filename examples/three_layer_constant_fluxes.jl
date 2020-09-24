@@ -13,12 +13,12 @@ function parse_command_line_arguments()
     @add_arg_table! settings begin
         "--Nh"
             help = "The number of grid points in x, y."
-            default = 32
+            default = 64
             arg_type = Int
 
         "--Nz"
             help = "The number of grid points in z."
-            default = 32
+            default = 64
             arg_type = Int
 
         "--buoyancy-flux"
@@ -27,8 +27,9 @@ function parse_command_line_arguments()
 
                       Note:
                           buoyancy-flux = + 1e-7 corresponds to cooling at 208 W / m²
+                          buoyancy-flux = + 1e-8 corresponds to cooling at 21 W / m²
                           buoyancy-flux = - 1e-7 corresponds to heating at 208 W / m²"""
-            default = 1e-7
+            default = 1e-8
             arg_type = Float64
 
         "--momentum-flux"
@@ -58,17 +59,17 @@ function parse_command_line_arguments()
 
         "--surface-layer-buoyancy-gradient"
             help = "The buoyancy gradient in the surface layer in units s⁻²."
-            default = 1e-7
+            default = 1e-6
             arg_type = Float64
 
         "--thermocline-buoyancy-gradient"
             help = "The buoyancy gradient in the thermocline in units s⁻²."
-            default = 1e-5
+            default = 1e-4
             arg_type = Float64
 
         "--deep-buoyancy-gradient"
             help = "The buoyancy gradient below the thermocline in units s⁻²."
-            default = 1e-6
+            default = 1e-5
             arg_type = Float64
 
         "--device", "-d"
@@ -100,9 +101,8 @@ using Oceananigans.Buoyancy, Oceananigans.BoundaryConditions
 Qᵇ = args["buoyancy-flux"]
 Qᵘ = args["momentum-flux"]
 
-thermocline_width = args["thermocline-width"]
 surface_layer_depth = args["surface-layer-depth"]
-thermocline_base = surface_layer_depth + thermocline_width
+thermocline_width = args["thermocline-width"]
 
 N²_surface_layer = args["surface-layer-buoyancy-gradient"]
 N²_thermocline = args["thermocline-buoyancy-gradient"]
@@ -115,8 +115,8 @@ g = buoyancy.gravitational_acceleration
 
 Qᶿ = Qᵇ / (α * g)
 dθdz_surface_layer = N²_surface_layer / (α * g)
-dθdz_thermocline = N²_thermocline / (α * g)
-dθdz_deep = N²_deep / (α * g)
+dθdz_thermocline   = N²_thermocline   / (α * g)
+dθdz_deep          = N²_deep          / (α * g)
 
 θ_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᶿ),
                                        bottom = BoundaryCondition(Gradient, dθdz_deep))
@@ -167,26 +167,39 @@ model = IncompressibleModel(architecture = CPU(),
 
 # # Initial condition
 
-Ξ(z) = rand() * exp(z / 8)
+## Fiddle with indices to get a correct discrete profile
+k_transition = searchsortedfirst(grid.zC, -surface_layer_depth)
+k_deep = searchsortedfirst(grid.zC, -(surface_layer_depth + thermocline_width))
+
+z_transition = grid.zC[k_transition]
+z_deep = grid.zC[k_deep]
 
 θ_surface = args["surface-temperature"]
+θ_transition = θ_surface + z_transition * dθdz_surface_layer
+θ_deep = θ_transition + (z_deep - z_transition) * dθdz_thermocline
 
+## Noise with 8 m decay scale
+Ξ(z) = rand() * exp(z / 8)
+                    
+"""
+    initial_temperature(x, y, z)
+
+Returns a three-layer initial temperature distribution. The average temperature varies in z
+and is augmented by three-dimensional, surface-concentrated random noise.
+"""
 function initial_temperature(x, y, z)
-    if z > -surface_layer_depth
-        return θ_surface + dθdz_surface_layer * z + 1e-6 * Ξ(z) * dθdz_surface_layer * grid.Lz
 
-    elseif z > -surface_layer_depth - thermocline_width
+    noise = 1e-6 * Ξ(z) * dθdz_surface_layer * grid.Lz
 
-        θ_transition = θ_surface + surface_layer_depth * dθdz_surface_layer
-        return θ_transition + dθdz_thermocline * z
+    if z > z_transition
+        return θ_surface + dθdz_surface_layer * z + noise
+
+    elseif z > z_deep
+        return θ_transition + dθdz_thermocline * (z - z_transition) + noise
 
     else
+        return θ_deep + dθdz_deep * (z - z_deep) + noise
 
-        θ_deep = (θ_surface 
-                    + surface_layer_depth * dθdz_surface_layer 
-                    + thermocline_width * dθdz_thermocline)
-
-        return θ_deep + dθdz_deep * z
     end
 end
 
@@ -198,9 +211,9 @@ using Oceananigans.Utils: hour, minute
 using LESbrary.Utils: SimulationProgressMessenger
 
 # Adaptive time-stepping
-wizard = TimeStepWizard(cfl=0.5, Δt=2.0, max_change=1.1, max_Δt=30.0)
+wizard = TimeStepWizard(cfl=0.5, Δt=10.0, max_change=1.1, max_Δt=30.0)
 
-simulation = Simulation(model, Δt=wizard, stop_time=8hour, iteration_interval=100, 
+simulation = Simulation(model, Δt=wizard, stop_time=4hour, iteration_interval=100,
                         progress=SimulationProgressMessenger(model, wizard))
 
 # Prepare Output
@@ -224,7 +237,7 @@ simulation.output_writers[:fields] = JLD2OutputWriter(model, merge(model.velocit
                                                               force = true)
     
 # Horizontally-averaged turbulence statistics
-turbulence_statistics = LESbrary.TurbulenceStatistics.first_through_third_order(model)
+turbulence_statistics = LESbrary.TurbulenceStatistics.first_through_second_order(model)
 tke_budget_statistics = LESbrary.TurbulenceStatistics.turbulent_kinetic_energy_budget(model)
 
 simulation.output_writers[:statistics] = JLD2OutputWriter(model, merge(turbulence_statistics, tke_budget_statistics),
@@ -240,4 +253,106 @@ LESbrary.Utils.print_banner(simulation)
 
 run!(simulation)
 
-exit() # Release GPU memory
+# # Load and plot turbulence statistics
+
+using JLD2, Plots
+
+## Some plot parameters
+linewidth = 3
+ylim = (-256, 0)
+plot_size = (500, 500)
+zC = znodes(Cell, grid)
+zF = znodes(Face, grid)
+
+## Load data
+file = jldopen(simulation.output_writers[:statistics].filepath)
+
+iterations = parse.(Int, keys(file["timeseries/t"]))
+iter = iterations[end] # plot final iteration
+
+## First-order quantities
+u = file["timeseries/u/$iter"][1, 1, :]
+v = file["timeseries/v/$iter"][1, 1, :]
+T = file["timeseries/T/$iter"][1, 1, :]
+c = file["timeseries/c/$iter"][1, 1, :]
+
+## Velocity variances
+w²  = file["timeseries/ww/$iter"][1, 1, :]
+tke = file["timeseries/turbulent_kinetic_energy/$iter"][1, 1, :]
+
+## Fluxes
+wu = file["timeseries/wu/$iter"][1, 1, :]
+wv = file["timeseries/wv/$iter"][1, 1, :]
+wc = file["timeseries/wc/$iter"][1, 1, :]
+wT = file["timeseries/wT/$iter"][1, 1, :]
+
+## Terms in the TKE budget
+      buoyancy_flux =   file["timeseries/buoyancy_flux/$iter"][1, 1, :]
+   shear_production = - file["timeseries/shear_production/$iter"][1, 1, :]
+        dissipation = - file["timeseries/dissipation/$iter"][1, 1, :]
+ pressure_transport = - file["timeseries/pressure_transport/$iter"][1, 1, :]
+advective_transport = - file["timeseries/advective_transport/$iter"][1, 1, :]
+
+total_transport = pressure_transport .+ advective_transport
+
+close(file)
+
+# Plot data
+
+velocities = plot([u v], zC, size = plot_size,
+                     linewidth = linewidth,
+                        xlabel = "Velocity (m s⁻¹)",
+                        ylabel = "z (m)",
+                          ylim = ylim,
+                         label = ["u" "v"],
+                        legend = :bottom)
+
+temperature = plot(T, zC, size = plot_size,
+                     linewidth = linewidth,
+                        xlabel = "Temperature (ᵒC)",
+                        ylabel = "z (m)",
+                          ylim = ylim,
+                         label = nothing)
+
+tracer = plot(c, zC, size = plot_size,
+                     linewidth = linewidth,
+                        xlabel = "Tracer",
+                        ylabel = "z (m)",
+                          ylim = ylim,
+                         label = nothing)
+
+variances = plot(tke, zC, size = plot_size,
+                     linewidth = linewidth,
+                        xlabel = "Velocity variances (m² s⁻²)",
+                        ylabel = "z (m)",
+                          ylim = ylim,
+                         label = "(u² + v² + w²) / 2",
+                        legend = :bottom)
+
+normalize(wϕ) = wϕ ./ maximum(abs, wϕ)
+
+fluxes = plot([normalize(wu) normalize(wv) normalize(wc) normalize(wT)], zF,
+                          size = plot_size,
+                     linewidth = linewidth,
+                        xlabel = "Normalized fluxes",
+                        ylabel = "z (m)",
+                          ylim = ylim,
+                         label = ["wu" "wv" "wc" "wT"],
+                        legend = :bottom)
+
+plot!(variances, 1/2 .* w², zF, linewidth = linewidth,
+                                    label = "w² / 2")
+
+budget = plot([buoyancy_flux dissipation total_transport], zC, size = plot_size,
+              linewidth = linewidth,
+                 xlabel = "TKE budget terms",
+                 ylabel = "z (m)",
+                   ylim = ylim,
+                  label = ["buoyancy flux" "dissipation" "kinetic energy transport"],
+                 legend = :bottom)
+
+plot(velocities, temperature, tracer, variances, fluxes, budget, layout=(1, 6), size=(1000, 500))
+
+# save plots
+
+#exit() # Release GPU memory

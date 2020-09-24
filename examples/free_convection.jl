@@ -134,7 +134,6 @@ tke = file["timeseries/turbulent_kinetic_energy/$iter"][1, 1, :]
 
 ## Terms in the TKE budget
       buoyancy_flux =   file["timeseries/buoyancy_flux/$iter"][1, 1, :]
-   shear_production =   file["timeseries/shear_production/$iter"][1, 1, :]
         dissipation = - file["timeseries/dissipation/$iter"][1, 1, :]
  pressure_transport = - file["timeseries/pressure_transport/$iter"][1, 1, :]
 advective_transport = - file["timeseries/advective_transport/$iter"][1, 1, :]

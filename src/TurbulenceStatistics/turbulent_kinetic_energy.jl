@@ -36,16 +36,16 @@ function turbulent_kinetic_energy_budget(model; b = BuoyancyField(model),
     buoyancy_flux            = @at (Cell, Cell, Cell) w * b
     shear_production         = @at (Cell, Cell, Cell) (u - U) * w * ∂z(U) + (v - V) * w * ∂z(V)
 
-    statistics[:turbulent_kinetic_energy] = AveragedField(turbulent_kinetic_energy, dims=(1, 2), computed_data=c_scratch.data)
-    statistics[:buoyancy_flux]            = AveragedField(buoyancy_flux,            dims=(1, 2), computed_data=c_scratch.data)
-    statistics[:shear_production]         = AveragedField(shear_production,         dims=(1, 2), computed_data=c_scratch.data)
+    statistics[:turbulent_kinetic_energy] = AveragedField(turbulent_kinetic_energy, dims=(1, 2), operand_data=c_scratch.data)
+    statistics[:buoyancy_flux]            = AveragedField(buoyancy_flux,            dims=(1, 2), operand_data=c_scratch.data)
+    statistics[:shear_production]         = AveragedField(shear_production,         dims=(1, 2), operand_data=c_scratch.data)
 
     advective_transport = @at (Cell, Cell, Cell) ∂z(w * turbulent_kinetic_energy)
     pressure_transport  = @at (Cell, Cell, Cell) ∂z(w * p)
 
-    statistics[:advective_transport] = AveragedField(advective_transport, dims=(1, 2), computed_data=c_scratch.data)
-    statistics[:pressure_transport] = AveragedField(pressure_transport, dims=(1, 2), computed_data=c_scratch.data)
-    statistics[:dissipation] = AveragedField(subfilter_viscous_dissipation(model), dims=(1, 2), computed_data=c_scratch.data)
+    statistics[:advective_transport] = AveragedField(advective_transport, dims=(1, 2), operand_data=c_scratch.data)
+    statistics[:pressure_transport] = AveragedField(pressure_transport, dims=(1, 2), operand_data=c_scratch.data)
+    statistics[:dissipation] = AveragedField(subfilter_viscous_dissipation(model), dims=(1, 2), operand_data=c_scratch.data)
 
     return statistics
 end
