@@ -80,7 +80,7 @@ prefix = @sprintf("free_convection_Qb%.1e_Nsq%.1e_Nh%d_Nz%d", Qᵇ, N², grid.Nx
 data_directory = joinpath(@__DIR__, "..", "data", prefix) # save data in /data/prefix
 
 # Copy this file into the directory with data
-mkpath(datmixing length calculationa_directory)
+mkpath(data_directory)
 cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
 
 simulation.output_writers[:fields] = JLD2OutputWriter(model, merge(model.velocities, model.tracers); 
@@ -133,12 +133,13 @@ w²  = file["timeseries/ww/$iter"][1, 1, :]
 tke = file["timeseries/turbulent_kinetic_energy/$iter"][1, 1, :]
 
 ## Terms in the TKE budget
-      buoyancy_flux =   file["timeseries/buoyancy_flux/$iter"][1, 1, :]
-        dissipation = - file["timeseries/dissipation/$iter"][1, 1, :]
- pressure_transport = - file["timeseries/pressure_transport/$iter"][1, 1, :]
-advective_transport = - file["timeseries/advective_transport/$iter"][1, 1, :]
+buoyancy_flux =   file["timeseries/buoyancy_flux/$iter"][1, 1, :]
+  dissipation = - file["timeseries/dissipation/$iter"][1, 1, :]
 
-total_transport = pressure_transport .+ advective_transport
+ pressure_flux_divergence = - file["timeseries/pressure_flux_divergence/$iter"][1, 1, :]
+advective_flux_divergence = - file["timeseries/advective_flux_divergence/$iter"][1, 1, :]
+
+transport = pressure_flux_divergence .+ advective_flux_divergence
 
 ## For mixing length calculation
 wT = file["timeseries/wT/$iter"][1, 1, 2:end-1]
@@ -175,7 +176,7 @@ variances = plot(tke, zC, size = plot_size,
 plot!(variances, 1/2 .* w², zF, linewidth = linewidth,
                                     label = "w² / 2")
 
-budget = plot([buoyancy_flux dissipation total_transport], zC, size = plot_size,
+budget = plot([buoyancy_flux dissipation transport], zC, size = plot_size,
               linewidth = linewidth,
                  xlabel = "TKE budget terms",
                  ylabel = "z (m)",

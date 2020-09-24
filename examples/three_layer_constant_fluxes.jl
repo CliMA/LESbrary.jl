@@ -237,10 +237,30 @@ simulation.output_writers[:fields] = JLD2OutputWriter(model, merge(model.velocit
                                                               force = true)
     
 # Horizontally-averaged turbulence statistics
-turbulence_statistics = LESbrary.TurbulenceStatistics.first_through_second_order(model)
-tke_budget_statistics = LESbrary.TurbulenceStatistics.turbulent_kinetic_energy_budget(model)
+using LESbrary.TurbulenceStatistics: turbulent_kinetic_energy_budget
+using LESbrary.TurbulenceStatistics: first_through_second_order
 
-simulation.output_writers[:statistics] = JLD2OutputWriter(model, merge(turbulence_statistics, tke_budget_statistics),
+# Create scratch space for online calculations
+b = BuoyancyField(model)
+c_scratch = CellField(model.architecture, model.grid)
+u_scratch = XFaceField(model.architecture, model.grid)
+v_scratch = YFaceField(model.architecture, model.grid)
+w_scratch = ZFaceField(model.architecture, model.grid)
+
+# Build output dictionaries
+turbulence_statistics = first_through_second_order(model, c_scratch = c_scratch,
+                                                          u_scratch = u_scratch,
+                                                          v_scratch = v_scratch,
+                                                          w_scratch = w_scratch,
+                                                                  b = b)
+
+tke_budget_statistics = turbulent_kinetic_energy_budget(model, c_scratch = c_scratch,
+                                                               w_scratch = w_scratch,
+                                                                       b = b)
+
+statistics = merge(turbulence_statistics, tke_budget_statistics)
+
+simulation.output_writers[:statistics] = JLD2OutputWriter(model, statistics,
                                                           time_averaging_window = 15minute,
                                                                   time_interval = 1hour,
                                                                          prefix = prefix * "_statistics",
@@ -287,13 +307,13 @@ wc = file["timeseries/wc/$iter"][1, 1, :]
 wT = file["timeseries/wT/$iter"][1, 1, :]
 
 ## Terms in the TKE budget
-      buoyancy_flux =   file["timeseries/buoyancy_flux/$iter"][1, 1, :]
-   shear_production = - file["timeseries/shear_production/$iter"][1, 1, :]
-        dissipation = - file["timeseries/dissipation/$iter"][1, 1, :]
- pressure_transport = - file["timeseries/pressure_transport/$iter"][1, 1, :]
-advective_transport = - file["timeseries/advective_transport/$iter"][1, 1, :]
+   buoyancy_flux =   file["timeseries/buoyancy_flux/$iter"][1, 1, :]
+shear_production = - file["timeseries/shear_production/$iter"][1, 1, :]
+     dissipation = - file["timeseries/dissipation/$iter"][1, 1, :]
+ pressure_flux_divergence = - file["timeseries/pressure_flux_divergence/$iter"][1, 1, :]
+advective_flux_divergence = - file["timeseries/advective_flux_divergence/$iter"][1, 1, :]
 
-total_transport = pressure_transport .+ advective_transport
+transport = pressure_flux_divergence .+ advective_flux_divergence
 
 close(file)
 
@@ -343,7 +363,7 @@ fluxes = plot([normalize(wu) normalize(wv) normalize(wc) normalize(wT)], zF,
 plot!(variances, 1/2 .* w², zF, linewidth = linewidth,
                                     label = "w² / 2")
 
-budget = plot([buoyancy_flux dissipation total_transport], zC, size = plot_size,
+budget = plot([buoyancy_flux dissipation transport], zC, size = plot_size,
               linewidth = linewidth,
                  xlabel = "TKE budget terms",
                  ylabel = "z (m)",

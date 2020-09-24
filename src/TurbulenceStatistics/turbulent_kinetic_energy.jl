@@ -19,12 +19,14 @@ function subfilter_viscous_dissipation(model)
 end
 
 function turbulent_kinetic_energy_budget(model; b = BuoyancyField(model),
+                                                w_scratch = ZFaceField(model.architecture, model.grid),
                                                 c_scratch = CellField(model.architecture, model.grid))
 
     u, v, w = model.velocities
 
     νₑ = model.diffusivities.νₑ
 
+    dissipation = subfilter_viscous_dissipation(model)
     p = pressure(model)
 
     U = AveragedField(u, dims=(1, 2))
@@ -40,12 +42,17 @@ function turbulent_kinetic_energy_budget(model; b = BuoyancyField(model),
     statistics[:buoyancy_flux]            = AveragedField(buoyancy_flux,            dims=(1, 2), operand_data=c_scratch.data)
     statistics[:shear_production]         = AveragedField(shear_production,         dims=(1, 2), operand_data=c_scratch.data)
 
-    advective_transport = @at (Cell, Cell, Cell) ∂z(w * turbulent_kinetic_energy)
-    pressure_transport  = @at (Cell, Cell, Cell) ∂z(w * p)
+    advective_flux            = @at (Cell, Cell, Face) w * turbulent_kinetic_energy
+    advective_flux_divergence = @at (Cell, Cell, Cell) ∂z(w * turbulent_kinetic_energy)
 
-    statistics[:advective_transport] = AveragedField(advective_transport, dims=(1, 2), operand_data=c_scratch.data)
-    statistics[:pressure_transport] = AveragedField(pressure_transport, dims=(1, 2), operand_data=c_scratch.data)
-    statistics[:dissipation] = AveragedField(subfilter_viscous_dissipation(model), dims=(1, 2), operand_data=c_scratch.data)
+    pressure_flux            = @at (Cell, Cell, Face) w * p
+    pressure_flux_divergence = @at (Cell, Cell, Cell) ∂z(w * p)
+
+    statistics[:advective_flux]            = AveragedField(advective_flux,            dims=(1, 2), operand_data=w_scratch.data)
+    statistics[:pressure_flux]             = AveragedField(pressure_flux,             dims=(1, 2), operand_data=w_scratch.data)
+    statistics[:advective_flux_divergence] = AveragedField(advective_flux_divergence, dims=(1, 2), operand_data=c_scratch.data)
+    statistics[:pressure_flux_divergence]  = AveragedField(pressure_flux_divergence,  dims=(1, 2), operand_data=c_scratch.data)
+    statistics[:dissipation]               = AveragedField(dissipation,               dims=(1, 2), operand_data=c_scratch.data)
 
     return statistics
 end

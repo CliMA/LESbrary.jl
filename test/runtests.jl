@@ -52,7 +52,8 @@ end
 
 @testset "Turbulence Statistics" begin
 
-    model = IncompressibleModel(grid=RegularCartesianGrid(size=(1, 1, 1), extent=(1, 1, 1)))
+    model = IncompressibleModel(grid=RegularCartesianGrid(size=(1, 1, 1), extent=(1, 1, 1)),
+                                closure=AnisotropicMinimumDissipation())
 
     using LESbrary.TurbulenceStatistics: pressure
     using LESbrary.TurbulenceStatistics: subfilter_viscous_dissipation
@@ -64,25 +65,24 @@ end
     using LESbrary.TurbulenceStatistics: first_order_statistics
     using LESbrary.TurbulenceStatistics: second_order_statistics
     using LESbrary.TurbulenceStatistics: third_order_statistics
-    using LESbrary.TurbulenceStatistics: first_through_second_order_statistics
-    using LESbrary.TurbulenceStatistics: first_through_third_order_statistics
+    using LESbrary.TurbulenceStatistics: first_through_second_order
+    using LESbrary.TurbulenceStatistics: first_through_third_order
 
     @test pressure(model) isa Oceananigans.AbstractOperations.BinaryOperation
     @test subfilter_viscous_dissipation(model) isa Oceananigans.AbstractOperations.AbstractOperation
 
-    @test all(ϕ for ϕ in values( horizontally_averaged_tracers(model)   ) isa AveragedField)
-    @test all(ϕ for ϕ in values( velocity_covariances(model)            ) isa AveragedField)
-    @test all(ϕ for ϕ in values( tracer_covariances(model)              ) isa AveragedField)
-    @test all(ϕ for ϕ in values( third_order_velocity_statistics(model) ) isa AveragedField)
-    @test all(ϕ for ϕ in values( third_order_tracer_statistics(model)   ) isa AveragedField)
+    @test all(ϕ isa AveragedField for ϕ in values( horizontally_averaged_tracers(model)   ))
+    @test all(ϕ isa AveragedField for ϕ in values( velocity_covariances(model)            ))
+    @test all(ϕ isa AveragedField for ϕ in values( tracer_covariances(model)              ))
+    @test all(ϕ isa AveragedField for ϕ in values( third_order_velocity_statistics(model) ))
+    @test all(ϕ isa AveragedField for ϕ in values( third_order_tracer_statistics(model)   ))
 
-    @test all(ϕ for ϕ in values( first_order_statistics(model)  ) isa AveragedField)
-    @test all(ϕ for ϕ in values( second_order_statistics(model) ) isa AveragedField)
-    @test all(ϕ for ϕ in values( third_order_statistics(model)  ) isa AveragedField)
+    @test all(ϕ isa AveragedField for ϕ in values( first_order_statistics(model)  ))
+    @test all(ϕ isa AveragedField for ϕ in values( second_order_statistics(model) ))
+    @test all(ϕ isa AveragedField for ϕ in values( third_order_statistics(model)  ))
 
-    @test all(ϕ for ϕ in values( first_through_second_order_statistics(model) ) isa AveragedField)
-    @test all(ϕ for ϕ in values( first_through_third_order_statistics(model)  ) isa AveragedField)
-
+    @test all(ϕ isa AveragedField for ϕ in values( first_through_second_order(model) ))
+    @test all(ϕ isa AveragedField for ϕ in values( first_through_third_order(model)  ))
 end
 
 @testset "Examples" begin
@@ -93,7 +93,13 @@ end
     
     free_convection_example = joinpath(@__DIR__, "..", "examples", "free_convection.jl")
 
-    replace_strings = [("size=(64, 64, 64)", "size=(1, 1, 1)")]
+    replace_strings = [
+                       ("size=(32, 32, 32)", "size=(1, 1, 1)"),
+                       ("time_interval = 4hour", "time_interval=2minute"),
+                       ("time_interval = 1hour", "time_interval=2minute"),
+                       ("time_averaging_window = 15minute", "time_averaging_window = 1minute"),
+                       ("stop_time=8hour", "stop_time=2minute")
+                      ]
 
     @test run_script(replace_strings, "free_convection", free_convection_example)
 
@@ -104,8 +110,11 @@ end
     three_layer_constant_fluxes_example = joinpath(@__DIR__, "..", "examples", "three_layer_constant_fluxes.jl")
 
     replace_strings = [
-                       ("""Nh = args["Nh"]""", "Nh = 1"), 
-                       ("""Nz = args["Nz"]""", "Nz = 1"), 
+                       ("""Nh = args["Nh"]""", "Nh = 1"),
+                       ("time_interval = 4hour", "time_interval=2minute"),
+                       ("time_interval = 1hour", "time_interval=2minute"),
+                       ("time_averaging_window = 15minute", "time_averaging_window = 1minute"),
+                       ("stop_time=4hour", "stop_time=2minute")
                       ]
 
     @test run_script(replace_strings, "three_layer_constant_fluxes", three_layer_constant_fluxes_example)
