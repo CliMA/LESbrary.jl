@@ -68,12 +68,12 @@ function velocity_covariances(model; u_scratch = XFaceField(model.architecture, 
     u, v, w = model.velocities
 
     covariances = Dict(
-                       :uu => AveragedField(u * u, dims=(1, 2), computed_data=u_scratch.data),
-                       :vv => AveragedField(v * v, dims=(1, 2), computed_data=v_scratch.data),
-                       :ww => AveragedField(w * w, dims=(1, 2), computed_data=w_scratch.data),
-                       :uv => AveragedField(u * v, dims=(1, 2), computed_data=u_scratch.data),
-                       :wv => AveragedField(w * v, dims=(1, 2), computed_data=w_scratch.data),
-                       :wu => AveragedField(w * u, dims=(1, 2), computed_data=w_scratch.data)
+                       :uu => AveragedField(u * u, dims=(1, 2), operand_data=u_scratch.data),
+                       :vv => AveragedField(v * v, dims=(1, 2), operand_data=v_scratch.data),
+                       :ww => AveragedField(w * w, dims=(1, 2), operand_data=w_scratch.data),
+                       :uv => AveragedField(u * v, dims=(1, 2), operand_data=u_scratch.data),
+                       :wv => AveragedField(w * v, dims=(1, 2), operand_data=w_scratch.data),
+                       :wu => AveragedField(w * u, dims=(1, 2), operand_data=w_scratch.data)
                        )
 
     return covariances
@@ -108,14 +108,21 @@ function tracer_covariances(model; b = BuoyancyField(model),
     for tracer in keys(model.tracers)
         c = getproperty(model.tracers, tracer)
 
-        covariances[Symbol(tracer, tracer)] = AveragedField(c * c, dims=(1, 2), computed_data=c_scratch.data)
-        covariances[Symbol(:u, tracer)]     = AveragedField(u * c, dims=(1, 2), computed_data=u_scratch.data)
-        covariances[Symbol(:v, tracer)]     = AveragedField(v * c, dims=(1, 2), computed_data=v_scratch.data)
-        covariances[Symbol(:w, tracer)]     = AveragedField(w * c, dims=(1, 2), computed_data=w_scratch.data)
+        # Keys
+        cc = Symbol(tracer, tracer)
+        uc = Symbol(:u, tracer)
+        vc = Symbol(:v, tracer)
+        wc = Symbol(:w, tracer)
+
+        covariances[cc] = AveragedField(c * c, dims=(1, 2), operand_data=c_scratch.data)
+        covariances[uc] = AveragedField(u * c, dims=(1, 2), operand_data=u_scratch.data)
+        covariances[vc] = AveragedField(v * c, dims=(1, 2), operand_data=v_scratch.data)
+        covariances[wc] = AveragedField(w * c, dims=(1, 2), operand_data=w_scratch.data)
 
         # Add covariance of tracer with buoyancy
         if tracer != :b && !has_buoyancy_tracer(model)
-            covariances[Symbol(:b, tracer)] = AveragedField(b * c, dims=(1, 2), computed_data=c_scratch.data)
+            bc = Symbol(:b, tracer)
+            covariances[bc] = AveragedField(b * c, dims=(1, 2), operand_data=c_scratch.data)
         end
     end
 
@@ -149,30 +156,30 @@ function third_order_velocity_statistics(model; u_scratch = XFaceField(model.arc
     Σʸᶻ = (∂z(v) + ∂y(w)) / 2 # CFF
 
     third_order_statistics = Dict(
-                                   :uuu => AveragedField(u * u * u, dims=(1, 2), computed_data=u_scratch.data),
-                                   :uuv => AveragedField(u * u * v, dims=(1, 2), computed_data=u_scratch.data),
-                                   :uuw => AveragedField(u * u * w, dims=(1, 2), computed_data=u_scratch.data),
-                                   :uvv => AveragedField(u * v * v, dims=(1, 2), computed_data=u_scratch.data),
-                                   :uww => AveragedField(u * w * w, dims=(1, 2), computed_data=u_scratch.data),
+                                   :uuu => AveragedField(u * u * u, dims=(1, 2), operand_data=u_scratch.data),
+                                   :uuv => AveragedField(u * u * v, dims=(1, 2), operand_data=u_scratch.data),
+                                   :uuw => AveragedField(u * u * w, dims=(1, 2), operand_data=u_scratch.data),
+                                   :uvv => AveragedField(u * v * v, dims=(1, 2), operand_data=u_scratch.data),
+                                   :uww => AveragedField(u * w * w, dims=(1, 2), operand_data=u_scratch.data),
 
-                                   :vvv => AveragedField(v * v * v, dims=(1, 2), computed_data=v_scratch.data),
-                                   :vvw => AveragedField(v * v * w, dims=(1, 2), computed_data=v_scratch.data),
-                                   :vww => AveragedField(v * w * w, dims=(1, 2), computed_data=v_scratch.data),
+                                   :vvv => AveragedField(v * v * v, dims=(1, 2), operand_data=v_scratch.data),
+                                   :vvw => AveragedField(v * v * w, dims=(1, 2), operand_data=v_scratch.data),
+                                   :vww => AveragedField(v * w * w, dims=(1, 2), operand_data=v_scratch.data),
  
-                                   :www => AveragedField(w * w * w, dims=(1, 2), computed_data=w_scratch.data),
-                                   :wvu => AveragedField(w * v * u, dims=(1, 2), computed_data=w_scratch.data),
+                                   :www => AveragedField(w * w * w, dims=(1, 2), operand_data=w_scratch.data),
+                                   :wvu => AveragedField(w * v * u, dims=(1, 2), operand_data=w_scratch.data),
  
-                                    :up => AveragedField(u * p,     dims=(1, 2), computed_data=u_scratch.data),
-                                    :vp => AveragedField(v * p,     dims=(1, 2), computed_data=v_scratch.data),
-                                    :wp => AveragedField(w * p,     dims=(1, 2), computed_data=w_scratch.data),
+                                    :up => AveragedField(u * p,     dims=(1, 2), operand_data=u_scratch.data),
+                                    :vp => AveragedField(v * p,     dims=(1, 2), operand_data=v_scratch.data),
+                                    :wp => AveragedField(w * p,     dims=(1, 2), operand_data=w_scratch.data),
   
-                                  :pΣˣˣ => AveragedField(p * ∂x(u), dims=(1, 2), computed_data=c_scratch.data),
-                                  :pΣʸʸ => AveragedField(p * ∂y(v), dims=(1, 2), computed_data=c_scratch.data),
-                                  :pΣᶻᶻ => AveragedField(p * ∂z(w), dims=(1, 2), computed_data=c_scratch.data),
+                                  :pΣˣˣ => AveragedField(p * ∂x(u), dims=(1, 2), operand_data=c_scratch.data),
+                                  :pΣʸʸ => AveragedField(p * ∂y(v), dims=(1, 2), operand_data=c_scratch.data),
+                                  :pΣᶻᶻ => AveragedField(p * ∂z(w), dims=(1, 2), operand_data=c_scratch.data),
 
-                                  :pΣˣʸ => AveragedField(p * Σˣʸ,   dims=(1, 2), computed_data=c_scratch.data),
-                                  :pΣʸᶻ => AveragedField(p * Σʸᶻ,   dims=(1, 2), computed_data=c_scratch.data),
-                                  :pΣˣᶻ => AveragedField(p * Σˣᶻ,   dims=(1, 2), computed_data=c_scratch.data)
+                                  :pΣˣʸ => AveragedField(p * Σˣʸ,   dims=(1, 2), operand_data=c_scratch.data),
+                                  :pΣˣᶻ => AveragedField(p * Σˣᶻ,   dims=(1, 2), operand_data=c_scratch.data),
+                                  :pΣʸᶻ => AveragedField(p * Σʸᶻ,   dims=(1, 2), operand_data=c_scratch.data)
                                  )
 
     return third_order_statistics
@@ -205,18 +212,18 @@ function third_order_tracer_statistics(model; u_scratch = XFaceField(model.archi
     for tracer in keys(model.tracers)
         c = getproperty(model.tracers, tracer)
 
-        cwu = AveragedField(c * w * u, dims=(1, 2), computed_data=c_scratch.data)
-        wcc = AveragedField(w * c * c, dims=(1, 2), computed_data=w_scratch.data)
+        # Keys
+        wcc = Symbol(:w, tracer, tracer)
+        cwu = Symbol(tracer, :wu)
+        cpx = Symbol(tracer, :px)
+        cpy = Symbol(tracer, :py)
+        cpz = Symbol(tracer, :pz)
 
-        cpx = AveragedField(c * ∂x(p), dims=(1, 2), computed_data=c_scratch.data)
-        cpy = AveragedField(c * ∂y(p), dims=(1, 2), computed_data=c_scratch.data)
-        cpz = AveragedField(c * ∂z(p), dims=(1, 2), computed_data=c_scratch.data)
-
-        third_order_statistics[Symbol(:w, tracer, tracer)] = AveragedField(w * c * c, dims=(1, 2), computed_data=w_scratch.data)
-        third_order_statistics[Symbol(tracer, :wu)]        = AveragedField(c * w * u, dims=(1, 2), computed_data=c_scratch.data)
-        third_order_statistics[Symbol(tracer, :px)]        = AveragedField(c * ∂x(p), dims=(1, 2), computed_data=c_scratch.data)
-        third_order_statistics[Symbol(tracer, :py)]        = AveragedField(c * ∂y(p), dims=(1, 2), computed_data=c_scratch.data)
-        third_order_statistics[Symbol(tracer, :pz)]        = AveragedField(c * ∂z(p), dims=(1, 2), computed_data=c_scratch.data)
+        third_order_statistics[wcc] = AveragedField(w * c * c, dims=(1, 2), operand_data=w_scratch.data)
+        third_order_statistics[cwu] = AveragedField(c * w * u, dims=(1, 2), operand_data=c_scratch.data)
+        third_order_statistics[cpx] = AveragedField(c * ∂x(p), dims=(1, 2), operand_data=c_scratch.data)
+        third_order_statistics[cpy] = AveragedField(c * ∂y(p), dims=(1, 2), operand_data=c_scratch.data)
+        third_order_statistics[cpz] = AveragedField(c * ∂z(p), dims=(1, 2), operand_data=c_scratch.data)
     end
 
     return third_order_statistics
@@ -234,7 +241,7 @@ function first_order_statistics(model; b = BuoyancyField(model),
                    )
 
     p = pressure(model)
-    output[:p] = AveragedField(p, dims=(1, 2), computed_data=c_scratch.data)
+    output[:p] = AveragedField(p, dims=(1, 2), operand_data=c_scratch.data)
 
     if !has_buoyancy_tracer(model)
         output[:b] = AveragedField(b, dims=(1, 2))
@@ -266,9 +273,9 @@ function second_order_statistics(model; b = BuoyancyField(model),
     if !has_buoyancy_tracer(model)
         u, v, w = model.velocities
 
-        output[:ub] = AveragedField(u * b, dims=(1, 2), computed_data=u_scratch.data)
-        output[:vb] = AveragedField(v * b, dims=(1, 2), computed_data=v_scratch.data)
-        output[:wb] = AveragedField(w * b, dims=(1, 2), computed_data=w_scratch.data)
+        output[:ub] = AveragedField(u * b, dims=(1, 2), operand_data=u_scratch.data)
+        output[:vb] = AveragedField(v * b, dims=(1, 2), operand_data=v_scratch.data)
+        output[:wb] = AveragedField(w * b, dims=(1, 2), operand_data=w_scratch.data)
     end
 
     return output
