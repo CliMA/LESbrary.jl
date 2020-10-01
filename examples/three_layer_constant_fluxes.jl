@@ -128,7 +128,7 @@ c_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Value, 1.0),
 
 # Tracer forcing
 
-using Oceananigans.Forcing
+using Oceananigans.Forcings
 using Oceananigans.Utils: hour
 
 struct SymmetricExponentialTarget{C}
@@ -157,13 +157,14 @@ using Oceananigans
 
 model = IncompressibleModel(architecture = CPU(),
                              timestepper = :RungeKutta3,
+                               advection = WENO5(),
                                     grid = grid,
                                  tracers = (:T, :c),
                                 buoyancy = buoyancy,
                                 coriolis = FPlane(f=1e-4),
                                  closure = AnisotropicMinimumDissipation(C=Cᴬᴹᴰ),
                      boundary_conditions = (T=θ_bcs, u=u_bcs),
-                                 forcing = ModelForcing(c=c_forcing))
+                                 forcing = (c=c_forcing,))
 
 # # Initial condition
 
@@ -203,7 +204,7 @@ function initial_temperature(x, y, z)
     end
 end
 
-set!(model, T = initial_temperature, c = (x, y, z) -> c_forcing.forcing.target(x, y, z, 0))
+set!(model, T = initial_temperature, c = (x, y, z) -> c_forcing.target(x, y, z, 0))
 
 # # Prepare the simulation
 
@@ -211,7 +212,7 @@ using Oceananigans.Utils: hour, minute
 using LESbrary.Utils: SimulationProgressMessenger
 
 # Adaptive time-stepping
-wizard = TimeStepWizard(cfl=0.5, Δt=10.0, max_change=1.1, max_Δt=30.0)
+wizard = TimeStepWizard(cfl=1.5, Δt=10.0, max_change=1.1, max_Δt=30.0)
 
 simulation = Simulation(model, Δt=wizard, stop_time=4hour, iteration_interval=100,
                         progress=SimulationProgressMessenger(model, wizard))
@@ -232,6 +233,14 @@ cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
 simulation.output_writers[:fields] = JLD2OutputWriter(model, merge(model.velocities, model.tracers); 
                                                       time_interval = 4hour, # every quarter period
                                                              prefix = prefix * "_fields",
+                                                                dir = data_directory,
+                                                       max_filesize = 2GiB,
+                                                              force = true)
+
+simulation.output_writers[:slices] = JLD2OutputWriter(model, merge(model.velocities, model.tracers),
+                                                      time_interval = 1minute, # every quarter period
+                                                             prefix = prefix * "_slices",
+                                                       field_slicer = FieldSlicer(j=floor(Int, grid.Ny/2)),
                                                                 dir = data_directory,
                                                        max_filesize = 2GiB,
                                                               force = true)
@@ -261,7 +270,7 @@ tke_budget_statistics = turbulent_kinetic_energy_budget(model, c_scratch = c_scr
 statistics = merge(turbulence_statistics, tke_budget_statistics)
 
 simulation.output_writers[:statistics] = JLD2OutputWriter(model, statistics,
-                                                          time_averaging_window = 15minute,
+                                                          time_averaging_window = 5minute,
                                                                   time_interval = 1hour,
                                                                          prefix = prefix * "_statistics",
                                                                             dir = data_directory,
@@ -277,102 +286,177 @@ run!(simulation)
 
 using JLD2, Plots
 
-## Some plot parameters
-linewidth = 3
-ylim = (-256, 0)
-plot_size = (500, 500)
-zC = znodes(Cell, grid)
-zF = znodes(Face, grid)
+make_animation = true
+plot_statistics = true
 
-## Load data
-file = jldopen(simulation.output_writers[:statistics].filepath)
+if make_animation
 
-iterations = parse.(Int, keys(file["timeseries/t"]))
-iter = iterations[end] # plot final iteration
+    xw, yw, zw = nodes(model.velocities.w)
+    xu, yu, zu = nodes(model.velocities.u)
 
-## First-order quantities
-u = file["timeseries/u/$iter"][1, 1, :]
-v = file["timeseries/v/$iter"][1, 1, :]
-T = file["timeseries/T/$iter"][1, 1, :]
-c = file["timeseries/c/$iter"][1, 1, :]
+    xw, yw, zw = xw[:], yw[:], zw[:]
+    xu, yu, zu = xu[:], yu[:], zu[:]
 
-## Velocity variances
-w²  = file["timeseries/ww/$iter"][1, 1, :]
-tke = file["timeseries/turbulent_kinetic_energy/$iter"][1, 1, :]
+    file = jldopen(simulation.output_writers[:slices].filepath)
 
-## Fluxes
-wu = file["timeseries/wu/$iter"][1, 1, :]
-wv = file["timeseries/wv/$iter"][1, 1, :]
-wc = file["timeseries/wc/$iter"][1, 1, :]
-wT = file["timeseries/wT/$iter"][1, 1, :]
+    iterations = parse.(Int, keys(file["timeseries/t"]))
 
-## Terms in the TKE budget
-   buoyancy_flux =   file["timeseries/buoyancy_flux/$iter"][1, 1, :]
-shear_production = - file["timeseries/shear_production/$iter"][1, 1, :]
-     dissipation = - file["timeseries/dissipation/$iter"][1, 1, :]
- pressure_flux_divergence = - file["timeseries/pressure_flux_divergence/$iter"][1, 1, :]
-advective_flux_divergence = - file["timeseries/advective_flux_divergence/$iter"][1, 1, :]
+    # This utility is handy for calculating nice contour intervals:
 
-transport = pressure_flux_divergence .+ advective_flux_divergence
+    function nice_divergent_levels(c, clim)
+        levels = range(-clim, stop=clim, length=10)
 
-close(file)
+        cmax = maximum(abs, c)
 
-# Plot data
+        if clim < cmax # add levels on either end
+            levels = vcat([-cmax], range(-clim, stop=clim, length=10), [cmax])
+        end
 
-velocities = plot([u v], zC, size = plot_size,
-                     linewidth = linewidth,
-                        xlabel = "Velocity (m s⁻¹)",
-                        ylabel = "z (m)",
-                          ylim = ylim,
-                         label = ["u" "v"],
-                        legend = :bottom)
+        return levels
+    end
 
-temperature = plot(T, zC, size = plot_size,
-                     linewidth = linewidth,
-                        xlabel = "Temperature (ᵒC)",
-                        ylabel = "z (m)",
-                          ylim = ylim,
-                         label = nothing)
+    # Finally, we're ready to animate.
 
-tracer = plot(c, zC, size = plot_size,
-                     linewidth = linewidth,
-                        xlabel = "Tracer",
-                        ylabel = "z (m)",
-                          ylim = ylim,
-                         label = nothing)
+    @info "Making an animation from the saved data..."
 
-variances = plot(tke, zC, size = plot_size,
-                     linewidth = linewidth,
-                        xlabel = "Velocity variances (m² s⁻²)",
-                        ylabel = "z (m)",
-                          ylim = ylim,
-                         label = "(u² + v² + w²) / 2",
-                        legend = :bottom)
+    anim = @animate for (i, iter) in enumerate(iterations)
 
-normalize(wϕ) = wϕ ./ maximum(abs, wϕ)
+        @info "Drawing frame $i from iteration $iter \n"
 
-fluxes = plot([normalize(wu) normalize(wv) normalize(wc) normalize(wT)], zF,
-                          size = plot_size,
-                     linewidth = linewidth,
-                        xlabel = "Normalized fluxes",
-                        ylabel = "z (m)",
-                          ylim = ylim,
-                         label = ["wu" "wv" "wc" "wT"],
-                        legend = :bottom)
+        ## Load 3D fields from file
+        w = file["timeseries/w/$iter"][:, 1, :]
+        u = file["timeseries/u/$iter"][:, 1, :]
 
-plot!(variances, 1/2 .* w², zF, linewidth = linewidth,
-                                    label = "w² / 2")
+        wlim = 0.02
+        ulim = 0.05
+        wlevels = nice_divergent_levels(w, wlim)
+        ulevels = nice_divergent_levels(w, ulim)
 
-budget = plot([buoyancy_flux dissipation transport], zC, size = plot_size,
-              linewidth = linewidth,
-                 xlabel = "TKE budget terms",
-                 ylabel = "z (m)",
-                   ylim = ylim,
-                  label = ["buoyancy flux" "dissipation" "kinetic energy transport"],
-                 legend = :bottom)
+        wxz_plot = contourf(xw, zw, w';
+                                  color = :balance,
+                            aspectratio = :equal,
+                                  clims = (-wlim, wlim),
+                                 levels = wlevels,
+                                  xlims = (0, grid.Lx),
+                                  ylims = (-grid.Lz, 0),
+                                 xlabel = "x (m)",
+                                 ylabel = "z (m)")
 
-plot(velocities, temperature, tracer, variances, fluxes, budget, layout=(1, 6), size=(1000, 500))
+        uxz_plot = contourf(xu, zu, u';
+                                  color = :balance,
+                            aspectratio = :equal,
+                                  clims = (-ulim, ulim),
+                                 levels = ulevels,
+                                  xlims = (0, grid.Lx),
+                                  ylims = (-grid.Lz, 0),
+                                 xlabel = "x (m)",
+                                 ylabel = "z (m)")
 
-# save plots
+        plot(wxz_plot, uxz_plot, layout=(1, 2), size=(1000, 400),
+             title = ["w(x, y, z=-8, t) (m/s)" "w(x, y=0, z, t) (m/s)" "u(x, y = 0, z, t) (m/s)"])
 
-#exit() # Release GPU memory
+        iter == iterations[end] && close(file)
+    end
+
+    mp4(anim, "three_layer_constant_fluxes.mp4", fps = 15)
+end
+
+if plot_statistics
+    ## Some plot parameters
+    linewidth = 3
+    ylim = (-256, 0)
+    plot_size = (500, 500)
+    zC = znodes(Cell, grid)
+    zF = znodes(Face, grid)
+
+    ## Load data
+    file = jldopen(simulation.output_writers[:statistics].filepath)
+
+    iterations = parse.(Int, keys(file["timeseries/t"]))
+    iter = iterations[end] # plot final iteration
+
+    ## First-order quantities
+    u = file["timeseries/u/$iter"][1, 1, :]
+    v = file["timeseries/v/$iter"][1, 1, :]
+    T = file["timeseries/T/$iter"][1, 1, :]
+    c = file["timeseries/c/$iter"][1, 1, :]
+
+    ## Velocity variances
+    w²  = file["timeseries/ww/$iter"][1, 1, :]
+    tke = file["timeseries/turbulent_kinetic_energy/$iter"][1, 1, :]
+
+    ## Fluxes
+    wu = file["timeseries/wu/$iter"][1, 1, :]
+    wv = file["timeseries/wv/$iter"][1, 1, :]
+    wc = file["timeseries/wc/$iter"][1, 1, :]
+    wT = file["timeseries/wT/$iter"][1, 1, :]
+
+    ## Terms in the TKE budget
+       buoyancy_flux =   file["timeseries/buoyancy_flux/$iter"][1, 1, :]
+    shear_production = - file["timeseries/shear_production/$iter"][1, 1, :]
+         dissipation = - file["timeseries/dissipation/$iter"][1, 1, :]
+     pressure_flux_divergence = - file["timeseries/pressure_flux_divergence/$iter"][1, 1, :]
+    advective_flux_divergence = - file["timeseries/advective_flux_divergence/$iter"][1, 1, :]
+
+    transport = pressure_flux_divergence .+ advective_flux_divergence
+
+    close(file)
+
+    # Plot data
+
+    velocities = plot([u v], zC, size = plot_size,
+                         linewidth = linewidth,
+                            xlabel = "Velocity (m s⁻¹)",
+                            ylabel = "z (m)",
+                              ylim = ylim,
+                             label = ["u" "v"],
+                            legend = :bottom)
+
+    temperature = plot(T, zC, size = plot_size,
+                         linewidth = linewidth,
+                            xlabel = "Temperature (ᵒC)",
+                            ylabel = "z (m)",
+                              ylim = ylim,
+                             label = nothing)
+
+    tracer = plot(c, zC, size = plot_size,
+                         linewidth = linewidth,
+                            xlabel = "Tracer",
+                            ylabel = "z (m)",
+                              ylim = ylim,
+                             label = nothing)
+
+    variances = plot(tke, zC, size = plot_size,
+                         linewidth = linewidth,
+                            xlabel = "Velocity variances (m² s⁻²)",
+                            ylabel = "z (m)",
+                              ylim = ylim,
+                             label = "(u² + v² + w²) / 2",
+                            legend = :bottom)
+
+    normalize(wϕ) = wϕ ./ maximum(abs, wϕ)
+
+    fluxes = plot([normalize(wu) normalize(wv) normalize(wc) normalize(wT)], zF,
+                              size = plot_size,
+                         linewidth = linewidth,
+                            xlabel = "Normalized fluxes",
+                            ylabel = "z (m)",
+                              ylim = ylim,
+                             label = ["wu" "wv" "wc" "wT"],
+                            legend = :bottom)
+
+    plot!(variances, 1/2 .* w², zF, linewidth = linewidth,
+                                        label = "w² / 2")
+
+    budget = plot([buoyancy_flux dissipation transport], zC, size = plot_size,
+                  linewidth = linewidth,
+                     xlabel = "TKE budget terms",
+                     ylabel = "z (m)",
+                       ylim = ylim,
+                      label = ["buoyancy flux" "dissipation" "kinetic energy transport"],
+                     legend = :bottom)
+
+    plot(velocities, temperature, tracer, variances, fluxes, budget, layout=(1, 6), size=(1000, 500))
+
+    # save plots
+end
