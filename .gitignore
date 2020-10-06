@@ -177,3 +177,6 @@ data
 
 # vim temporary files
 *.swp
+
+# DS_STORE...
+.DS_STORE

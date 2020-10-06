@@ -76,12 +76,25 @@ function parse_command_line_arguments()
             help = "The CUDA device index on which to run the simulation."
             default = 0
             arg_type = Int
+
+        "--animation"
+            help = "Make an animation of the horizontal and vertical velocity when the simulation completes."
+            default = false
+            arg_type = Bool
+
+        "--plot-statistics"
+            help = "Plot some turbulence statistics after the simulation is complete."
+            default = false
+            arg_type = Bool
     end
 
     return parse_args(settings)
 end
 
 args = parse_command_line_arguments()
+
+make_animation = args["animation"]
+plot_statistics = args["plot-statistics"]
 
 using LESbrary, Printf, Statistics
 
@@ -286,9 +299,6 @@ run!(simulation)
 
 using JLD2, Plots
 
-make_animation = true
-plot_statistics = true
-
 if make_animation
 
     xw, yw, zw = nodes(model.velocities.w)
@@ -458,5 +468,5 @@ if plot_statistics
 
     plot(velocities, temperature, tracer, variances, fluxes, budget, layout=(1, 6), size=(1000, 500))
 
-    # save plots
+    savefig("three_layer_constant_fluxes_statistics.png")
 end
