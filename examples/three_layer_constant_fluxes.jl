@@ -13,12 +13,12 @@ function parse_command_line_arguments()
     @add_arg_table! settings begin
         "--Nh"
             help = "The number of grid points in x, y."
-            default = 64
+            default = 128
             arg_type = Int
 
         "--Nz"
             help = "The number of grid points in z."
-            default = 64
+            default = 128
             arg_type = Int
 
         "--buoyancy-flux"
@@ -74,12 +74,12 @@ function parse_command_line_arguments()
 
         "--device", "-d"
             help = "The CUDA device index on which to run the simulation."
-            default = 0
+            default = 1
             arg_type = Int
 
         "--animation"
             help = "Make an animation of the horizontal and vertical velocity when the simulation completes."
-            default = false
+            default = true
             arg_type = Bool
 
         "--plot-statistics"
@@ -100,7 +100,7 @@ using LESbrary, Printf, Statistics
 
 # Domain
 
-using Oceananigans.Grids
+using Oceananigans
 
 Nh = args["Nh"]
 Nz = args["Nz"]
@@ -144,17 +144,11 @@ c_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Value, 1.0),
 using Oceananigans.Forcings
 using Oceananigans.Utils: hour
 
-struct SymmetricExponentialTarget{C}
-         center :: C
-    decay_scale :: C
-end
+const λᶜ = 24.0
 
-SymmetricExponentialTarget(FT=Float64; decay_scale, center=0) =
-    SymmetricExponentialTarget{FT}(center, decay_scale)
+@inline c_target(x, y, z, t) = exp(-abs(z) / λᶜ)
 
-@inline (e::SymmetricExponentialTarget)(x, y, z, t) = exp(-abs(z - e.center) / e.decay_scale)
-
-c_forcing = Relaxation(; rate=1/hour, target=SymmetricExponentialTarget(decay_scale=24))
+c_forcing = Relaxation(; rate=1/hour, target=c_target)
 
 # LES Model
 
@@ -166,7 +160,7 @@ Cᴬᴹᴰ = SurfaceEnhancedModelConstant(grid.Δz, C₀ = 1/12, enhancement = 7
 
 # Instantiate Oceananigans.IncompressibleModel
 
-using Oceananigans
+using Oceananigans.Advection: WENO5
 
 model = IncompressibleModel(architecture = CPU(),
                              timestepper = :RungeKutta3,
@@ -221,21 +215,22 @@ set!(model, T = initial_temperature, c = (x, y, z) -> c_forcing.target(x, y, z, 
 
 # # Prepare the simulation
 
-using Oceananigans.Utils: hour, minute
+using Oceananigans.Utils: minute
 using LESbrary.Utils: SimulationProgressMessenger
 
 # Adaptive time-stepping
-wizard = TimeStepWizard(cfl=1.5, Δt=10.0, max_change=1.1, max_Δt=30.0)
+wizard = TimeStepWizard(cfl=0.8, Δt=10.0, max_change=1.1, max_Δt=30.0)
 
-simulation = Simulation(model, Δt=wizard, stop_time=4hour, iteration_interval=100,
+simulation = Simulation(model, Δt=wizard, stop_time=8hour, iteration_interval=10,
                         progress=SimulationProgressMessenger(model, wizard))
 
 # Prepare Output
 
+#=
 using Oceananigans.Utils: GiB
-using Oceananigans.OutputWriters: JLD2OutputWriter
+using Oceananigans.OutputWriters: JLD2OutputWriter, FieldSlicer
 
-prefix = @sprintf("constant_fluxes_Qu%.1e_Qb%.1e_Nh%d_Nz%d", abs(Qᵘ), Qᵇ, grid.Nx, grid.Nz)
+prefix = @sprintf("three_layer_constant_fluxes_Qu%.1e_Qb%.1e_Nh%d_Nz%d", abs(Qᵘ), Qᵇ, grid.Nx, grid.Nz)
 
 data_directory = joinpath(@__DIR__, "..", "data", prefix) # save data in /data/prefix
 
@@ -283,7 +278,7 @@ tke_budget_statistics = turbulent_kinetic_energy_budget(model, c_scratch = c_scr
 statistics = merge(turbulence_statistics, tke_budget_statistics)
 
 simulation.output_writers[:statistics] = JLD2OutputWriter(model, statistics,
-                                                          time_averaging_window = 5minute,
+                                                          time_averaging_window = 1minute,
                                                                   time_interval = 1hour,
                                                                          prefix = prefix * "_statistics",
                                                                             dir = data_directory,
@@ -294,20 +289,25 @@ simulation.output_writers[:statistics] = JLD2OutputWriter(model, statistics,
 LESbrary.Utils.print_banner(simulation)
 
 run!(simulation)
+=#
 
 # # Load and plot turbulence statistics
 
-using JLD2, Plots
+using JLD2, Plots, Oceananigans.Grids
+
+pyplot()
 
 if make_animation
 
     xw, yw, zw = nodes(model.velocities.w)
     xu, yu, zu = nodes(model.velocities.u)
+    xc, yc, zc = nodes(model.tracers.c)
 
     xw, yw, zw = xw[:], yw[:], zw[:]
     xu, yu, zu = xu[:], yu[:], zu[:]
+    xc, yc, zc = xc[:], yc[:], zc[:]
 
-    file = jldopen(simulation.output_writers[:slices].filepath)
+    file = jldopen(joinpath(data_directory, prefix * "_slices.jld2"))
 
     iterations = parse.(Int, keys(file["timeseries/t"]))
 
@@ -336,11 +336,14 @@ if make_animation
         ## Load 3D fields from file
         w = file["timeseries/w/$iter"][:, 1, :]
         u = file["timeseries/u/$iter"][:, 1, :]
+        c = file["timeseries/c/$iter"][:, 1, :]
 
         wlim = 0.02
         ulim = 0.05
+        clim = 0.8
         wlevels = nice_divergent_levels(w, wlim)
-        ulevels = nice_divergent_levels(w, ulim)
+        ulevels = nice_divergent_levels(u, ulim)
+        clevels = nice_divergent_levels(c, clim)
 
         wxz_plot = contourf(xw, zw, w';
                                   color = :balance,
@@ -362,16 +365,27 @@ if make_animation
                                  xlabel = "x (m)",
                                  ylabel = "z (m)")
 
-        plot(wxz_plot, uxz_plot, layout=(1, 2), size=(1000, 400),
-             title = ["w(x, y, z=-8, t) (m/s)" "w(x, y=0, z, t) (m/s)" "u(x, y = 0, z, t) (m/s)"])
+        cxz_plot = contourf(xu, zu, c';
+                                  color = :balance,
+                            aspectratio = :equal,
+                                  clims = (-clim, clim),
+                                 levels = clevels,
+                                  xlims = (0, grid.Lx),
+                                  ylims = (-grid.Lz, 0),
+                                 xlabel = "x (m)",
+                                 ylabel = "z (m)")
+
+        plot(wxz_plot, uxz_plot, cxz_plot, layout=(1, 3), size=(1000, 400),
+             title = ["w(x, y=0, z, t) (m/s)" "u(x, y=0, z, t) (m/s)" "c(x, y = 0, z, t)"])
 
         iter == iterations[end] && close(file)
     end
 
-    mp4(anim, "three_layer_constant_fluxes.mp4", fps = 15)
+    gif(anim, "three_layer_constant_fluxes.gif", fps = 15)
 end
 
 if plot_statistics
+
     ## Some plot parameters
     linewidth = 3
     ylim = (-256, 0)
@@ -380,7 +394,7 @@ if plot_statistics
     zF = znodes(Face, grid)
 
     ## Load data
-    file = jldopen(simulation.output_writers[:statistics].filepath)
+    file = jldopen(joinpath(data_directory, prefix * "_statistics.jld2"))
 
     iterations = parse.(Int, keys(file["timeseries/t"]))
     iter = iterations[end] # plot final iteration
