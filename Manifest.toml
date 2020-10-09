@@ -759,9 +759,7 @@ version = "0.1.5"
 
 [[Oceananigans]]
 deps = ["Adapt", "CUDA", "Crayons", "Dates", "FFTW", "InteractiveUtils", "JLD2", "KernelAbstractions", "LinearAlgebra", "Logging", "NCDatasets", "OffsetArrays", "OrderedCollections", "Pkg", "Printf", "Random", "SafeTestsets", "SeawaterPolynomials", "StaticArrays", "Statistics"]
-git-tree-sha1 = "1b3ed7c959c2dd36b8e757c80c7ee300f5360ea9"
-repo-rev = "glw/field-arguments"
-repo-url = "https://github.com/CliMA/Oceananigans.jl.git"
+git-tree-sha1 = "d0383350ea7f7c35b0f424de7e1d1845f9762991"
 uuid = "9e8cae18-63c1-5223-a75c-80ca9d6e9a09"
 version = "0.40.0"
 

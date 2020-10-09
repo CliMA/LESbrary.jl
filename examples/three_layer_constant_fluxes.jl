@@ -3,6 +3,9 @@
 # This script runs a simulation of a turbulent oceanic boundary layer with an initial
 # three-layer temperature stratification. Turbulent mixing is driven by constant fluxes
 # of momentum and heat at the surface.
+#
+# This script is set up to be configurable on the command line --- a useful property
+# when launching multiple jobs at on a cluster.
 
 using ArgParse
 
@@ -59,17 +62,17 @@ function parse_command_line_arguments()
 
         "--surface-layer-buoyancy-gradient"
             help = "The buoyancy gradient in the surface layer in units s⁻²."
-            default = 1e-6
+            default = 1e-7
             arg_type = Float64
 
         "--thermocline-buoyancy-gradient"
             help = "The buoyancy gradient in the thermocline in units s⁻²."
-            default = 1e-4
+            default = 1e-5
             arg_type = Float64
 
         "--deep-buoyancy-gradient"
             help = "The buoyancy gradient below the thermocline in units s⁻²."
-            default = 1e-5
+            default = 1e-6
             arg_type = Float64
 
         "--device", "-d"
@@ -79,7 +82,7 @@ function parse_command_line_arguments()
 
         "--animation"
             help = "Make an animation of the horizontal and vertical velocity when the simulation completes."
-            default = true
+            default = false
             arg_type = Bool
 
         "--plot-statistics"
@@ -91,14 +94,27 @@ function parse_command_line_arguments()
     return parse_args(settings)
 end
 
+# # Setup
+#
+# We start by parsing the arguments received on the command line.
+
 args = parse_command_line_arguments()
 
-make_animation = args["animation"]
-plot_statistics = args["plot-statistics"]
+# Select GPU device
+#
+# We use a LESbrary tool to select the GPU device specified on the
+# command line.
 
-using LESbrary, Printf, Statistics
+using LESbrary
+
+#LESbrary.Utils.select_device!(args["device"])
 
 # Domain
+#
+# We use a three-dimensional domain that's twice as wide as it is deep.
+# We choose this aspect ratio so that the horizontal scale is 4x larger
+# than the boundary layer depth when the boundary layer penetrates half
+# the domain depth.
 
 using Oceananigans
 
@@ -141,14 +157,72 @@ c_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Value, 1.0),
 
 # Tracer forcing
 
+using Oceananigans.Grids
 using Oceananigans.Forcings
 using Oceananigans.Utils: hour
 
-const λᶜ = 24.0
 
+# # Initial condition and sponge layer
+
+## Fiddle with indices to get a correct discrete profile
+k_transition = searchsortedfirst(grid.zC, -surface_layer_depth)
+k_deep = searchsortedfirst(grid.zC, -(surface_layer_depth + thermocline_width))
+
+z_transition = grid.zC[k_transition]
+z_deep = grid.zC[k_deep]
+
+θ_surface = args["surface-temperature"]
+θ_transition = θ_surface + z_transition * dθdz_surface_layer
+θ_deep = θ_transition + (z_deep - z_transition) * dθdz_thermocline
+
+# Note: ContinuousForcing doesn't currently work on the GPU on Oceananigans master,
+# so we resort to the "old" style of implementing a sponge layer with tons of const's
+# and hand-written sponge forcing funcs.
+
+const λᶜ = 24.0
+const z_mask = -grid.Lz
+const h_mask = grid.Lz / 10
+const μ₀ = 1/hour
+
+const θ̃ = θ_deep - z_deep * dθdz_deep
+const θ̃z = dθdz_deep
+
+""" Gaussian mask + damping at the rate μ₀. """
+@inline μ(z) = μ₀ * exp(-(z - z_mask)^2 / (2 * h_mask^2))
+
+@inline c_target(z) = exp(-abs(z) / λᶜ)
+
+""" Relax the tracer `c` back to an exponential profile with decay rate λᶜ. """
+@inline c_func(i, j, k, grid, clock, model_fields) =
+    @inbounds 1/hour * (c_target(znode(Cell, k, grid)) - model_fields.c[i, j, k])
+
+c_forcing = Forcing(c_func, discrete_form=true)
+
+T_sponge_func(i, j, k, grid, clock, model_fields) = @inbounds   μ(grid.zC[k]) * (θ̃ + θ̃z * grid.zC[k] - model_fields.T[i, j, k])
+u_sponge_func(i, j, k, grid, clock, model_fields) = @inbounds - μ(grid.zC[k]) * model_fields.u[i, j, k]
+v_sponge_func(i, j, k, grid, clock, model_fields) = @inbounds - μ(grid.zC[k]) * model_fields.v[i, j, k]
+w_sponge_func(i, j, k, grid, clock, model_fields) = @inbounds - μ(grid.zF[k]) * model_fields.w[i, j, k]
+    
+T_sponge = Forcing(T_sponge_func, discrete_form=true)
+u_sponge = Forcing(u_sponge_func, discrete_form=true)
+v_sponge = Forcing(v_sponge_func, discrete_form=true)
+w_sponge = Forcing(w_sponge_func, discrete_form=true)
+
+#=
+# How we would like to implement the sponge layer and tracer forcing.
 @inline c_target(x, y, z, t) = exp(-abs(z) / λᶜ)
 
-c_forcing = Relaxation(; rate=1/hour, target=c_target)
+c_forcing = Relaxation(rate = 1/hour)
+                       target = c_target)
+
+gaussian_mask = GaussianMask{:z}(center=-grid.Lz, width=grid.Lz/10)
+
+u_sponge = v_sponge = w_sponge = Relaxation(rate=1/hour, mask=gaussian_mask)
+
+T_sponge = Relaxation(rate = 1/hour,
+                      target = LinearTarget{:z}(intercept = θ_deep - z_deep*dθdz_deep, gradient = dθdz_deep),
+                      mask = gaussian_mask)
+=#
 
 # LES Model
 
@@ -162,7 +236,7 @@ Cᴬᴹᴰ = SurfaceEnhancedModelConstant(grid.Δz, C₀ = 1/12, enhancement = 7
 
 using Oceananigans.Advection: WENO5
 
-model = IncompressibleModel(architecture = CPU(),
+model = IncompressibleModel(architecture = GPU(),
                              timestepper = :RungeKutta3,
                                advection = WENO5(),
                                     grid = grid,
@@ -171,20 +245,9 @@ model = IncompressibleModel(architecture = CPU(),
                                 coriolis = FPlane(f=1e-4),
                                  closure = AnisotropicMinimumDissipation(C=Cᴬᴹᴰ),
                      boundary_conditions = (T=θ_bcs, u=u_bcs),
-                                 forcing = (c=c_forcing,))
+                                 forcing = (u=u_sponge, v=v_sponge, w=w_sponge, T=T_sponge, c=c_forcing))
 
-# # Initial condition
-
-## Fiddle with indices to get a correct discrete profile
-k_transition = searchsortedfirst(grid.zC, -surface_layer_depth)
-k_deep = searchsortedfirst(grid.zC, -(surface_layer_depth + thermocline_width))
-
-z_transition = grid.zC[k_transition]
-z_deep = grid.zC[k_deep]
-
-θ_surface = args["surface-temperature"]
-θ_transition = θ_surface + z_transition * dθdz_surface_layer
-θ_deep = θ_transition + (z_deep - z_transition) * dθdz_thermocline
+# # Set Initial condition
 
 ## Noise with 8 m decay scale
 Ξ(z) = rand() * exp(z / 8)
@@ -211,7 +274,7 @@ function initial_temperature(x, y, z)
     end
 end
 
-set!(model, T = initial_temperature, c = (x, y, z) -> c_forcing.target(x, y, z, 0))
+set!(model, T = initial_temperature, c = (x, y, z) -> c_target(z))
 
 # # Prepare the simulation
 
@@ -221,12 +284,12 @@ using LESbrary.Utils: SimulationProgressMessenger
 # Adaptive time-stepping
 wizard = TimeStepWizard(cfl=0.8, Δt=10.0, max_change=1.1, max_Δt=30.0)
 
-simulation = Simulation(model, Δt=wizard, stop_time=8hour, iteration_interval=10,
+simulation = Simulation(model, Δt=wizard, stop_time=16minute, iteration_interval=100,
                         progress=SimulationProgressMessenger(model, wizard))
 
 # Prepare Output
 
-#=
+using Printf
 using Oceananigans.Utils: GiB
 using Oceananigans.OutputWriters: JLD2OutputWriter, FieldSlicer
 
@@ -246,7 +309,7 @@ simulation.output_writers[:fields] = JLD2OutputWriter(model, merge(model.velocit
                                                               force = true)
 
 simulation.output_writers[:slices] = JLD2OutputWriter(model, merge(model.velocities, model.tracers),
-                                                      time_interval = 1minute, # every quarter period
+                                                      time_interval = 15minute, # every quarter period
                                                              prefix = prefix * "_slices",
                                                        field_slicer = FieldSlicer(j=floor(Int, grid.Ny/2)),
                                                                 dir = data_directory,
@@ -255,7 +318,7 @@ simulation.output_writers[:slices] = JLD2OutputWriter(model, merge(model.velocit
     
 # Horizontally-averaged turbulence statistics
 using LESbrary.TurbulenceStatistics: turbulent_kinetic_energy_budget
-using LESbrary.TurbulenceStatistics: first_through_second_order
+using LESbrary.TurbulenceStatistics: first_order_statistics, first_through_second_order
 
 # Create scratch space for online calculations
 b = BuoyancyField(model)
@@ -275,11 +338,12 @@ tke_budget_statistics = turbulent_kinetic_energy_budget(model, c_scratch = c_scr
                                                                w_scratch = w_scratch,
                                                                        b = b)
 
-statistics = merge(turbulence_statistics, tke_budget_statistics)
+#statistics = merge(turbulence_statistics, tke_budget_statistics)
+statistics = turbulence_statistics
 
 simulation.output_writers[:statistics] = JLD2OutputWriter(model, statistics,
-                                                          time_averaging_window = 1minute,
-                                                                  time_interval = 1hour,
+                                                          time_averaging_window = 2minute,
+                                                                  time_interval = 15minute,
                                                                          prefix = prefix * "_statistics",
                                                                             dir = data_directory,
                                                                           force = true)
@@ -289,13 +353,15 @@ simulation.output_writers[:statistics] = JLD2OutputWriter(model, statistics,
 LESbrary.Utils.print_banner(simulation)
 
 run!(simulation)
-=#
 
 # # Load and plot turbulence statistics
 
 using JLD2, Plots, Oceananigans.Grids
 
 pyplot()
+
+make_animation = args["animation"]
+plot_statistics = args["plot-statistics"]
 
 if make_animation
 
@@ -307,6 +373,7 @@ if make_animation
     xu, yu, zu = xu[:], yu[:], zu[:]
     xc, yc, zc = xc[:], yc[:], zc[:]
 
+    #file = jldopen(simulation.output_writers[:slices].filepath)
     file = jldopen(joinpath(data_directory, prefix * "_slices.jld2"))
 
     iterations = parse.(Int, keys(file["timeseries/t"]))
@@ -314,12 +381,12 @@ if make_animation
     # This utility is handy for calculating nice contour intervals:
 
     function nice_divergent_levels(c, clim)
-        levels = range(-clim, stop=clim, length=10)
+        levels = range(-clim, stop=clim, length=40)
 
         cmax = maximum(abs, c)
 
         if clim < cmax # add levels on either end
-            levels = vcat([-cmax], range(-clim, stop=clim, length=10), [cmax])
+            levels = vcat([-cmax], range(-clim, stop=clim, length=40), [cmax])
         end
 
         return levels
@@ -340,10 +407,13 @@ if make_animation
 
         wlim = 0.02
         ulim = 0.05
-        clim = 0.8
+
+        cmax = maximum(abs, c)
+        clim = 0.8 * cmax
+
         wlevels = nice_divergent_levels(w, wlim)
         ulevels = nice_divergent_levels(u, ulim)
-        clevels = nice_divergent_levels(c, clim)
+        clevels = vcat(range(0, stop=clim, length=40), [cmax])
 
         wxz_plot = contourf(xw, zw, w';
                                   color = :balance,
@@ -368,14 +438,14 @@ if make_animation
         cxz_plot = contourf(xu, zu, c';
                                   color = :balance,
                             aspectratio = :equal,
-                                  clims = (-clim, clim),
+                                  clims = (0, clim),
                                  levels = clevels,
                                   xlims = (0, grid.Lx),
                                   ylims = (-grid.Lz, 0),
                                  xlabel = "x (m)",
                                  ylabel = "z (m)")
 
-        plot(wxz_plot, uxz_plot, cxz_plot, layout=(1, 3), size=(1000, 400),
+        plot(wxz_plot, uxz_plot, cxz_plot, layout=(3, 1), size=(1000, 1000),
              title = ["w(x, y=0, z, t) (m/s)" "u(x, y=0, z, t) (m/s)" "c(x, y = 0, z, t)"])
 
         iter == iterations[end] && close(file)
@@ -394,6 +464,7 @@ if plot_statistics
     zF = znodes(Face, grid)
 
     ## Load data
+    #file = jldopen(simulation.output_writers[:statistics].filepath)
     file = jldopen(joinpath(data_directory, prefix * "_statistics.jld2"))
 
     iterations = parse.(Int, keys(file["timeseries/t"]))
