@@ -7,7 +7,7 @@
 # This script is set up to be configurable on the command line --- a useful property
 # when launching multiple jobs at on a cluster.
 
-using ArgParse
+using ArgParse, Statistics
 
 "Returns a dictionary of command line arguments."
 function parse_command_line_arguments()
@@ -16,12 +16,12 @@ function parse_command_line_arguments()
     @add_arg_table! settings begin
         "--Nh"
             help = "The number of grid points in x, y."
-            default = 128
+            default = 32
             arg_type = Int
 
         "--Nz"
             help = "The number of grid points in z."
-            default = 128
+            default = 32
             arg_type = Int
 
         "--buoyancy-flux"
@@ -82,7 +82,7 @@ function parse_command_line_arguments()
 
         "--animation"
             help = "Make an animation of the horizontal and vertical velocity when the simulation completes."
-            default = false
+            default = true
             arg_type = Bool
 
         "--plot-statistics"
@@ -236,7 +236,7 @@ Cᴬᴹᴰ = SurfaceEnhancedModelConstant(grid.Δz, C₀ = 1/12, enhancement = 7
 
 using Oceananigans.Advection: WENO5
 
-model = IncompressibleModel(architecture = GPU(),
+model = IncompressibleModel(architecture = CPU(),
                              timestepper = :RungeKutta3,
                                advection = WENO5(),
                                     grid = grid,
@@ -375,6 +375,7 @@ if make_animation
 
     #file = jldopen(simulation.output_writers[:slices].filepath)
     file = jldopen(joinpath(data_directory, prefix * "_slices.jld2"))
+    statistics_file = jldopen(joinpath(data_directory, prefix * "_statistics.jld2"))
 
     iterations = parse.(Int, keys(file["timeseries/t"]))
 
@@ -403,7 +404,13 @@ if make_animation
         ## Load 3D fields from file
         w = file["timeseries/w/$iter"][:, 1, :]
         u = file["timeseries/u/$iter"][:, 1, :]
+        v = file["timeseries/v/$iter"][:, 1, :]
         c = file["timeseries/c/$iter"][:, 1, :]
+
+        U = statistics_file["timeseries/u/$iter"][1, 1, :]
+        V = statistics_file["timeseries/v/$iter"][1, 1, :]
+        T = statistics_file["timeseries/T/$iter"][1, 1, :]
+        C = statistics_file["timeseries/c/$iter"][1, 1, :]
 
         wlim = 0.02
         ulim = 0.05
@@ -414,6 +421,10 @@ if make_animation
         wlevels = nice_divergent_levels(w, wlim)
         ulevels = nice_divergent_levels(u, ulim)
         clevels = vcat(range(0, stop=clim, length=40), [cmax])
+
+        T_plot = plot(T, zc, label="T")
+        U_plot = plot([U, V], zc, label=["u" "v"])
+        C_plot = plot(C, zc, label="C")
 
         wxz_plot = contourf(xw, zw, w';
                                   color = :balance,
@@ -445,8 +456,10 @@ if make_animation
                                  xlabel = "x (m)",
                                  ylabel = "z (m)")
 
-        plot(wxz_plot, uxz_plot, cxz_plot, layout=(3, 1), size=(1000, 1000),
-             title = ["w(x, y=0, z, t) (m/s)" "u(x, y=0, z, t) (m/s)" "c(x, y = 0, z, t)"])
+        plot(wxz_plot, T_plot, uxz_plot, U_plot, cxz_plot, C_plot, layout=(3, 2),
+             size = (1000, 1000),
+             link = :y,
+             title = ["w(x, y=0, z, t) (m/s)" "T" "u(x, y=0, z, t) (m/s)" "U and V" "c(x, y = 0, z, t)" "C"])
 
         iter == iterations[end] && close(file)
     end
