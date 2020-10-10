@@ -78,7 +78,7 @@ function parse_command_line_arguments()
 
         "--surface-layer-depth"
             help = "The depth of the surface layer in units of m."
-            default = 48.0
+            default = 32.0
             arg_type = Float64
 
         "--thermocline-width"
@@ -88,7 +88,7 @@ function parse_command_line_arguments()
 
         "--surface-layer-buoyancy-gradient"
             help = "The buoyancy gradient in the surface layer in units s⁻²."
-            default = 1e-7
+            default = 1e-6
             arg_type = Float64
 
         "--thermocline-buoyancy-gradient"
@@ -302,7 +302,7 @@ mkpath(data_directory)
 cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
 
 simulation.output_writers[:fields] = JLD2OutputWriter(model, merge(model.velocities, model.tracers); 
-                                                      time_interval = 4hour, # every quarter period
+                                                      time_interval = 24hour, # every quarter period
                                                              prefix = prefix * "_fields",
                                                                 dir = data_directory,
                                                        max_filesize = 2GiB,
@@ -313,7 +313,6 @@ simulation.output_writers[:slices] = JLD2OutputWriter(model, merge(model.velocit
                                                              prefix = prefix * "_slices",
                                                        field_slicer = FieldSlicer(j=floor(Int, grid.Ny/2)),
                                                                 dir = data_directory,
-                                                       max_filesize = 2GiB,
                                                               force = true)
     
 # Horizontally-averaged turbulence statistics
@@ -336,15 +335,21 @@ tke_budget_statistics = turbulent_kinetic_energy_budget(model, c_scratch = c_scr
                                                                w_scratch = w_scratch,
                                                                        b = b)
 
-#statistics = merge(turbulence_statistics, tke_budget_statistics)
-statistics = turbulence_statistics
+# Can't any other statistics due to GPU compilaton issues
+# turbulence_statistics[:turbulent_kinetic_energy] = tke_budget_statistics[:turbulent_kinetic_energy]
 
-simulation.output_writers[:statistics] = JLD2OutputWriter(model, statistics,
-                                                          time_averaging_window = 2minute,
-                                                                  time_interval = 5minute,
-                                                                         prefix = prefix * "_statistics",
-                                                                            dir = data_directory,
-                                                                          force = true)
+simulation.output_writers[:statistics] = JLD2OutputWriter(model, turbulence_statistics,
+                                                          time_interval = 5minute,
+                                                                 prefix = prefix * "_statistics",
+                                                                    dir = data_directory,
+                                                                  force = true)
+
+simulation.output_writers[:averaged_statistics] = JLD2OutputWriter(model, turbulence_statistics,
+                                                                           time_averaging_window = 15minute,
+                                                                                   time_interval = 1hour,
+                                                                                          prefix = prefix * "_averaged_statistics",
+                                                                                             dir = data_directory,
+                                                                                           force = true)
 
 # # Run
 
