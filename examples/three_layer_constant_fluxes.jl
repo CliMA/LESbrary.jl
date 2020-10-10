@@ -7,7 +7,33 @@
 # This script is set up to be configurable on the command line --- a useful property
 # when launching multiple jobs at on a cluster.
 
-using ArgParse, Statistics
+using Pkg
+using ArgParse
+using Statistics
+using Printf
+using JLD2
+using Plots
+
+using LESbrary
+using Oceananigans
+using Oceananigans.Buoyancy
+using Oceananigans.BoundaryConditions
+using Oceananigans.Grids
+using Oceananigans.Forcings
+
+using Oceananigans.Advection: WENO5
+using Oceananigans.Utils: minute, hour, GiB
+using Oceananigans.OutputWriters: JLD2OutputWriter, FieldSlicer
+
+using LESbrary.Utils: SimulationProgressMessenger
+using LESbrary.NearSurfaceTurbulenceModels: SurfaceEnhancedModelConstant
+using LESbrary.TurbulenceStatistics: turbulent_kinetic_energy_budget, first_order_statistics, first_through_second_order
+
+# To start, we ensure that all packages in the LESbrary environment are installed:
+
+Pkg.instantiate()
+
+# Next, we parse the command line arguments
 
 "Returns a dictionary of command line arguments."
 function parse_command_line_arguments()
@@ -75,10 +101,10 @@ function parse_command_line_arguments()
             default = 1e-6
             arg_type = Float64
 
-        "--device", "-d"
-            help = "The CUDA device index on which to run the simulation."
-            default = 1
-            arg_type = Int
+        "--hours"
+            help = "Number of hours to run the simulation for"
+            default = 12.0
+            arg_type = Float64
 
         "--animation"
             help = "Make an animation of the horizontal and vertical velocity when the simulation completes."
@@ -100,15 +126,6 @@ end
 
 args = parse_command_line_arguments()
 
-# Select GPU device
-#
-# We use a LESbrary tool to select the GPU device specified on the
-# command line.
-
-using LESbrary
-
-#LESbrary.Utils.select_device!(args["device"])
-
 # Domain
 #
 # We use a three-dimensional domain that's twice as wide as it is deep.
@@ -116,16 +133,12 @@ using LESbrary
 # than the boundary layer depth when the boundary layer penetrates half
 # the domain depth.
 
-using Oceananigans
-
 Nh = args["Nh"]
 Nz = args["Nz"]
 
 grid = RegularCartesianGrid(size=(Nh, Nh, Nz), x=(0, 512), y=(0, 512), z=(-256, 0))
 
 # Buoyancy and boundary conditions
-
-using Oceananigans.Buoyancy, Oceananigans.BoundaryConditions
 
 Qᵇ = args["buoyancy-flux"]
 Qᵘ = args["momentum-flux"]
@@ -156,11 +169,6 @@ c_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Value, 1.0),
                                        bottom = BoundaryCondition(Value, 0.0))
 
 # Tracer forcing
-
-using Oceananigans.Grids
-using Oceananigans.Forcings
-using Oceananigans.Utils: hour
-
 
 # # Initial condition and sponge layer
 
@@ -228,15 +236,12 @@ T_sponge = Relaxation(rate = 1/hour,
 
 # Wall-aware AMD model constant which is 'enhanced' near the upper boundary.
 # Necessary to obtain a smooth temperature distribution.
-using LESbrary.NearSurfaceTurbulenceModels: SurfaceEnhancedModelConstant
 
 Cᴬᴹᴰ = SurfaceEnhancedModelConstant(grid.Δz, C₀ = 1/12, enhancement = 7, decay_scale = 4 * grid.Δz)
 
 # Instantiate Oceananigans.IncompressibleModel
 
-using Oceananigans.Advection: WENO5
-
-model = IncompressibleModel(architecture = CPU(),
+model = IncompressibleModel(architecture = GPU(),
                              timestepper = :RungeKutta3,
                                advection = WENO5(),
                                     grid = grid,
@@ -278,20 +283,15 @@ set!(model, T = initial_temperature, c = (x, y, z) -> c_target(z))
 
 # # Prepare the simulation
 
-using Oceananigans.Utils: minute
-using LESbrary.Utils: SimulationProgressMessenger
-
 # Adaptive time-stepping
 wizard = TimeStepWizard(cfl=0.8, Δt=10.0, max_change=1.1, max_Δt=30.0)
 
-simulation = Simulation(model, Δt=wizard, stop_time=16minute, iteration_interval=100,
+stop_hours = args["hours"]
+
+simulation = Simulation(model, Δt=wizard, stop_time=stop_hours * hour, iteration_interval=100,
                         progress=SimulationProgressMessenger(model, wizard))
 
 # Prepare Output
-
-using Printf
-using Oceananigans.Utils: GiB
-using Oceananigans.OutputWriters: JLD2OutputWriter, FieldSlicer
 
 prefix = @sprintf("three_layer_constant_fluxes_Qu%.1e_Qb%.1e_Nh%d_Nz%d", abs(Qᵘ), Qᵇ, grid.Nx, grid.Nz)
 
@@ -309,7 +309,7 @@ simulation.output_writers[:fields] = JLD2OutputWriter(model, merge(model.velocit
                                                               force = true)
 
 simulation.output_writers[:slices] = JLD2OutputWriter(model, merge(model.velocities, model.tracers),
-                                                      time_interval = 15minute, # every quarter period
+                                                      time_interval = 5minute, # every quarter period
                                                              prefix = prefix * "_slices",
                                                        field_slicer = FieldSlicer(j=floor(Int, grid.Ny/2)),
                                                                 dir = data_directory,
@@ -317,8 +317,6 @@ simulation.output_writers[:slices] = JLD2OutputWriter(model, merge(model.velocit
                                                               force = true)
     
 # Horizontally-averaged turbulence statistics
-using LESbrary.TurbulenceStatistics: turbulent_kinetic_energy_budget
-using LESbrary.TurbulenceStatistics: first_order_statistics, first_through_second_order
 
 # Create scratch space for online calculations
 b = BuoyancyField(model)
@@ -343,7 +341,7 @@ statistics = turbulence_statistics
 
 simulation.output_writers[:statistics] = JLD2OutputWriter(model, statistics,
                                                           time_averaging_window = 2minute,
-                                                                  time_interval = 15minute,
+                                                                  time_interval = 5minute,
                                                                          prefix = prefix * "_statistics",
                                                                             dir = data_directory,
                                                                           force = true)
@@ -355,8 +353,6 @@ LESbrary.Utils.print_banner(simulation)
 run!(simulation)
 
 # # Load and plot turbulence statistics
-
-using JLD2, Plots, Oceananigans.Grids
 
 pyplot()
 
@@ -414,17 +410,19 @@ if make_animation
 
         wlim = 0.02
         ulim = 0.05
+        clim = 0.8
 
         cmax = maximum(abs, c)
-        clim = 0.8 * cmax
 
         wlevels = nice_divergent_levels(w, wlim)
         ulevels = nice_divergent_levels(u, ulim)
-        clevels = vcat(range(0, stop=clim, length=40), [cmax])
 
-        T_plot = plot(T, zc, label="T")
+        clevels = cmax > clim ? vcat(range(0, stop=clim, length=40), [cmax]) :
+                                     range(0, stop=clim, length=40)
+
+        T_plot = plot(T, zc, label="T", xlim=(initial_temperature(0, 0, -grid.Lz), θ_surface))
         U_plot = plot([U, V], zc, label=["u" "v"])
-        C_plot = plot(C, zc, label="C")
+        C_plot = plot(C, zc, label="C", xlim=(0, 1))
 
         wxz_plot = contourf(xw, zw, w';
                                   color = :balance,
@@ -464,7 +462,7 @@ if make_animation
         iter == iterations[end] && close(file)
     end
 
-    gif(anim, "three_layer_constant_fluxes.gif", fps = 15)
+    gif(anim, prefix * ".gif", fps = 8)
 end
 
 if plot_statistics
@@ -566,5 +564,5 @@ if plot_statistics
 
     plot(velocities, temperature, tracer, variances, fluxes, budget, layout=(1, 6), size=(1000, 500))
 
-    savefig("three_layer_constant_fluxes_statistics.png")
+    savefig(prefix * "_statistics.png")
 end
