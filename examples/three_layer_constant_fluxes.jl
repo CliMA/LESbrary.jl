@@ -21,13 +21,15 @@ using Oceananigans.BoundaryConditions
 using Oceananigans.Grids
 using Oceananigans.Forcings
 
+using Oceananigans.Fields: AveragedField
 using Oceananigans.Advection: WENO5
 using Oceananigans.Utils: minute, hour, GiB
 using Oceananigans.OutputWriters: JLD2OutputWriter, FieldSlicer
 
 using LESbrary.Utils: SimulationProgressMessenger
 using LESbrary.NearSurfaceTurbulenceModels: SurfaceEnhancedModelConstant
-using LESbrary.TurbulenceStatistics: turbulent_kinetic_energy_budget, first_order_statistics, first_through_second_order
+using LESbrary.TurbulenceStatistics: first_through_second_order
+using LESbrary.TurbulenceStatistics: TurbulentKineticEnergy
 
 # To start, we ensure that all packages in the LESbrary environment are installed:
 
@@ -332,6 +334,9 @@ turbulence_statistics = first_through_second_order(model, c_scratch = c_scratch,
                                                           w_scratch = w_scratch,
                                                                   b = b)
 
+#=
+using LESbrary.TurbulenceStatistics: turbulent_kinetic_energy_budget
+
 tke_budget_statistics = turbulent_kinetic_energy_budget(model, c_scratch = c_scratch,
                                                                u_scratch = u_scratch,
                                                                v_scratch = v_scratch,
@@ -340,7 +345,6 @@ tke_budget_statistics = turbulent_kinetic_energy_budget(model, c_scratch = c_scr
 
 turbulence_statistics = merge(turbulence_statistics, tke_budget_statistics)
 
-#=
 usq = turbulence_statistics[:turbulent_u_variance].operand
 
 using Oceananigans.Utils: work_layout
@@ -352,6 +356,13 @@ workgroup, worksize = work_layout(grid, :xyz, include_right_boundaries=true, loc
 compute_kernel! = _compute!(device(GPU()), workgroup, worksize)
 @ka_code_typed compute_kernel!(usq.data, usq.operand; dependencies=Event(device(GPU())))
 =#
+
+turbulent_kinetic_energy = TurbulentKineticEnergy(model,
+                                                  data = c_scratch.data,
+                                                  U = turbulence_statistics[:u],
+                                                  V = turbulence_statistics[:v])
+
+turbulence_statistics[:tke] = AveragedField(turbulent_kinetic_energy, dims=(1, 2))
 
 simulation.output_writers[:statistics] = JLD2OutputWriter(model, turbulence_statistics,
                                                           time_interval = 5minute,
