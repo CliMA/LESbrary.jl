@@ -103,7 +103,7 @@ function parse_command_line_arguments()
 
         "--hours"
             help = "Number of hours to run the simulation for"
-            default = 12.0
+            default = 0.1
             arg_type = Float64
 
         "--animation"
@@ -183,11 +183,13 @@ z_deep = grid.zC[k_deep]
 θ_transition = θ_surface + z_transition * dθdz_surface_layer
 θ_deep = θ_transition + (z_deep - z_transition) * dθdz_thermocline
 
+const λᶜ = 24.0
+
+#=
 # Note: ContinuousForcing doesn't currently work on the GPU on Oceananigans master,
 # so we resort to the "old" style of implementing a sponge layer with tons of const's
 # and hand-written sponge forcing funcs.
 
-const λᶜ = 24.0
 const z_mask = -grid.Lz
 const h_mask = grid.Lz / 10
 const μ₀ = 1/hour
@@ -215,12 +217,12 @@ T_sponge = Forcing(T_sponge_func, discrete_form=true)
 u_sponge = Forcing(u_sponge_func, discrete_form=true)
 v_sponge = Forcing(v_sponge_func, discrete_form=true)
 w_sponge = Forcing(w_sponge_func, discrete_form=true)
+=#
 
-#=
 # How we would like to implement the sponge layer and tracer forcing.
 @inline c_target(x, y, z, t) = exp(-abs(z) / λᶜ)
 
-c_forcing = Relaxation(rate = 1/hour)
+c_forcing = Relaxation(rate = 1/hour,
                        target = c_target)
 
 gaussian_mask = GaussianMask{:z}(center=-grid.Lz, width=grid.Lz/10)
@@ -230,7 +232,6 @@ u_sponge = v_sponge = w_sponge = Relaxation(rate=1/hour, mask=gaussian_mask)
 T_sponge = Relaxation(rate = 1/hour,
                       target = LinearTarget{:z}(intercept = θ_deep - z_deep*dθdz_deep, gradient = dθdz_deep),
                       mask = gaussian_mask)
-=#
 
 # LES Model
 
@@ -279,12 +280,12 @@ function initial_temperature(x, y, z)
     end
 end
 
-set!(model, T = initial_temperature, c = (x, y, z) -> c_target(z))
+set!(model, T = initial_temperature, c = (x, y, z) -> c_target(x, y, z, 0))
 
 # # Prepare the simulation
 
 # Adaptive time-stepping
-wizard = TimeStepWizard(cfl=0.8, Δt=10.0, max_change=1.1, max_Δt=30.0)
+wizard = TimeStepWizard(cfl=0.8, Δt=1.0, max_change=1.1, max_Δt=30.0)
 
 stop_hours = args["hours"]
 
@@ -332,11 +333,25 @@ turbulence_statistics = first_through_second_order(model, c_scratch = c_scratch,
                                                                   b = b)
 
 tke_budget_statistics = turbulent_kinetic_energy_budget(model, c_scratch = c_scratch,
+                                                               u_scratch = u_scratch,
+                                                               v_scratch = v_scratch,
                                                                w_scratch = w_scratch,
                                                                        b = b)
 
-# Can't any other statistics due to GPU compilaton issues
-# turbulence_statistics[:turbulent_kinetic_energy] = tke_budget_statistics[:turbulent_kinetic_energy]
+turbulence_statistics = merge(turbulence_statistics, tke_budget_statistics)
+
+#=
+usq = turbulence_statistics[:turbulent_u_variance].operand
+
+using Oceananigans.Utils: work_layout
+using Oceananigans.Fields: _compute!
+using Oceananigans.Architectures: device
+using KernelAbstractions: @ka_code_typed
+
+workgroup, worksize = work_layout(grid, :xyz, include_right_boundaries=true, location=(Cell, Cell, Cell))
+compute_kernel! = _compute!(device(GPU()), workgroup, worksize)
+@ka_code_typed compute_kernel!(usq.data, usq.operand; dependencies=Event(device(GPU())))
+=#
 
 simulation.output_writers[:statistics] = JLD2OutputWriter(model, turbulence_statistics,
                                                           time_interval = 5minute,
@@ -345,11 +360,11 @@ simulation.output_writers[:statistics] = JLD2OutputWriter(model, turbulence_stat
                                                                   force = true)
 
 simulation.output_writers[:averaged_statistics] = JLD2OutputWriter(model, turbulence_statistics,
-                                                                           time_averaging_window = 15minute,
-                                                                                   time_interval = 1hour,
-                                                                                          prefix = prefix * "_averaged_statistics",
-                                                                                             dir = data_directory,
-                                                                                           force = true)
+                                                                   time_averaging_window = 15minute,
+                                                                           time_interval = 1hour,
+                                                                                  prefix = prefix * "_averaged_statistics",
+                                                                                     dir = data_directory,
+                                                                                   force = true)
 
 # # Run
 
