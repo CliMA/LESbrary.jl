@@ -167,8 +167,8 @@ dθdz_deep          = N²_deep          / (α * g)
 
 u_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᵘ))
 
-c_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Value, 1.0),
-                                       bottom = BoundaryCondition(Value, 0.0))
+c_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Value, 1),
+                                       bottom = BoundaryCondition(Value, 0))
 
 # Tracer forcing
 
@@ -185,48 +185,13 @@ z_deep = grid.zC[k_deep]
 θ_transition = θ_surface + z_transition * dθdz_surface_layer
 θ_deep = θ_transition + (z_deep - z_transition) * dθdz_thermocline
 
+# Relax `c` to an exponential profile with decay rate `λᶜ`.
 const λᶜ = 24.0
-
-#=
-# Note: ContinuousForcing doesn't currently work on the GPU on Oceananigans master,
-# so we resort to the "old" style of implementing a sponge layer with tons of const's
-# and hand-written sponge forcing funcs.
-
-const z_mask = -grid.Lz
-const h_mask = grid.Lz / 10
-const μ₀ = 1/hour
-
-const θ̃ = θ_deep - z_deep * dθdz_deep
-const θ̃z = dθdz_deep
-
-""" Gaussian mask + damping at the rate μ₀. """
-@inline μ(z) = μ₀ * exp(-(z - z_mask)^2 / (2 * h_mask^2))
-
-@inline c_target(z) = exp(-abs(z) / λᶜ)
-
-""" Relax the tracer `c` back to an exponential profile with decay rate λᶜ. """
-@inline c_func(i, j, k, grid, clock, model_fields) =
-    @inbounds 1/hour * (c_target(znode(Cell, k, grid)) - model_fields.c[i, j, k])
-
-c_forcing = Forcing(c_func, discrete_form=true)
-
-T_sponge_func(i, j, k, grid, clock, model_fields) = @inbounds   μ(grid.zC[k]) * (θ̃ + θ̃z * grid.zC[k] - model_fields.T[i, j, k])
-u_sponge_func(i, j, k, grid, clock, model_fields) = @inbounds - μ(grid.zC[k]) * model_fields.u[i, j, k]
-v_sponge_func(i, j, k, grid, clock, model_fields) = @inbounds - μ(grid.zC[k]) * model_fields.v[i, j, k]
-w_sponge_func(i, j, k, grid, clock, model_fields) = @inbounds - μ(grid.zF[k]) * model_fields.w[i, j, k]
-    
-T_sponge = Forcing(T_sponge_func, discrete_form=true)
-u_sponge = Forcing(u_sponge_func, discrete_form=true)
-v_sponge = Forcing(v_sponge_func, discrete_form=true)
-w_sponge = Forcing(w_sponge_func, discrete_form=true)
-=#
-
-# How we would like to implement the sponge layer and tracer forcing.
 @inline c_target(x, y, z, t) = exp(-abs(z) / λᶜ)
 
-c_forcing = Relaxation(rate = 1/hour,
-                       target = c_target)
+c_forcing = Relaxation(rate=1/hour, target=c_target)
 
+# Sponge layer for u, v, w, and T
 gaussian_mask = GaussianMask{:z}(center=-grid.Lz, width=grid.Lz/10)
 
 u_sponge = v_sponge = w_sponge = Relaxation(rate=1/hour, mask=gaussian_mask)
@@ -235,14 +200,14 @@ T_sponge = Relaxation(rate = 1/hour,
                       target = LinearTarget{:z}(intercept = θ_deep - z_deep*dθdz_deep, gradient = dθdz_deep),
                       mask = gaussian_mask)
 
-# LES Model
+# # LES Model
 
 # Wall-aware AMD model constant which is 'enhanced' near the upper boundary.
 # Necessary to obtain a smooth temperature distribution.
 
 Cᴬᴹᴰ = SurfaceEnhancedModelConstant(grid.Δz, C₀ = 1/12, enhancement = 7, decay_scale = 4 * grid.Δz)
 
-# Instantiate Oceananigans.IncompressibleModel
+# # Instantiate Oceananigans.IncompressibleModel
 
 model = IncompressibleModel(architecture = GPU(),
                              timestepper = :RungeKutta3,
@@ -334,28 +299,16 @@ turbulence_statistics = first_through_second_order(model, c_scratch = c_scratch,
                                                           w_scratch = w_scratch,
                                                                   b = b)
 
-#=
-using LESbrary.TurbulenceStatistics: turbulent_kinetic_energy_budget
+# The AveragedFields defined by `turbulent_kinetic_energy_budget` cannot be computed
+# on the GPU yet, so this block is commented out.
 
-tke_budget_statistics = turbulent_kinetic_energy_budget(model, c_scratch = c_scratch,
-                                                               u_scratch = u_scratch,
-                                                               v_scratch = v_scratch,
-                                                               w_scratch = w_scratch,
-                                                                       b = b)
-
-turbulence_statistics = merge(turbulence_statistics, tke_budget_statistics)
-
-usq = turbulence_statistics[:turbulent_u_variance].operand
-
-using Oceananigans.Utils: work_layout
-using Oceananigans.Fields: _compute!
-using Oceananigans.Architectures: device
-using KernelAbstractions: @ka_code_typed
-
-workgroup, worksize = work_layout(grid, :xyz, include_right_boundaries=true, location=(Cell, Cell, Cell))
-compute_kernel! = _compute!(device(GPU()), workgroup, worksize)
-@ka_code_typed compute_kernel!(usq.data, usq.operand; dependencies=Event(device(GPU())))
-=#
+# tke_budget_statistics = turbulent_kinetic_energy_budget(model, c_scratch = c_scratch,
+#                                                                u_scratch = u_scratch,
+#                                                                v_scratch = v_scratch,
+#                                                                w_scratch = w_scratch,
+#                                                                        b = b)
+# 
+# turbulence_statistics = merge(turbulence_statistics, tke_budget_statistics)
 
 turbulent_kinetic_energy = TurbulentKineticEnergy(model,
                                                   data = c_scratch.data,
