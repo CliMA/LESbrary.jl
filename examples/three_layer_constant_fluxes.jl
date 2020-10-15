@@ -201,9 +201,9 @@ d24_forcing = Relaxation(rate = 1 / 24hour, target=d_target)
 # Sponge layer for u, v, w, and T
 gaussian_mask = GaussianMask{:z}(center=-grid.Lz, width=grid.Lz/10)
 
-u_sponge = v_sponge = w_sponge = Relaxation(rate=1/hour, mask=gaussian_mask)
+u_sponge = v_sponge = w_sponge = Relaxation(rate=4/hour, mask=gaussian_mask)
 
-T_sponge = Relaxation(rate = 1/hour,
+T_sponge = Relaxation(rate = 4/hour,
                       target = LinearTarget{:z}(intercept = θ_deep - z_deep*dθdz_deep, gradient = dθdz_deep),
                       mask = gaussian_mask)
 
