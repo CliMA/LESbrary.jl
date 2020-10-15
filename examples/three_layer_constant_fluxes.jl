@@ -409,16 +409,21 @@ if make_animation
         u = file["timeseries/u/$iter"][:, 1, :]
         v = file["timeseries/v/$iter"][:, 1, :]
         c1 = file["timeseries/c1/$iter"][:, 1, :]
-        c4 = file["timeseries/c4/$iter"][:, 1, :]
-        c16 = file["timeseries/c16/$iter"][:, 1, :]
+        c3 = file["timeseries/c3/$iter"][:, 1, :]
+        d3 = file["timeseries/d3/$iter"][:, 1, :]
 
         U = statistics_file["timeseries/u/$iter"][1, 1, :]
         V = statistics_file["timeseries/v/$iter"][1, 1, :]
         E = statistics_file["timeseries/tke/$iter"][1, 1, :]
         T = statistics_file["timeseries/T/$iter"][1, 1, :]
-        C1 = statistics_file["timeseries/c1/$iter"][1, 1, :]
-        C4 = statistics_file["timeseries/c4/$iter"][1, 1, :]
-        C16 = statistics_file["timeseries/c16/$iter"][1, 1, :]
+        C1  = statistics_file["timeseries/c1/$iter"][1, 1, :]
+        C3  = statistics_file["timeseries/c3/$iter"][1, 1, :]
+        C12 = statistics_file["timeseries/c12/$iter"][1, 1, :]
+        C24 = statistics_file["timeseries/c24/$iter"][1, 1, :]
+        D1  = statistics_file["timeseries/d1/$iter"][1, 1, :]
+        D3  = statistics_file["timeseries/d3/$iter"][1, 1, :]
+        D12 = statistics_file["timeseries/d12/$iter"][1, 1, :]
+        D24 = statistics_file["timeseries/d24/$iter"][1, 1, :]
 
         wlim = 0.02
         clim = 0.8
@@ -430,9 +435,14 @@ if make_animation
         clevels = cmax > clim ? vcat(range(0, stop=clim, length=40), [cmax]) :
                                      range(0, stop=clim, length=40)
 
-        T_plot = plot(T, zc, label="T", xlim=(initial_temperature(0, 0, -grid.Lz), θ_surface))
-        U_plot = plot([U, V, sqrt.(E)], zc, label=["u" "v" "√E"], linewidth=[1 1 2])
-        C_plot = plot([C1 C4 C16], zc, label="C", xlim=(0, 1))
+        T_plot = plot(T, zc, label="T", xlim=(initial_temperature(0, 0, -grid.Lz), θ_surface), legend=:bottom)
+
+        U_plot = plot([U, V, sqrt.(E)], zc, label=["u" "v" "√E"], linewidth=[1 1 2], legend=:bottom)
+
+        C_plot = plot([C1 C3 C12 C24 D1 D3 D12 D24], zc,
+                      label = ["C₁" "C₃" "C₁₂" "C₂₄" "D₁" "D₃" "D₁₂" "D₂₄"],
+                      legend=:bottom,
+                       xlim = (0, 1))
 
         wxz_plot = contourf(xw, zw, w';
                                   color = :balance,
@@ -454,7 +464,7 @@ if make_animation
                                  xlabel = "x (m)",
                                  ylabel = "z (m)")
 
-        c4xz_plot = contourf(xc, zc, c4';
+        d1xz_plot = contourf(xc, zc, d1';
                                   color = :thermal,
                             aspectratio = :equal,
                                   clims = (0, clim),
@@ -468,118 +478,16 @@ if make_animation
         T_title = "T"
         c1_title = @sprintf("c₁(x, y=0, z, t=%s)", prettytime(t))
         U_title = "U and V"
-        c4_title = @sprintf("c₂(x, y=0, z, t=%s)", prettytime(t))
-        C_title = "C₁, C₄, C₁₆"
+        d1_title = @sprintf("d₁(x, y=0, z, t=%s)", prettytime(t))
+        C_title = "C's and D's"
 
-        plot(wxz_plot, T_plot, c1xz_plot, U_plot, c4xz_plot, C_plot, layout=(3, 2),
+        plot(wxz_plot, T_plot, c1xz_plot, U_plot, d1xz_plot, C_plot, layout=(3, 2),
              size = (1000, 1000),
              link = :y,
-             title = [w_title T_title c1_title U_title c4_title C_title])
+             title = [w_title T_title c1_title U_title d1_title C_title])
 
         iter == iterations[end] && close(file)
     end
 
     gif(anim, prefix * ".gif", fps = 8)
-end
-
-if plot_statistics
-
-    ## Some plot parameters
-    linewidth = 3
-    ylim = (-256, 0)
-    plot_size = (500, 500)
-    zC = znodes(Cell, grid)
-    zF = znodes(Face, grid)
-
-    ## Load data
-    #file = jldopen(simulation.output_writers[:statistics].filepath)
-    file = jldopen(joinpath(data_directory, prefix * "_statistics.jld2"))
-
-    iterations = parse.(Int, keys(file["timeseries/t"]))
-    iter = iterations[end] # plot final iteration
-
-    ## First-order quantities
-    u = file["timeseries/u/$iter"][1, 1, :]
-    v = file["timeseries/v/$iter"][1, 1, :]
-    T = file["timeseries/T/$iter"][1, 1, :]
-    c = file["timeseries/c/$iter"][1, 1, :]
-
-    ## Velocity variances
-    w²  = file["timeseries/ww/$iter"][1, 1, :]
-    tke = file["timeseries/turbulent_kinetic_energy/$iter"][1, 1, :]
-
-    ## Fluxes
-    wu = file["timeseries/wu/$iter"][1, 1, :]
-    wv = file["timeseries/wv/$iter"][1, 1, :]
-    wc = file["timeseries/wc/$iter"][1, 1, :]
-    wT = file["timeseries/wT/$iter"][1, 1, :]
-
-    ## Terms in the TKE budget
-       buoyancy_flux =   file["timeseries/buoyancy_flux/$iter"][1, 1, :]
-    shear_production = - file["timeseries/shear_production/$iter"][1, 1, :]
-         dissipation = - file["timeseries/dissipation/$iter"][1, 1, :]
-     pressure_flux_divergence = - file["timeseries/pressure_flux_divergence/$iter"][1, 1, :]
-    advective_flux_divergence = - file["timeseries/advective_flux_divergence/$iter"][1, 1, :]
-
-    transport = pressure_flux_divergence .+ advective_flux_divergence
-
-    close(file)
-
-    # Plot data
-
-    velocities = plot([u v], zC, size = plot_size,
-                         linewidth = linewidth,
-                            xlabel = "Velocity (m s⁻¹)",
-                            ylabel = "z (m)",
-                              ylim = ylim,
-                             label = ["u" "v"],
-                            legend = :bottom)
-
-    temperature = plot(T, zC, size = plot_size,
-                         linewidth = linewidth,
-                            xlabel = "Temperature (ᵒC)",
-                            ylabel = "z (m)",
-                              ylim = ylim,
-                             label = nothing)
-
-    tracer = plot(c, zC, size = plot_size,
-                         linewidth = linewidth,
-                            xlabel = "Tracer",
-                            ylabel = "z (m)",
-                              ylim = ylim,
-                             label = nothing)
-
-    variances = plot(tke, zC, size = plot_size,
-                         linewidth = linewidth,
-                            xlabel = "Velocity variances (m² s⁻²)",
-                            ylabel = "z (m)",
-                              ylim = ylim,
-                             label = "(u² + v² + w²) / 2",
-                            legend = :bottom)
-
-    normalize(wϕ) = wϕ ./ maximum(abs, wϕ)
-
-    fluxes = plot([normalize(wu) normalize(wv) normalize(wc) normalize(wT)], zF,
-                              size = plot_size,
-                         linewidth = linewidth,
-                            xlabel = "Normalized fluxes",
-                            ylabel = "z (m)",
-                              ylim = ylim,
-                             label = ["wu" "wv" "wc" "wT"],
-                            legend = :bottom)
-
-    plot!(variances, 1/2 .* w², zF, linewidth = linewidth,
-                                        label = "w² / 2")
-
-    budget = plot([buoyancy_flux dissipation transport], zC, size = plot_size,
-                  linewidth = linewidth,
-                     xlabel = "TKE budget terms",
-                     ylabel = "z (m)",
-                       ylim = ylim,
-                      label = ["buoyancy flux" "dissipation" "kinetic energy transport"],
-                     legend = :bottom)
-
-    plot(velocities, temperature, tracer, variances, fluxes, budget, layout=(1, 6), size=(1000, 500))
-
-    savefig(prefix * "_statistics.png")
 end
