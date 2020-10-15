@@ -184,11 +184,19 @@ z_deep = grid.zC[k_deep]
 
 # Relax `c` to an exponential profile with decay rate `λᶜ`.
 const λᶜ = 24.0
-@inline c_target(x, y, z, t) = exp(-abs(z) / λᶜ)
 
-c1_forcing = Relaxation(rate=1/1hour, target=c_target)
-c4_forcing = Relaxation(rate=1/4hour, target=c_target)
-c16_forcing = Relaxation(rate=1/16hour, target=c_target)
+@inline c_target(x, y, z, t) = exp(z / λᶜ)
+@inline d_target(x, y, z, t) = exp(-(z + 128.0) / λᶜ)
+
+c1_forcing  = Relaxation(rate = 1 / 1hour,  target=c_target)
+c3_forcing  = Relaxation(rate = 1 / 3hour,  target=c_target)
+c12_forcing = Relaxation(rate = 1 / 12hour, target=c_target)
+c24_forcing = Relaxation(rate = 1 / 24hour, target=c_target)
+
+d1_forcing  = Relaxation(rate = 1 / 1hour,  target=d_target)
+d3_forcing  = Relaxation(rate = 1 / 3hour,  target=d_target)
+d12_forcing = Relaxation(rate = 1 / 12hour, target=d_target)
+d24_forcing = Relaxation(rate = 1 / 24hour, target=d_target)
 
 # Sponge layer for u, v, w, and T
 gaussian_mask = GaussianMask{:z}(center=-grid.Lz, width=grid.Lz/10)
@@ -212,13 +220,14 @@ model = IncompressibleModel(architecture = GPU(),
                              timestepper = :RungeKutta3,
                                advection = WENO5(),
                                     grid = grid,
-                                 tracers = (:T, :c1, :c4, :c16),
+                                 tracers = (:T, :c1, :c3, :c12, :c24, :d1, :d3, :d12, :d24),
                                 buoyancy = buoyancy,
                                 coriolis = FPlane(f=1e-4),
                                  closure = AnisotropicMinimumDissipation(C=Cᴬᴹᴰ),
                      boundary_conditions = (T=θ_bcs, u=u_bcs),
                                  forcing = (u=u_sponge, v=v_sponge, w=w_sponge, T=T_sponge,
-                                            c1=c1_forcing, c4=c4_forcing, c16=c16_forcing)
+                                            c1=c1_forcing, c3=c3_forcing, c12=c12_forcing, c24=c24_forcing,
+                                            d1=d1_forcing, d3=d3_forcing, d12=d12_forcing, d24=d24_forcing)
                                 )
 
 # # Set Initial condition
@@ -248,10 +257,17 @@ function initial_temperature(x, y, z)
     end
 end
 
-set!(model, T = initial_temperature,
-     c1 = (x, y, z) -> c_target(x, y, z, 0),
-     c4 = (x, y, z) -> c_target(x, y, z, 0),
-     c16 = (x, y, z) -> c_target(x, y, z, 0))
+set!(model,
+     T   = initial_temperature,
+     c1  = (x, y, z) -> c_target(x, y, z, 0),
+     c3  = (x, y, z) -> c_target(x, y, z, 0),
+     c12 = (x, y, z) -> c_target(x, y, z, 0),
+     c24 = (x, y, z) -> c_target(x, y, z, 0),
+     d1  = (x, y, z) -> d_target(x, y, z, 0),
+     d3  = (x, y, z) -> d_target(x, y, z, 0),
+     d12 = (x, y, z) -> d_target(x, y, z, 0),
+     d24 = (x, y, z) -> d_target(x, y, z, 0),
+    )
 
 # # Prepare the simulation
 
@@ -329,8 +345,8 @@ simulation.output_writers[:statistics] = JLD2OutputWriter(model, turbulence_stat
                                                                   force = true)
 
 simulation.output_writers[:averaged_statistics] = JLD2OutputWriter(model, turbulence_statistics,
-                                                                   time_averaging_window = 15minute,
-                                                                           time_interval = 1hour,
+                                                                   time_averaging_window = 30minute,
+                                                                           time_interval = 3hour,
                                                                                   prefix = prefix * "_averaged_statistics",
                                                                                      dir = data_directory,
                                                                                    force = true)
