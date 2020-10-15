@@ -24,11 +24,11 @@ buoyancy = SeawaterBuoyancy(equation_of_state=LinearEquationOfState(α=2e-4), co
 g = buoyancy.gravitational_acceleration
 
 ## Compute temperature flux and gradient from buoyancy flux and gradient
-Qᶿ = Qᵇ / (α * g)
-dθdz = N² / (α * g)
+Qᵀ = Qᵇ / (α * g)
+dTdz = N² / (α * g)
 
-θ_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᶿ),
-                                       bottom = BoundaryCondition(Gradient, dθdz))
+T_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᵀ),
+                                       bottom = BoundaryCondition(Gradient, dTdz))
 
 # LES Model
 
@@ -41,23 +41,25 @@ Cᴬᴹᴰ = SurfaceEnhancedModelConstant(grid.Δz, C₀ = 1/12, enhancement = 7
 # Instantiate Oceananigans.IncompressibleModel
 
 using Oceananigans
+using Oceananigans.Advection: WENO5
 
 model = IncompressibleModel(architecture = CPU(),
                              timestepper = :RungeKutta3,
+                               advection = WENO5(),
                                     grid = grid,
                                  tracers = :T,
                                 buoyancy = buoyancy,
                                 coriolis = FPlane(f=1e-4),
                                  closure = AnisotropicMinimumDissipation(C=Cᴬᴹᴰ),
-                     boundary_conditions = (T=θ_bcs,))
+                     boundary_conditions = (T=T_bcs,))
 
 # # Initial condition
 
 Ξ(z) = rand() * exp(z / 8)
 
-θᵢ(x, y, z) = dθdz * z + 1e-6 * Ξ(z) * dθdz * grid.Lz
+Tᵢ(x, y, z) = dTdz * z + 1e-6 * Ξ(z) * dTdz * grid.Lz
 
-set!(model, T=θᵢ)
+set!(model, T=Tᵢ)
 
 # # Prepare the simulation
 
@@ -65,7 +67,7 @@ using Oceananigans.Utils: hour, minute
 using LESbrary.Utils: SimulationProgressMessenger
 
 # Adaptive time-stepping
-wizard = TimeStepWizard(cfl=0.5, Δt=2.0, max_change=1.1, max_Δt=30.0)
+wizard = TimeStepWizard(cfl=1.5, Δt=2.0, max_change=1.1, max_Δt=30.0)
 
 simulation = Simulation(model, Δt=wizard, stop_time=8hour, iteration_interval=100, 
                         progress=SimulationProgressMessenger(model, wizard))
@@ -73,7 +75,7 @@ simulation = Simulation(model, Δt=wizard, stop_time=8hour, iteration_interval=1
 # Prepare Output
 
 using Oceananigans.Utils: GiB
-using Oceananigans.OutputWriters: JLD2OutputWriter
+using Oceananigans.OutputWriters: JLD2OutputWriter, FieldSlicer
 
 prefix = @sprintf("free_convection_Qb%.1e_Nsq%.1e_Nh%d_Nz%d", Qᵇ, N², grid.Nx, grid.Nz)
 
@@ -89,6 +91,15 @@ simulation.output_writers[:fields] = JLD2OutputWriter(model, merge(model.velocit
                                                                 dir = data_directory,
                                                        max_filesize = 2GiB,
                                                               force = true)
+
+simulation.output_writers[:slices] = JLD2OutputWriter(model, merge(model.velocities, model.tracers),
+                                                      time_interval = 15minute, # every quarter period
+                                                             prefix = prefix * "_slices",
+                                                       field_slicer = FieldSlicer(j=floor(Int, grid.Ny/2)),
+                                                                dir = data_directory,
+                                                       max_filesize = 2GiB,
+                                                              force = true)
+ 
     
 # Horizontally-averaged turbulence statistics
 turbulence_statistics = LESbrary.TurbulenceStatistics.first_through_second_order(model)

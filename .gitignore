@@ -165,6 +165,7 @@ dmypy.json
 # Plots and movies
 *.png
 *.mp4
+*.gif
 
 # Generated scripts and log files
 *.slurm
@@ -177,3 +178,6 @@ data
 
 # vim temporary files
 *.swp
+
+# DS_STORE...
+.DS_STORE
