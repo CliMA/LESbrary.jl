@@ -186,16 +186,14 @@ z_deep = grid.zC[k_deep]
 const λᶜ = 24.0
 
 @inline c_target(x, y, z, t) = exp(z / λᶜ)
-@inline d_target(x, y, z, t) = exp(-(z + 128.0) / λᶜ)
+@inline d_target(x, y, z, t) = exp(-(z + 96.0) / λᶜ)
 
 c1_forcing  = Relaxation(rate = 1 / 1hour,  target=c_target)
 c3_forcing  = Relaxation(rate = 1 / 3hour,  target=c_target)
-c12_forcing = Relaxation(rate = 1 / 12hour, target=c_target)
 c24_forcing = Relaxation(rate = 1 / 24hour, target=c_target)
 
 d1_forcing  = Relaxation(rate = 1 / 1hour,  target=d_target)
 d3_forcing  = Relaxation(rate = 1 / 3hour,  target=d_target)
-d12_forcing = Relaxation(rate = 1 / 12hour, target=d_target)
 d24_forcing = Relaxation(rate = 1 / 24hour, target=d_target)
 
 # Sponge layer for u, v, w, and T
@@ -220,14 +218,14 @@ model = IncompressibleModel(architecture = GPU(),
                              timestepper = :RungeKutta3,
                                advection = WENO5(),
                                     grid = grid,
-                                 tracers = (:T, :c1, :c3, :c12, :c24, :d1, :d3, :d12, :d24),
+                                 tracers = (:T, :c1, :c3, :c24, :d1, :d3, :d24),
                                 buoyancy = buoyancy,
                                 coriolis = FPlane(f=1e-4),
                                  closure = AnisotropicMinimumDissipation(C=Cᴬᴹᴰ),
                      boundary_conditions = (T=θ_bcs, u=u_bcs),
                                  forcing = (u=u_sponge, v=v_sponge, w=w_sponge, T=T_sponge,
-                                            c1=c1_forcing, c3=c3_forcing, c12=c12_forcing, c24=c24_forcing,
-                                            d1=d1_forcing, d3=d3_forcing, d12=d12_forcing, d24=d24_forcing)
+                                            c1=c1_forcing, c3=c3_forcing, c24=c24_forcing,
+                                            d1=d1_forcing, d3=d3_forcing, d24=d24_forcing)
                                 )
 
 # # Set Initial condition
@@ -261,11 +259,9 @@ set!(model,
      T   = initial_temperature,
      c1  = (x, y, z) -> c_target(x, y, z, 0),
      c3  = (x, y, z) -> c_target(x, y, z, 0),
-     c12 = (x, y, z) -> c_target(x, y, z, 0),
      c24 = (x, y, z) -> c_target(x, y, z, 0),
      d1  = (x, y, z) -> d_target(x, y, z, 0),
      d3  = (x, y, z) -> d_target(x, y, z, 0),
-     d12 = (x, y, z) -> d_target(x, y, z, 0),
      d24 = (x, y, z) -> d_target(x, y, z, 0),
     )
 
@@ -276,7 +272,7 @@ wizard = TimeStepWizard(cfl=0.8, Δt=1.0, max_change=1.1, max_Δt=30.0)
 
 stop_hours = args["hours"]
 
-simulation = Simulation(model, Δt=wizard, stop_time=stop_hours * hour, iteration_interval=100,
+simulation = Simulation(model, Δt=wizard, stop_time=stop_hours * hour, iteration_interval=10,
                         progress=SimulationProgressMessenger(model, wizard))
 
 # Prepare Output
@@ -409,8 +405,7 @@ if make_animation
         u = file["timeseries/u/$iter"][:, 1, :]
         v = file["timeseries/v/$iter"][:, 1, :]
         c1 = file["timeseries/c1/$iter"][:, 1, :]
-        c3 = file["timeseries/c3/$iter"][:, 1, :]
-        d3 = file["timeseries/d3/$iter"][:, 1, :]
+        d1 = file["timeseries/d1/$iter"][:, 1, :]
 
         U = statistics_file["timeseries/u/$iter"][1, 1, :]
         V = statistics_file["timeseries/v/$iter"][1, 1, :]
@@ -418,11 +413,9 @@ if make_animation
         T = statistics_file["timeseries/T/$iter"][1, 1, :]
         C1  = statistics_file["timeseries/c1/$iter"][1, 1, :]
         C3  = statistics_file["timeseries/c3/$iter"][1, 1, :]
-        C12 = statistics_file["timeseries/c12/$iter"][1, 1, :]
         C24 = statistics_file["timeseries/c24/$iter"][1, 1, :]
         D1  = statistics_file["timeseries/d1/$iter"][1, 1, :]
         D3  = statistics_file["timeseries/d3/$iter"][1, 1, :]
-        D12 = statistics_file["timeseries/d12/$iter"][1, 1, :]
         D24 = statistics_file["timeseries/d24/$iter"][1, 1, :]
 
         wlim = 0.02
@@ -439,7 +432,7 @@ if make_animation
 
         U_plot = plot([U, V, sqrt.(E)], zc, label=["u" "v" "√E"], linewidth=[1 1 2], legend=:bottom)
 
-        C_plot = plot([C1 C3 C12 C24 D1 D3 D12 D24], zc,
+        C_plot = plot([C1 C3 C24 D1 D3 D24], zc,
                       label = ["C₁" "C₃" "C₁₂" "C₂₄" "D₁" "D₃" "D₁₂" "D₂₄"],
                       legend=:bottom,
                        xlim = (0, 1))
