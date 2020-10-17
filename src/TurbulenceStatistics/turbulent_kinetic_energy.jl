@@ -62,4 +62,4 @@ end
                              ) / 2
 end
 
-Adapt.adapt_strutcture(to, tke::TurbulentKineticEnergy) = Adapt.adapt(to, tke.data)
+Adapt.adapt_structure(to, tke::TurbulentKineticEnergy) = Adapt.adapt(to, tke.data)

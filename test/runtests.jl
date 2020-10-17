@@ -3,6 +3,8 @@ using Printf
 using LESbrary
 using Oceananigans
 using Oceananigans.Fields
+using Oceananigans.OutputWriters
+
 
 function run_script(replace_strings, script_name, script_filepath, module_suffix="")
     file_content = read(script_filepath, String)
@@ -50,6 +52,30 @@ function run_script(replace_strings, script_name, script_filepath, module_suffix
     return true
 end
 
+function output_works(simulation, output)
+    model = simulation.model
+    model.clock.time = 0
+    model.clock.iteration = 0
+    simulation.stop_iteration = 1
+
+    simulation.output_writers[:test] = JLD2OutputWriter(model, output,
+                                                        iteration_interval = 1,
+                                                        prefix = "test",
+                                                           dir = ".")
+
+    it_works = try
+        run!(simulation)
+        true
+    catch
+        false
+    finally
+        rm("test.jld2")
+        pop!(simulation.output_writers, :test)
+    end
+
+    return it_works
+end
+
 @testset "Turbulence Statistics" begin
 
     model = IncompressibleModel(grid=RegularCartesianGrid(size=(1, 1, 1), extent=(1, 1, 1)),
@@ -71,18 +97,45 @@ end
     @test pressure(model) isa Oceananigans.AbstractOperations.BinaryOperation
     @test subfilter_viscous_dissipation(model) isa Oceananigans.AbstractOperations.AbstractOperation
 
-    @test all(ϕ isa AveragedField for ϕ in values( horizontally_averaged_tracers(model)   ))
-    @test all(ϕ isa AveragedField for ϕ in values( velocity_covariances(model)            ))
-    @test all(ϕ isa AveragedField for ϕ in values( tracer_covariances(model)              ))
-    @test all(ϕ isa AveragedField for ϕ in values( third_order_velocity_statistics(model) ))
-    @test all(ϕ isa AveragedField for ϕ in values( third_order_tracer_statistics(model)   ))
+    C  = horizontally_averaged_tracers(model)  
+    u² = velocity_covariances(model)           
+    c² = tracer_covariances(model)             
+    u³ = third_order_velocity_statistics(model)
+    u³ = third_order_tracer_statistics(model)  
+                                          
+    ψ¹ = first_order_statistics(model)         
+    ψ² = second_order_statistics(model)        
+    ψ³ = third_order_statistics(model)         
+                                          
+    ψ¹_ψ² = first_through_second_order(model)     
+    ψ¹_ψ³ = first_through_third_order(model)      
 
-    @test all(ϕ isa AveragedField for ϕ in values( first_order_statistics(model)  ))
-    @test all(ϕ isa AveragedField for ϕ in values( second_order_statistics(model) ))
-    @test all(ϕ isa AveragedField for ϕ in values( third_order_statistics(model)  ))
+    @test all(ϕ isa AveragedField for ϕ in values( C     ))
+    @test all(ϕ isa AveragedField for ϕ in values( u²    ))
+    @test all(ϕ isa AveragedField for ϕ in values( c²    ))
+    @test all(ϕ isa AveragedField for ϕ in values( u³    ))
+    @test all(ϕ isa AveragedField for ϕ in values( u³    ))
+                                                      
+    @test all(ϕ isa AveragedField for ϕ in values( ψ¹    ))
+    @test all(ϕ isa AveragedField for ϕ in values( ψ²    ))
+    @test all(ϕ isa AveragedField for ϕ in values( ψ³    ))
+                                                      
+    @test all(ϕ isa AveragedField for ϕ in values( ψ¹_ψ² ))
+    @test all(ϕ isa AveragedField for ϕ in values( ψ¹_ψ³ ))
 
-    @test all(ϕ isa AveragedField for ϕ in values( first_through_second_order(model) ))
-    @test all(ϕ isa AveragedField for ϕ in values( first_through_third_order(model)  ))
+    simulation = Simulation(model, Δt=1.0, stop_iteration=1)
+
+    @test output_works(simulation, C     )
+    @test output_works(simulation, u²    )
+    @test output_works(simulation, c²    )
+    @test output_works(simulation, u³    )
+    @test output_works(simulation, u³    )
+    @test output_works(simulation, ψ¹    )
+    @test output_works(simulation, ψ²    )
+    @test output_works(simulation, ψ³    )
+    @test output_works(simulation, ψ¹_ψ² )
+    @test output_works(simulation, ψ¹_ψ³ )
+
 end
 
 @testset "Examples" begin
@@ -117,5 +170,5 @@ end
                        ("stop_time=4hour", "stop_time=2minute")
                       ]
 
-    @test run_script(replace_strings, "three_layer_constant_fluxes", three_layer_constant_fluxes_example)
+    #@test run_script(replace_strings, "three_layer_constant_fluxes", three_layer_constant_fluxes_example)
 end

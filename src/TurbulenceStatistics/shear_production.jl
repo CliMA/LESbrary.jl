@@ -56,4 +56,4 @@ end
         ℑyᵃᶜᵃ(i, j, k, grid, ψ′, v, U) * ℑzᵃᵃᶜ(i, j, k, grid, w∂zΨ, w, V) )
 end
 
-Adapt.adapt_strutcture(to, sp::ShearProduction) = Adapt.adapt(to, sp.data)
+Adapt.adapt_structure(to, sp::ShearProduction) = Adapt.adapt(to, sp.data)
