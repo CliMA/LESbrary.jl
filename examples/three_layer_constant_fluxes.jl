@@ -165,7 +165,7 @@ dθdz_deep          = N²_deep          / (α * g)
 θ_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᶿ),
                                        bottom = BoundaryCondition(Gradient, dθdz_deep))
 
-u_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᵘ))
+u_bcs = UVelocityBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᵘ))
 
 # Tracer forcing
 
