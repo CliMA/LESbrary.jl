@@ -56,40 +56,38 @@ All variables are located at cell centers and share memory space with `c_scratch
 
 Note that these diagnostics do not compile on the GPU currently.
 """
-function turbulent_kinetic_energy_budget(model; b = BuoyancyField(model),
-                                                u_scratch = XFaceField(model.architecture, model.grid),
-                                                v_scratch = YFaceField(model.architecture, model.grid),
-                                                w_scratch = ZFaceField(model.architecture, model.grid),
-                                                c_scratch = CellField(model.architecture, model.grid))
+function turbulent_kinetic_energy_budget(model;
+                                         b = BuoyancyField(model),
+                                         w_scratch = ZFaceField(model.architecture, model.grid),
+                                         c_scratch = CellField(model.architecture, model.grid),
+                                         U = AveragedField(model.velocities.u, dims=(1, 2)),
+                                         V = AveragedField(model.velocities.v, dims=(1, 2)),
+                                        )
 
-    statistics = Dict()
-
-    dissipation = subfilter_viscous_dissipation(model)
+    e = TurbulentKineticEnergy(model, U=U, V=V)
+    shear_production = ShearProduction(model, data=c_scratch.data, U=U, V=V)
 
     u, v, w = model.velocities
     p = pressure(model)
 
-    U = AveragedField(u, dims=(1, 2))
-    V = AveragedField(v, dims=(1, 2))
+    dissipation = subfilter_viscous_dissipation(model)
+    advective_flux = w * e
+    pressure_flux = w * p
+    buoyancy_flux = @at (Cell, Cell, Cell) w * b
 
-    turbulent_kinetic_energy  = @at (Cell, Cell, Cell) 0.5 * ( (u - U)^2 + (v - V)^2 + w^2 )
-    buoyancy_flux             = @at (Cell, Cell, Cell) w * b
-    shear_production          = @at (Cell, Cell, Cell) (u - U) * w * ∂z(U) + (v - V) * w * ∂z(V)
+    advective_flux_divergence = ∂z(advective_flux)
+    pressure_flux_divergence = ∂z(pressure_flux)
 
-    advective_flux            = @at (Cell, Cell, Face) w * turbulent_kinetic_energy
-    advective_flux_divergence = @at (Cell, Cell, Cell) ∂z(w * turbulent_kinetic_energy)
+    turbulence_statistics = Dict()
 
-    pressure_flux             = @at (Cell, Cell, Face) w * p
-    pressure_flux_divergence  = @at (Cell, Cell, Cell) ∂z(w * p)
+    turbulence_statistics[:e] = AveragedField(e, dims=(1, 2))
+    turbulence_statistics[:tke_shear_production]          = AveragedField(shear_production,          dims=(1, 2))
+    turbulence_statistics[:tke_advective_flux]            = AveragedField(advective_flux,            dims=(1, 2))
+    turbulence_statistics[:tke_pressure_flux]             = AveragedField(pressure_flux,             dims=(1, 2))
+    turbulence_statistics[:tke_advective_flux_divergence] = AveragedField(advective_flux_divergence, dims=(1, 2))
+    turbulence_statistics[:tke_pressure_flux_divergence]  = AveragedField(pressure_flux_divergence,  dims=(1, 2))
+    turbulence_statistics[:tke_dissipation]               = AveragedField(dissipation,               dims=(1, 2))
+    turbulence_statistics[:tke_buoyancy_flux]             = AveragedField(buoyancy_flux,             dims=(1, 2))
 
-    statistics[:turbulent_kinetic_energy]  = AveragedField(turbulent_kinetic_energy, dims=(1, 2), operand_data=c_scratch.data)
-    statistics[:buoyancy_flux]             = AveragedField(buoyancy_flux,            dims=(1, 2), operand_data=c_scratch.data)
-    statistics[:shear_production]          = AveragedField(shear_production,         dims=(1, 2), operand_data=c_scratch.data)
-    statistics[:dissipation]               = AveragedField(dissipation,               dims=(1, 2), operand_data=c_scratch.data)
-    statistics[:advective_flux]            = AveragedField(advective_flux,            dims=(1, 2), operand_data=w_scratch.data)
-    statistics[:pressure_flux]             = AveragedField(pressure_flux,             dims=(1, 2), operand_data=w_scratch.data)
-    statistics[:advective_flux_divergence] = AveragedField(advective_flux_divergence, dims=(1, 2), operand_data=c_scratch.data)
-    statistics[:pressure_flux_divergence]  = AveragedField(pressure_flux_divergence,  dims=(1, 2), operand_data=c_scratch.data)
-
-    return statistics
+    return turbulence_statistics
 end

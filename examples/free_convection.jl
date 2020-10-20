@@ -75,7 +75,7 @@ simulation = Simulation(model, Δt=wizard, stop_time=8hour, iteration_interval=1
 # Prepare Output
 
 using Oceananigans.Utils: GiB
-using Oceananigans.OutputWriters: JLD2OutputWriter, FieldSlicer
+using Oceananigans.OutputWriters
 
 prefix = @sprintf("free_convection_Qb%.1e_Nsq%.1e_Nh%d_Nz%d", Qᵇ, N², grid.Nx, grid.Nz)
 
@@ -86,14 +86,14 @@ mkpath(data_directory)
 cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
 
 simulation.output_writers[:fields] = JLD2OutputWriter(model, merge(model.velocities, model.tracers); 
-                                                      time_interval = 4hour, # every quarter period
+                                                           schedule = TimeInterval(4hour),
                                                              prefix = prefix * "_fields",
                                                                 dir = data_directory,
                                                        max_filesize = 2GiB,
                                                               force = true)
 
 simulation.output_writers[:slices] = JLD2OutputWriter(model, merge(model.velocities, model.tracers),
-                                                      time_interval = 15minute, # every quarter period
+                                                           schedule = AveragedTimeInterval(1hour, window=15minute),
                                                              prefix = prefix * "_slices",
                                                        field_slicer = FieldSlicer(j=floor(Int, grid.Ny/2)),
                                                                 dir = data_directory,
@@ -103,15 +103,14 @@ simulation.output_writers[:slices] = JLD2OutputWriter(model, merge(model.velocit
     
 # Horizontally-averaged turbulence statistics
 turbulence_statistics = LESbrary.TurbulenceStatistics.first_through_second_order(model)
-tke_budget_statistics = LESbrary.TurbulenceStatistics.turbulent_kinetic_energy_budget(model)
+e_budget_statistics = LESbrary.TurbulenceStatistics.turbulent_kinetic_energy_budget(model)
 
 simulation.output_writers[:statistics] =
-    JLD2OutputWriter(model, merge(turbulence_statistics, tke_budget_statistics),
-                     time_averaging_window = 15minute,
-                             time_interval = 1hour,
-                                    prefix = prefix * "_statistics",
-                                       dir = data_directory,
-                                     force = true)
+    JLD2OutputWriter(model, merge(turbulence_statistics, e_budget_statistics),
+                     schedule = AveragedTimeInterval(1hour, window=15minute),
+                       prefix = prefix * "_statistics",
+                          dir = data_directory,
+                        force = true)
 
 # # Run
 
@@ -140,15 +139,15 @@ iter = iterations[end] # plot final iteration
 T = file["timeseries/T/$iter"][1, 1, :]
 
 ## Velocity variances
-w²  = file["timeseries/ww/$iter"][1, 1, :]
-tke = file["timeseries/turbulent_kinetic_energy/$iter"][1, 1, :]
+w² = file["timeseries/ww/$iter"][1, 1, :]
+e  = file["timeseries/e/$iter"][1, 1, :]
 
 ## Terms in the TKE budget
-buoyancy_flux =   file["timeseries/buoyancy_flux/$iter"][1, 1, :]
-  dissipation = - file["timeseries/dissipation/$iter"][1, 1, :]
+buoyancy_flux =   file["timeseries/tke_buoyancy_flux/$iter"][1, 1, :]
+  dissipation = - file["timeseries/tke_dissipation/$iter"][1, 1, :]
 
- pressure_flux_divergence = - file["timeseries/pressure_flux_divergence/$iter"][1, 1, :]
-advective_flux_divergence = - file["timeseries/advective_flux_divergence/$iter"][1, 1, :]
+ pressure_flux_divergence = - file["timeseries/tke_pressure_flux_divergence/$iter"][1, 1, :]
+advective_flux_divergence = - file["timeseries/tke_advective_flux_divergence/$iter"][1, 1, :]
 
 transport = pressure_flux_divergence .+ advective_flux_divergence
 
@@ -162,11 +161,11 @@ close(file)
 ## Mixing length, computed at cell interfaces and omitting boundaries
 Tz = @. (T[2:end] - T[1:end-1]) / grid.Δz
 bz = @. α * g * Tz
-tkeᶠ = @. (tke[1:end-1] + tke[2:end]) / 2
+eᶠ = @. (e[1:end-1] + e[2:end]) / 2
 
-## Mixing length model: wT ∝ - ℓᵀ √tke ∂z T ⟹  ℓᵀ = wT / (√tke ∂z T)
-ℓ_measured = @. - wT / (√(tkeᶠ) * Tz)
-ℓ_estimated = @. min(-zF[2:end-1], sqrt(tkeᶠ / max(0, bz)))
+## Mixing length model: wT ∝ - ℓᵀ √e ∂z T ⟹  ℓᵀ = wT / (√e ∂z T)
+ℓ_measured = @. - wT / (√(eᶠ) * Tz)
+ℓ_estimated = @. min(-zF[2:end-1], sqrt(eᶠ / max(0, bz)))
 
 # Plot data
 
@@ -177,7 +176,7 @@ temperature = plot(T, zC, size = plot_size,
                           ylim = ylim,
                          label = nothing)
 
-variances = plot(tke, zC, size = plot_size,
+variances = plot(e, zC, size = plot_size,
                      linewidth = linewidth,
                         xlabel = "Velocity variances (m² s⁻²)",
                         ylabel = "z (m)",

@@ -14,8 +14,7 @@ function run_script(replace_strings, script_name, script_filepath, module_suffix
         new_file_content = replace(file_content, strs[1] => strs[2])
 
         if new_file_content == file_content
-            error("$(strs[1]) => $(strs[2]) replacement not found in $script_filepath. " *
-                  "Make sure the script has not changed, otherwise the test might take a long time.")
+            @warn "$(strs[1]) => $(strs[2]) replacement not found in $script_filepath."
             return false
         else
             file_content = new_file_content
@@ -33,7 +32,7 @@ function run_script(replace_strings, script_name, script_filepath, module_suffix
     try
         include(test_script_filepath)
     catch err
-        @error sprint(showerror, err)
+        @warn "Error while testing script: " * sprint(showerror, err)
 
         # Print the content of the file to the test log, with line numbers, for debugging
         test_file_content = read(test_script_filepath, String)
@@ -43,6 +42,7 @@ function run_script(replace_strings, script_name, script_filepath, module_suffix
         end
 
         rm(test_script_filepath)
+
         return false
     end
 
@@ -59,7 +59,7 @@ function output_works(simulation, output)
     simulation.stop_iteration = 1
 
     simulation.output_writers[:test] = JLD2OutputWriter(model, output,
-                                                        iteration_interval = 1,
+                                                        schedule=IterationInterval(1),
                                                         prefix = "test",
                                                            dir = ".")
 
@@ -148,11 +148,14 @@ end
 
     replace_strings = [
                        ("size=(32, 32, 32)", "size=(1, 1, 1)"),
-                       ("time_interval = 4hour", "time_interval=2minute"),
-                       ("time_interval = 1hour", "time_interval=2minute"),
-                       ("time_averaging_window = 15minute", "time_averaging_window = 1minute"),
+                       ("TimeInterval(4hour)", "TimeInterval(2minute)"),
+                       ("AveragedTimeInterval(1hour, window=15minute)", "AveragedTimeInterval(2minute, window=1minute)"),
                        ("stop_time=8hour", "stop_time=2minute")
                       ]
+
+    @test run_script(replace_strings, "free_convection", free_convection_example)
+
+    push!(replace_strings, ("CPU()", "GPU()"))
 
     @test run_script(replace_strings, "free_convection", free_convection_example)
 
@@ -164,9 +167,8 @@ end
 
     replace_strings = [
                        ("""Nh = args["Nh"]""", "Nh = 1"),
-                       ("time_interval = 4hour", "time_interval=2minute"),
-                       ("time_interval = 1hour", "time_interval=2minute"),
-                       ("time_averaging_window = 15minute", "time_averaging_window = 1minute"),
+                       ("TimeInterval(4hour)", "TimeInterval(2minute)"),
+                       ("schedule = AveragedTimeInterval(3hour, window=30minute)", "schedule = AveragedTimeInterval(2minute, window=1minute)"),
                        ("stop_time=4hour", "stop_time=2minute")
                       ]
 

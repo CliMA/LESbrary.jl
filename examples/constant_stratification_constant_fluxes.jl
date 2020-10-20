@@ -20,15 +20,18 @@ using Oceananigans.Buoyancy
 using Oceananigans.BoundaryConditions
 using Oceananigans.Grids
 using Oceananigans.Forcings
+using Oceananigans.OutputWriters
+using Oceananigans.AbstractOperations
 
-using Oceananigans.Fields: AveragedField
+using Oceananigans.Fields: AveragedField, PressureField
 using Oceananigans.Advection: WENO5
 using Oceananigans.Utils: minute, hour, GiB, prettytime
-using Oceananigans.OutputWriters: JLD2OutputWriter, FieldSlicer
 
 using LESbrary.Utils: SimulationProgressMessenger
 using LESbrary.TurbulenceStatistics: first_through_second_order
+using LESbrary.TurbulenceStatistics: turbulent_kinetic_energy_budget
 using LESbrary.TurbulenceStatistics: TurbulentKineticEnergy
+using LESbrary.TurbulenceStatistics: ShearProduction
 
 # To start, we ensure that all packages in the LESbrary environment are installed:
 
@@ -138,19 +141,18 @@ u_bcs = UVelocityBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᵘ))
 
 # # Initial condition and sponge layer
 
-# Relax `c` to an exponential profile with decay rate `λᶜ`.
-const λᶜ = 24.0
+@inline c_forcing_func(x, y, z, t, p) = 1/p.growth * exp(z / p.scale) - p.decay
+@inline d_forcing_func(x, y, z, t, p) = 1/p.growth * exp(-(z + 96.0) / p.scale) - p.decay
 
-@inline c_target(x, y, z, t) = exp(z / λᶜ)
-@inline d_target(x, y, z, t) = exp(-(z + 96.0) / λᶜ)
-
-c_forcing = Relaxation(rate = 1 / 12hour, target=c_target)
-d_forcing = Relaxation(rate = 1 / 12hour, target=d_target)
+c_forcing = Forcing(c_forcing_func, parameters=(growth=1hour, decay=12hour, scale=24.0))
+d_forcing = Forcing(d_forcing_func, parameters=(growth=1hour, decay=12hour, scale=24.0))
 
 # Sponge layer for u, v, w, and T
 gaussian_mask = GaussianMask{:z}(center=-grid.Lz, width=grid.Lz/10)
 
 u_sponge = v_sponge = w_sponge = Relaxation(rate=1/hour, mask=gaussian_mask)
+
+θ_surface = args["surface-temperature"]
 
 T_sponge = Relaxation(rate = 1/hour,
                       target = LinearTarget{:z}(intercept=θ_surface, gradient=dθdz),
@@ -175,12 +177,10 @@ model = IncompressibleModel(architecture = GPU(),
 
 ## Noise with 8 m decay scale
 Ξ(z) = rand() * exp(z / 8)
+
+initial_temperature(x, y, z) = θ_surface + dθdz + 1e-6 * Ξ(z) * dθdz * grid.Lz
                    
-set!(model,
-     T   = (x, y, z) -> θ_surface + dθdz + 1e-6 * Ξ(z) * dθdz_surface_layer * grid.Lz
-     c = (x, y, z) -> c_target(x, y, z, 0),
-     d = (x, y, z) -> d_target(x, y, z, 0),
-    )
+set!(model, T = initial_temperature)
 
 # # Prepare the simulation
 
@@ -194,7 +194,7 @@ simulation = Simulation(model, Δt=wizard, stop_time=stop_hours * hour, iteratio
 
 # Prepare Output
 
-prefix = @sprintf("simple_constant_fluxes_Qu%.1e_Qb$.1e_Nh%d_Nz%d", abs(Qᵘ), Qᵇ, grid.Nx, grid.Nz)
+prefix = @sprintf("simple_constant_fluxes_Qu%.1e_Qb%.1e_Nh%d_Nz%d", abs(Qᵘ), Qᵇ, grid.Nx, grid.Nz)
 
 data_directory = joinpath(@__DIR__, "..", "data", prefix) # save data in /data/prefix
 
@@ -205,14 +205,14 @@ mkpath(data_directory)
 cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
 
 simulation.output_writers[:fields] = JLD2OutputWriter(model, merge(model.velocities, model.tracers); 
-                                                      time_interval = 12hour,
+                                                           schedule = TimeInterval(12hour),
                                                              prefix = prefix * "_fields",
                                                                 dir = data_directory,
                                                        max_filesize = 2GiB,
                                                               force = true)
 
 simulation.output_writers[:slices] = JLD2OutputWriter(model, merge(model.velocities, model.tracers),
-                                                      time_interval = slice_interval,
+                                                           schedule = TimeInterval(slice_interval),
                                                              prefix = prefix * "_slices",
                                                        field_slicer = FieldSlicer(j=floor(Int, grid.Ny/2)),
                                                                 dir = data_directory,
@@ -233,36 +233,27 @@ turbulence_statistics = first_through_second_order(model, c_scratch = c_scratch,
                                                           w_scratch = w_scratch,
                                                                   b = b)
 
-# The AveragedFields defined by `turbulent_kinetic_energy_budget` cannot be computed
-# on the GPU yet, so this block is commented out.
+tke_budget_statistics = turbulent_kinetic_energy_budget(model;
+                                                        b = b,
+                                                        w_scratch = w_scratch,
+                                                        c_scratch = c_scratch,
+                                                        U = turbulence_statistics[:u],
+                                                        V = turbulence_statistics[:v])
 
-# tke_budget_statistics = turbulent_kinetic_energy_budget(model, c_scratch = c_scratch,
-#                                                                u_scratch = u_scratch,
-#                                                                v_scratch = v_scratch,
-#                                                                w_scratch = w_scratch,
-#                                                                        b = b)
-# 
-# turbulence_statistics = merge(turbulence_statistics, tke_budget_statistics)
-
-turbulent_kinetic_energy = TurbulentKineticEnergy(model,
-                                                  data = c_scratch.data,
-                                                  U = turbulence_statistics[:u],
-                                                  V = turbulence_statistics[:v])
-
-turbulence_statistics[:tke] = AveragedField(turbulent_kinetic_energy, dims=(1, 2))
+turbulence_statistics = merge(turbulence_statstics, tke_budget_statistics) 
 
 simulation.output_writers[:statistics] = JLD2OutputWriter(model, turbulence_statistics,
-                                                          time_interval = slice_interval,
-                                                                 prefix = prefix * "_statistics",
-                                                                    dir = data_directory,
-                                                                  force = true)
+                                                          schedule = IterationInterval(10),
+                                                          #schedule = TimeInterval(slice_interval),
+                                                            prefix = prefix * "_statistics",
+                                                               dir = data_directory,
+                                                             force = true)
 
 simulation.output_writers[:averaged_statistics] = JLD2OutputWriter(model, turbulence_statistics,
-                                                                   time_averaging_window = 30minute,
-                                                                           time_interval = 3hour,
-                                                                                  prefix = prefix * "_averaged_statistics",
-                                                                                     dir = data_directory,
-                                                                                   force = true)
+                                                                   schedule = AveragedTimeInterval(3hour, window=30minute),
+                                                                     prefix = prefix * "_averaged_statistics",
+                                                                        dir = data_directory,
+                                                                      force = true)
 
 # # Run
 
@@ -274,131 +265,126 @@ run!(simulation)
 
 pyplot()
 
-make_animation = args["animation"]
-plot_statistics = args["plot-statistics"]
+xw, yw, zw = nodes(model.velocities.w)
+xu, yu, zu = nodes(model.velocities.u)
+xc, yc, zc = nodes(model.tracers.c)
 
-if make_animation
+xw, yw, zw = xw[:], yw[:], zw[:]
+xu, yu, zu = xu[:], yu[:], zu[:]
+xc, yc, zc = xc[:], yc[:], zc[:]
 
-    xw, yw, zw = nodes(model.velocities.w)
-    xu, yu, zu = nodes(model.velocities.u)
-    xc, yc, zc = nodes(model.tracers.c)
+file = jldopen(joinpath(data_directory, prefix * "_slices.jld2"))
+statistics_file = jldopen(joinpath(data_directory, prefix * "_statistics.jld2"))
 
-    xw, yw, zw = xw[:], yw[:], zw[:]
-    xu, yu, zu = xu[:], yu[:], zu[:]
-    xc, yc, zc = xc[:], yc[:], zc[:]
+@show keys(statistics_file["timeseries"])
 
-    #file = jldopen(simulation.output_writers[:slices].filepath)
-    file = jldopen(joinpath(data_directory, prefix * "_slices.jld2"))
-    statistics_file = jldopen(joinpath(data_directory, prefix * "_statistics.jld2"))
+iterations = parse.(Int, keys(file["timeseries/t"]))
 
-    iterations = parse.(Int, keys(file["timeseries/t"]))
+# This utility is handy for calculating nice contour intervals:
 
-    # This utility is handy for calculating nice contour intervals:
+function nice_divergent_levels(c, clim)
+    levels = range(-clim, stop=clim, length=40)
 
-    function nice_divergent_levels(c, clim)
-        levels = range(-clim, stop=clim, length=40)
+    cmax = maximum(abs, c)
 
-        cmax = maximum(abs, c)
-
-        if clim < cmax # add levels on either end
-            levels = vcat([-cmax], range(-clim, stop=clim, length=40), [cmax])
-        end
-
-        return levels
+    if clim < cmax # add levels on either end
+        levels = vcat([-cmax], range(-clim, stop=clim, length=40), [cmax])
     end
 
-    # Finally, we're ready to animate.
-
-    @info "Making an animation from the saved data..."
-
-    anim = @animate for (i, iter) in enumerate(iterations)
-
-        @info "Drawing frame $i from iteration $iter \n"
-
-        t = file["timeseries/t/$iter"]
-
-        ## Load 3D fields from file
-        w = file["timeseries/w/$iter"][:, 1, :]
-        u = file["timeseries/u/$iter"][:, 1, :]
-        v = file["timeseries/v/$iter"][:, 1, :]
-        c = file["timeseries/c/$iter"][:, 1, :]
-        d = file["timeseries/d/$iter"][:, 1, :]
-
-        U = statistics_file["timeseries/u/$iter"][1, 1, :]
-        V = statistics_file["timeseries/v/$iter"][1, 1, :]
-        E = statistics_file["timeseries/tke/$iter"][1, 1, :]
-        T = statistics_file["timeseries/T/$iter"][1, 1, :]
-        C  = statistics_file["timeseries/c/$iter"][1, 1, :]
-        D  = statistics_file["timeseries/d/$iter"][1, 1, :]
-
-        wlim = 0.02
-        clim = 0.8
-        dlim = 1.2
-
-        cmax = maximum(abs, c)
-        dmax = maximum(abs, d)
-
-        clevels = cmax > clim ? vcat(range(0, stop=clim, length=40), [cmax]) :
-                                     range(0, stop=clim, length=40)
-
-        dlevels = dmax > dlim ? vcat(range(0, stop=dlim, length=40), [dmax]) :
-                                     range(0, stop=dlim, length=40)
-
-        wlevels = nice_divergent_levels(w, wlim)
-
-        T_plot = plot(T, zc, label="T", xlim=(initial_temperature(0, 0, -grid.Lz), θ_surface), legend=:bottom)
-
-        U_plot = plot([U, V, sqrt.(E)], zc, label=["u" "v" "√E"], linewidth=[1 1 2], legend=:bottom)
-
-        C_plot = plot([C D], zc,
-                      label = ["C" "D"],
-                      legend=:bottom,
-                       xlim = (0, 1))
-
-        wxz_plot = contourf(xw, zw, w';
-                                  color = :balance,
-                            aspectratio = :equal,
-                                  clims = (-wlim, wlim),
-                                 levels = wlevels,
-                                  xlims = (0, grid.Lx),
-                                  ylims = (-grid.Lz, 0),
-                                 xlabel = "x (m)",
-                                 ylabel = "z (m)")
-
-        cxz_plot = contourf(xc, zc, c';
-                                  color = :thermal,
-                            aspectratio = :equal,
-                                  clims = (0, clim),
-                                 levels = clevels,
-                                  xlims = (0, grid.Lx),
-                                  ylims = (-grid.Lz, 0),
-                                 xlabel = "x (m)",
-                                 ylabel = "z (m)")
-
-        d1xz_plot = contourf(xc, zc, d1';
-                                  color = :thermal,
-                            aspectratio = :equal,
-                                  clims = (0, clim),
-                                 levels = clevels,
-                                  xlims = (0, grid.Lx),
-                                  ylims = (-grid.Lz, 0),
-                                 xlabel = "x (m)",
-                                 ylabel = "z (m)")
-
-        w_title = @sprintf("w(x, y=0, z, t=%s) (m/s)", prettytime(t))
-        T_title = "T"
-        c_title = @sprintf("c₁(x, y=0, z, t=%s)", prettytime(t))
-        U_title = "U and V"
-        d1_title = @sprintf("d₁(x, y=0, z, t=%s)", prettytime(t))
-        C_title = "C's and D's"
-
-        plot(wxz_plot, T_plot, cxz_plot, U_plot, d1xz_plot, C_plot, layout=(3, 2),
-             size = (1000, 1000),
-             link = :y,
-             title = [w_title T_title c_title U_title d1_title C_title])
-
-        iter == iterations[end] && close(file)
-    end
-
-    gif(anim, prefix * ".gif", fps = 8)
+    return levels
 end
+
+# Finally, we're ready to animate.
+
+@info "Making an animation from the saved data..."
+
+anim = @animate for (i, iter) in enumerate(iterations)
+
+    @info "Drawing frame $i from iteration $iter \n"
+
+    t = file["timeseries/t/$iter"]
+
+    ## Load 3D fields from file
+    w = file["timeseries/w/$iter"][:, 1, :]
+    u = file["timeseries/u/$iter"][:, 1, :]
+    v = file["timeseries/v/$iter"][:, 1, :]
+    c = file["timeseries/c/$iter"][:, 1, :]
+    d = file["timeseries/d/$iter"][:, 1, :]
+
+    U = statistics_file["timeseries/u/$iter"][1, 1, :]
+    V = statistics_file["timeseries/v/$iter"][1, 1, :]
+    E = statistics_file["timeseries/e/$iter"][1, 1, :]
+    T = statistics_file["timeseries/T/$iter"][1, 1, :]
+    C  = statistics_file["timeseries/c/$iter"][1, 1, :]
+    D  = statistics_file["timeseries/d/$iter"][1, 1, :]
+
+    wlim = 0.02
+    clim = 0.8
+    dlim = 1.2
+
+    cmax = maximum(abs, c)
+    dmax = maximum(abs, d)
+
+    clevels = cmax > clim ? vcat(range(0, stop=clim, length=40), [cmax]) :
+                                 range(0, stop=clim, length=40)
+
+    dlevels = dmax > dlim ? vcat(range(0, stop=dlim, length=40), [dmax]) :
+                                 range(0, stop=dlim, length=40)
+
+    wlevels = nice_divergent_levels(w, wlim)
+
+    T_plot = plot(T, zc, label="T", xlim=(initial_temperature(0, 0, -grid.Lz), θ_surface), legend=:bottom)
+
+    U_plot = plot([U, V, sqrt.(E)], zc, label=["u" "v" "√E"], linewidth=[1 1 2], legend=:bottom)
+
+    C_plot = plot([C D], zc,
+                  label = ["C" "D"],
+                  legend=:bottom,
+                   xlim = (0, 1))
+
+    wxz_plot = contourf(xw, zw, w';
+                              color = :balance,
+                        aspectratio = :equal,
+                              clims = (-wlim, wlim),
+                             levels = wlevels,
+                              xlims = (0, grid.Lx),
+                              ylims = (-grid.Lz, 0),
+                             xlabel = "x (m)",
+                             ylabel = "z (m)")
+
+    cxz_plot = contourf(xc, zc, c';
+                              color = :thermal,
+                        aspectratio = :equal,
+                              clims = (0, clim),
+                             levels = clevels,
+                              xlims = (0, grid.Lx),
+                              ylims = (-grid.Lz, 0),
+                             xlabel = "x (m)",
+                             ylabel = "z (m)")
+
+    dxz_plot = contourf(xc, zc, d';
+                              color = :thermal,
+                        aspectratio = :equal,
+                              clims = (0, clim),
+                             levels = clevels,
+                              xlims = (0, grid.Lx),
+                              ylims = (-grid.Lz, 0),
+                             xlabel = "x (m)",
+                             ylabel = "z (m)")
+
+    w_title = @sprintf("w(x, y=0, z, t=%s) (m/s)", prettytime(t))
+    T_title = "T"
+    c_title = @sprintf("c(x, y=0, z, t=%s)", prettytime(t))
+    U_title = "U and V"
+    d_title = @sprintf("d(x, y=0, z, t=%s)", prettytime(t))
+    C_title = "C's and D's"
+
+    plot(wxz_plot, T_plot, cxz_plot, U_plot, dxz_plot, C_plot, layout=(3, 2),
+         size = (1000, 1000),
+         link = :y,
+         title = [w_title T_title c_title U_title d_title C_title])
+
+    iter == iterations[end] && close(file)
+end
+
+gif(anim, prefix * ".gif", fps = 8)
