@@ -13,7 +13,8 @@ julia> using Pkg
 julia> Pkg.add("https://github.com/CliMA/LESbrary.jl.git")
 ```
 
-To add the `LESbrary` package to your julia environment. This will allow you to write `using LESbrary` in your scripts (and thereby run the scripts in `examples/`.
+at the REPL.
+This will allow you to write `using LESbrary` in your scripts (and thereby run the scripts in `/examples`).
 
 ## Python conda environment
 
