@@ -5,9 +5,9 @@ The LESbrary will archive turbulence data for both idealized and realistic ocean
 
 ## Adding LESbrary.jl to a julia environment
 
-Type
+To add `LESbrary.jl` to your julia environment, type
 
-```
+```julia
 julia> using Pkg
 
 julia> Pkg.add("https://github.com/CliMA/LESbrary.jl.git")
