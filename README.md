@@ -17,7 +17,7 @@ To add the `LESbrary` package to your julia environment. This will allow you to 
 
 ## Python conda environment
 
-LESbrary.jl relies on some Python functionality. To get the conda environment set up:
+Some aspects of the LESbrary.jl relies on some Python functionality. If you need this python functionality, you'll have to set up the conda environment:
 
 1. Download and install Miniconda (or Anaconda) if needed: https://docs.conda.io/en/latest/miniconda.html
 2. Instantiate and activate the LESbrary.jl conda environment: `conda env create --name lesbrary --file=environment.yml` then `conda activate lesbrary`
