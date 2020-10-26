@@ -56,7 +56,7 @@ All variables are located at cell centers and share memory space with `c_scratch
 
 Note that these diagnostics do not compile on the GPU currently.
 """
-function turbulent_kinetic_energy_budget(model;
+function turbulent_kinetic_energy_budget(model; with_flux_divergences = false,
                                          b = BuoyancyField(model),
                                          w_scratch = ZFaceField(model.architecture, model.grid),
                                          c_scratch = CellField(model.architecture, model.grid),
@@ -75,19 +75,25 @@ function turbulent_kinetic_energy_budget(model;
     pressure_flux = w * p
     buoyancy_flux = @at (Cell, Cell, Cell) w * b
 
-    advective_flux_divergence = ∂z(advective_flux)
-    pressure_flux_divergence = ∂z(pressure_flux)
-
     turbulence_statistics = Dict()
 
     turbulence_statistics[:e] = AveragedField(e, dims=(1, 2))
-    turbulence_statistics[:tke_shear_production]          = AveragedField(shear_production,          dims=(1, 2))
-    turbulence_statistics[:tke_advective_flux]            = AveragedField(advective_flux,            dims=(1, 2))
-    turbulence_statistics[:tke_pressure_flux]             = AveragedField(pressure_flux,             dims=(1, 2))
-    turbulence_statistics[:tke_advective_flux_divergence] = AveragedField(advective_flux_divergence, dims=(1, 2))
-    turbulence_statistics[:tke_pressure_flux_divergence]  = AveragedField(pressure_flux_divergence,  dims=(1, 2))
-    turbulence_statistics[:tke_dissipation]               = AveragedField(dissipation,               dims=(1, 2))
-    turbulence_statistics[:tke_buoyancy_flux]             = AveragedField(buoyancy_flux,             dims=(1, 2))
+    turbulence_statistics[:tke_shear_production]          = AveragedField(shear_production, dims=(1, 2))
+    turbulence_statistics[:tke_advective_flux]            = AveragedField(advective_flux,   dims=(1, 2))
+    turbulence_statistics[:tke_pressure_flux]             = AveragedField(pressure_flux,    dims=(1, 2))
+    turbulence_statistics[:tke_dissipation]               = AveragedField(dissipation,      dims=(1, 2))
+    turbulence_statistics[:tke_buoyancy_flux]             = AveragedField(buoyancy_flux,    dims=(1, 2))
+
+    if with_flux_divergences
+        advective_flux_field = ComputedField(advective_flux)
+        pressure_flux_field = ComputedField(pressure_flux)
+
+        advective_flux_divergence = ∂z(advective_flux_field)
+        pressure_flux_divergence = ∂z(pressure_flux_field)
+
+        turbulence_statistics[:tke_advective_flux_divergence] = AveragedField(advective_flux_divergence, dims=(1, 2))
+        turbulence_statistics[:tke_pressure_flux_divergence]  = AveragedField(pressure_flux_divergence,  dims=(1, 2))
+    end
 
     return turbulence_statistics
 end

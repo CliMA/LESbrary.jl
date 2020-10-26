@@ -1,13 +1,5 @@
-using Oceananigans.Fields: XFaceField, YFaceField, ZFaceField, CellField
+using Oceananigans.Fields: XFaceField, YFaceField, ZFaceField, CellField, Pressurefield
 using Oceananigans.Buoyancy: BuoyancyField
-
-# Replace with PressureField once available in Oceananigans
-# using Oceananigans.Fields: PressureField
-
-function pressure(model)
-    p_hyd, p_non = model.pressures
-    return p_hyd + p_non
-end
 
 has_buoyancy_tracer(model) = :b ∈ keys(model.tracers)
 
@@ -133,7 +125,8 @@ end
     third_order_velocity_statistics(model, u_scratch = XFaceField(model.architecture, model.grid),
                                            v_scratch = YFaceField(model.architecture, model.grid),
                                            w_scratch = ZFaceField(model.architecture, model.grid),
-                                           c_scratch = CellField(model.architecture, model.grid))
+                                           c_scratch = CellField(model.architecture, model.grid),
+                                           p = PressureField(model))
 
 Returns a dictionary of functions that calculate horizontally-averaged third-order statistics
 that involve the velocity field. Includes statistics associated with pressure.

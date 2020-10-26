@@ -103,10 +103,10 @@ simulation.output_writers[:slices] = JLD2OutputWriter(model, merge(model.velocit
     
 # Horizontally-averaged turbulence statistics
 turbulence_statistics = LESbrary.TurbulenceStatistics.first_through_second_order(model)
-e_budget_statistics = LESbrary.TurbulenceStatistics.turbulent_kinetic_energy_budget(model)
+tke_budget_statistics = LESbrary.TurbulenceStatistics.turbulent_kinetic_energy_budget(model)
 
 simulation.output_writers[:statistics] =
-    JLD2OutputWriter(model, merge(turbulence_statistics, e_budget_statistics),
+    JLD2OutputWriter(model, merge(turbulence_statistics, tke_budget_statistics),
                      schedule = AveragedTimeInterval(1hour, window=15minute),
                        prefix = prefix * "_statistics",
                           dir = data_directory,
