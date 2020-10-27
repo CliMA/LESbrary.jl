@@ -240,16 +240,15 @@ tke_budget_statistics = turbulent_kinetic_energy_budget(model;
                                                         U = turbulence_statistics[:u],
                                                         V = turbulence_statistics[:v])
 
-turbulence_statistics = merge(turbulence_statstics, tke_budget_statistics) 
+statistics = merge(turbulence_statistics, tke_budget_statistics) 
 
-simulation.output_writers[:statistics] = JLD2OutputWriter(model, turbulence_statistics,
-                                                          schedule = IterationInterval(10),
-                                                          #schedule = TimeInterval(slice_interval),
+simulation.output_writers[:statistics] = JLD2OutputWriter(model, statistics,
+                                                          schedule = TimeInterval(slice_interval),
                                                             prefix = prefix * "_statistics",
                                                                dir = data_directory,
                                                              force = true)
 
-simulation.output_writers[:averaged_statistics] = JLD2OutputWriter(model, turbulence_statistics,
+simulation.output_writers[:averaged_statistics] = JLD2OutputWriter(model, statistics,
                                                                    schedule = AveragedTimeInterval(3hour, window=30minute),
                                                                      prefix = prefix * "_averaged_statistics",
                                                                         dir = data_directory,
