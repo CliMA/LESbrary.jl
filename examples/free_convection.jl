@@ -146,10 +146,12 @@ e  = file["timeseries/e/$iter"][1, 1, :]
 buoyancy_flux =   file["timeseries/tke_buoyancy_flux/$iter"][1, 1, :]
   dissipation = - file["timeseries/tke_dissipation/$iter"][1, 1, :]
 
- pressure_flux_divergence = - file["timeseries/tke_pressure_flux_divergence/$iter"][1, 1, :]
-advective_flux_divergence = - file["timeseries/tke_advective_flux_divergence/$iter"][1, 1, :]
+ pressure_flux = - file["timeseries/tke_pressure_flux/$iter"][1, 1, :]
+advective_flux = - file["timeseries/tke_advective_flux/$iter"][1, 1, :]
 
-transport = pressure_flux_divergence .+ advective_flux_divergence
+transport = zeros(grid.Nz)
+transport = (pressure_flux[2:end] .+ advective_flux[2:end]
+             .- pressure_flux[1:end-1] .- advective_flux[1:end-1]) / grid.Δz
 
 ## For mixing length calculation
 wT = file["timeseries/wT/$iter"][1, 1, 2:end-1]
