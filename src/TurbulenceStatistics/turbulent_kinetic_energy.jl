@@ -1,5 +1,13 @@
 using KernelAbstractions
 using Adapt
+using Statistics
+
+using Oceananigans.Fields
+using Oceananigans.Utils: work_layout
+using Oceananigans.Operators: ℑxᶜᵃᵃ, ℑyᵃᶜᵃ, ℑzᵃᵃᶜ
+using Oceananigans.Fields: AbstractField, new_data
+
+import Oceananigans.Fields: compute!
 
 struct TurbulentKineticEnergy{A, G, U, V, W, Ua, Va} <: AbstractField{Cell, Cell, Cell, A, G}
     data :: A
