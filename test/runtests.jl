@@ -98,8 +98,7 @@ end
                                     grid = RegularCartesianGrid(size=(1, 1, 1), extent=(1, 1, 1)),
                                     closure = AnisotropicMinimumDissipation())
 
-        @test pressure(model) isa Oceananigans.AbstractOperations.BinaryOperation
-        @test subfilter_viscous_dissipation(model) isa Oceananigans.AbstractOperations.AbstractOperation
+        simulation = Simulation(model, Δt=1.0, stop_iteration=1)
 
         C  = horizontally_averaged_tracers(model)  
         u² = velocity_covariances(model)           
@@ -126,8 +125,6 @@ end
                                                           
         @test all(ϕ isa AveragedField for ϕ in values( ψ¹_ψ² ))
         @test all(ϕ isa AveragedField for ϕ in values( ψ¹_ψ³ ))
-
-        simulation = Simulation(model, Δt=1.0, stop_iteration=1)
 
         @test output_works(simulation, C, "Horizontally averaged tracers")
         @test output_works(simulation, u², "Velocity covariances")
