@@ -29,7 +29,7 @@ function ViscousDissipation(model; data = nothing)
     end
 
     u, v, w = model.velocities
-    νₑ = model.dissipation.νₑ
+    νₑ = model.diffusivities.νₑ
 
     return ViscousDissipation(data, model.grid, νₑ, u, v, w)
 end

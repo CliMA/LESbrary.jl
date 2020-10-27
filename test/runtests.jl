@@ -80,8 +80,6 @@ end
 
 @testset "Turbulence Statistics" begin
 
-    using LESbrary.TurbulenceStatistics: pressure
-    using LESbrary.TurbulenceStatistics: subfilter_viscous_dissipation
     using LESbrary.TurbulenceStatistics: horizontally_averaged_tracers
     using LESbrary.TurbulenceStatistics: velocity_covariances
     using LESbrary.TurbulenceStatistics: tracer_covariances
