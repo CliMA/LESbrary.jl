@@ -1,33 +1,4 @@
 """
-    subfilter_viscous_dissipation(model)
-
-Returns an `AbstractOperation` corresponding to subfilter viscous dissipation,
-
-```math
-ϵ = 2 νₑ Σⁱʲ Σⁱʲ
-```
-"""
-function subfilter_viscous_dissipation(model) 
-
-
-    u, v, w = model.velocities
-
-    νₑ = model.diffusivities.νₑ
-
-    Σˣˣ = ∂x(u)
-    Σʸʸ = ∂y(v)
-    Σᶻᶻ = ∂z(w)
-    Σˣʸ = (∂y(u) + ∂x(v)) / 2
-    Σˣᶻ = (∂z(u) + ∂x(w)) / 2
-    Σʸᶻ = (∂z(v) + ∂y(w)) / 2
-
-    #ϵ = νₑ * 2 * ( Σˣˣ^2 + Σʸʸ^2 + Σᶻᶻ^2 + Σˣʸ^2 + Σˣᶻ^2 + Σʸᶻ^2 )
-    ϵ = νₑ * ∂x(u)^2
-
-    return ϵ
-end
-
-"""
     turbulent_kinetic_energy_budget(model; b = BuoyancyField(model),
                                            w_scratch = ZFaceField(model.architecture, model.grid),
                                            c_scratch = CellField(model.architecture, model.grid),
@@ -73,10 +44,10 @@ function turbulent_kinetic_energy_budget(model; with_flux_divergences = false,
 
     e = TurbulentKineticEnergy(model, U=U, V=V)
     shear_production = ShearProduction(model, data=c_scratch.data, U=U, V=V)
+    dissipation = ViscousDissipation(model, data=c_scratch.data)
 
     u, v, w = model.velocities
 
-    dissipation = subfilter_viscous_dissipation(model)
     advective_flux = w * e
     pressure_flux = w * p
     buoyancy_flux = @at (Cell, Cell, Cell) w * b

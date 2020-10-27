@@ -17,6 +17,7 @@ include("first_through_third_order.jl")
 
 include("turbulent_kinetic_energy.jl")
 include("shear_production.jl")
+include("viscous_dissipation.jl")
 
 include("turbulent_kinetic_energy_budget.jl")
 
