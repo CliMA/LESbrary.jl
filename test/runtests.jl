@@ -23,14 +23,14 @@ function run_script(replace_strings, script_name, script_filepath, module_suffix
 
     end
 
-    open(test_script_filepath, "w") do f
-        # Wrap test script inside module to avoid polluting namespaces
-        write(f, "module _Test_$script_name" * "_$module_suffix\n")
-        write(f, file_content)
-        write(f, "\nend # module")
-    end
-
     try
+        open(test_script_filepath, "w") do f
+            # Wrap test script inside module to avoid polluting namespaces
+            write(f, "module _Test_$script_name" * "_$module_suffix\n")
+            write(f, file_content)
+            write(f, "\nend # module")
+        end
+
         include(test_script_filepath)
     catch err
         @warn "Error while testing script: " * sprint(showerror, err)
@@ -42,13 +42,11 @@ function run_script(replace_strings, script_name, script_filepath, module_suffix
             @printf("% 3d %s\n", number, line)
         end
 
-        rm(test_script_filepath)
-
         return false
+    finally
+        # Delete the test script
+        rm(test_script_filepath, force=true)
     end
-
-    # Delete the test script (if it hasn't been deleted already)
-    rm(test_script_filepath)
 
     return true
 end
