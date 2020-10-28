@@ -310,8 +310,7 @@ function first_through_second_order(model; b = BuoyancyField(model), p = Pressur
                                           u_scratch = u_scratch,
                                           v_scratch = v_scratch,
                                           w_scratch = w_scratch,
-                                          c_scratch = c_scratch)
-                                                  
+                                          c_scratch = c_scratch),
 
                    second_order_statistics(model,
                                            u_scratch = u_scratch,
