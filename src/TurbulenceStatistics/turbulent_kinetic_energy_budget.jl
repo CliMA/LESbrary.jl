@@ -33,13 +33,14 @@ All variables are located at cell centers and share memory space with `c_scratch
 
 Note that these diagnostics do not compile on the GPU currently.
 """
-function turbulent_kinetic_energy_budget(model; with_flux_divergences = false,
+function turbulent_kinetic_energy_budget(model;
+                                         with_flux_divergences = false,
                                          b = BuoyancyField(model),
-                                         w_scratch = ZFaceField(model.architecture, model.grid),
-                                         c_scratch = CellField(model.architecture, model.grid),
+                                         p = PressureField(model),
                                          U = AveragedField(model.velocities.u, dims=(1, 2)),
                                          V = AveragedField(model.velocities.v, dims=(1, 2)),
-                                         p = PressureField(model)
+                                         w_scratch = ZFaceField(model.architecture, model.grid),
+                                         c_scratch = CellField(model.architecture, model.grid),
                                         )
 
     e = TurbulentKineticEnergy(model, U=U, V=V)

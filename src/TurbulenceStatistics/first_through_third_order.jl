@@ -165,10 +165,6 @@ function third_order_velocity_statistics(model; u_scratch = XFaceField(model.arc
                                     :vp => AveragedField(v * p,     dims=(1, 2), operand_data=v_scratch.data),
                                     :wp => AveragedField(w * p,     dims=(1, 2), operand_data=w_scratch.data),
   
-                                  #:pΣˣˣ => AveragedField(p * ∂x(u), dims=(1, 2), operand_data=c_scratch.data),
-                                  #:pΣʸʸ => AveragedField(p * ∂y(v), dims=(1, 2), operand_data=c_scratch.data),
-                                  #:pΣᶻᶻ => AveragedField(p * ∂z(w), dims=(1, 2), operand_data=c_scratch.data),
-
                                   :pux => AveragedField(p * ∂x(u), dims=(1, 2), operand_data=c_scratch.data),
                                   :puy => AveragedField(p * ∂y(u), dims=(1, 2), operand_data=c_scratch.data),
                                   :puz => AveragedField(p * ∂z(u), dims=(1, 2), operand_data=c_scratch.data),
@@ -180,10 +176,6 @@ function third_order_velocity_statistics(model; u_scratch = XFaceField(model.arc
                                   :pwx => AveragedField(p * ∂x(w), dims=(1, 2), operand_data=c_scratch.data),
                                   :pwy => AveragedField(p * ∂y(w), dims=(1, 2), operand_data=c_scratch.data),
                                   :pwz => AveragedField(p * ∂z(w), dims=(1, 2), operand_data=c_scratch.data),
-
-                                  #:pΣˣʸ => AveragedField(p * Σˣʸ,   dims=(1, 2), operand_data=c_scratch.data),
-                                  #:pΣˣᶻ => AveragedField(p * Σˣᶻ,   dims=(1, 2), operand_data=c_scratch.data),
-                                  #:pΣʸᶻ => AveragedField(p * Σʸᶻ,   dims=(1, 2), operand_data=c_scratch.data)
                                  )
 
     return third_order_statistics
@@ -286,16 +278,17 @@ end
 function third_order_statistics(model; u_scratch = XFaceField(model.architecture, model.grid),
                                        v_scratch = YFaceField(model.architecture, model.grid),
                                        w_scratch = ZFaceField(model.architecture, model.grid),
-                                       c_scratch = CellField(model.architecture, model.grid))
+                                       c_scratch = CellField(model.architecture, model.grid),
+                                       p = PressureField(model))
 
     output = merge(
-                   third_order_velocity_statistics(model,
+                   third_order_velocity_statistics(model, p = p,
                                                    u_scratch = u_scratch,
                                                    v_scratch = v_scratch,
                                                    w_scratch = w_scratch,
                                                    c_scratch = c_scratch),
 
-                   third_order_tracer_statistics(model,
+                   third_order_tracer_statistics(model, p = p,
                                                  u_scratch = u_scratch,
                                                  v_scratch = v_scratch,
                                                  w_scratch = w_scratch,
@@ -305,19 +298,20 @@ function third_order_statistics(model; u_scratch = XFaceField(model.architecture
     return output
 end
 
-function first_through_second_order(model; b = BuoyancyField(model),
+function first_through_second_order(model; b = BuoyancyField(model), p = PressureField(model),
                                            u_scratch = XFaceField(model.architecture, model.grid),
                                            v_scratch = YFaceField(model.architecture, model.grid),
                                            w_scratch = ZFaceField(model.architecture, model.grid),
                                            c_scratch = CellField(model.architecture, model.grid))
+                                       
 
     output = merge(
-                   first_order_statistics(model,
+                   first_order_statistics(model, b = b, p = p,
                                           u_scratch = u_scratch,
                                           v_scratch = v_scratch,
                                           w_scratch = w_scratch,
-                                          c_scratch = c_scratch,
-                                                  b = b),
+                                          c_scratch = c_scratch)
+                                                  
 
                    second_order_statistics(model,
                                            u_scratch = u_scratch,
@@ -331,7 +325,7 @@ function first_through_second_order(model; b = BuoyancyField(model),
     return output
 end
 
-function first_through_third_order(model; b = BuoyancyField(model),
+function first_through_third_order(model; b = BuoyancyField(model), p = PressureField(model),
                                           u_scratch = XFaceField(model.architecture, model.grid),
                                           v_scratch = YFaceField(model.architecture, model.grid),
                                           w_scratch = ZFaceField(model.architecture, model.grid),
@@ -339,12 +333,11 @@ function first_through_third_order(model; b = BuoyancyField(model),
                                           
 
     output = merge(
-                   first_order_statistics(model,
+                   first_order_statistics(model, b = b, p = p,
                                           u_scratch = u_scratch,
                                           v_scratch = v_scratch,
                                           w_scratch = w_scratch,
-                                          c_scratch = c_scratch,
-                                                  b = b),
+                                          c_scratch = c_scratch)
 
                    second_order_statistics(model,
                                            u_scratch = u_scratch,
@@ -353,7 +346,7 @@ function first_through_third_order(model; b = BuoyancyField(model),
                                            c_scratch = c_scratch,
                                                    b = b),
 
-                   third_order_statistics(model,
+                   third_order_statistics(model, p = p,
                                           u_scratch = u_scratch,
                                           v_scratch = v_scratch,
                                           w_scratch = w_scratch,
