@@ -1,3 +1,4 @@
+module _Test_free_convection_
 # # Free convection
 
 # This script runs a simulation of convection driven by cooling at the 
@@ -9,7 +10,7 @@ using LESbrary, Printf, Statistics
 
 using Oceananigans.Grids
 
-grid = RegularCartesianGrid(size=(32, 32, 32), x=(0, 128), y=(0, 128), z=(-64, 0))
+grid = RegularCartesianGrid(size=(1, 1, 1), x=(0, 128), y=(0, 128), z=(-64, 0))
 
 # Buoyancy and boundary conditions
 
@@ -69,7 +70,7 @@ using LESbrary.Utils: SimulationProgressMessenger
 # Adaptive time-stepping
 wizard = TimeStepWizard(cfl=1.5, Δt=2.0, max_change=1.1, max_Δt=30.0)
 
-simulation = Simulation(model, Δt=wizard, stop_time=8hour, iteration_interval=100, 
+simulation = Simulation(model, Δt=wizard, stop_time=2minute, iteration_interval=1, 
                         progress=SimulationProgressMessenger(model, wizard))
 
 # Prepare Output
@@ -86,14 +87,14 @@ mkpath(data_directory)
 cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
 
 simulation.output_writers[:fields] = JLD2OutputWriter(model, merge(model.velocities, model.tracers); 
-                                                           schedule = TimeInterval(4hour),
+                                                           schedule = TimeInterval(2minute),
                                                              prefix = prefix * "_fields",
                                                                 dir = data_directory,
                                                        max_filesize = 2GiB,
                                                               force = true)
 
 simulation.output_writers[:slices] = JLD2OutputWriter(model, merge(model.velocities, model.tracers),
-                                                           schedule = AveragedTimeInterval(1hour, window=15minute),
+                                                           schedule = AveragedTimeInterval(2minute, window=1minute),
                                                              prefix = prefix * "_slices",
                                                        field_slicer = FieldSlicer(j=floor(Int, grid.Ny/2)),
                                                                 dir = data_directory,
@@ -107,7 +108,7 @@ tke_budget_statistics = LESbrary.TurbulenceStatistics.turbulent_kinetic_energy_b
 
 simulation.output_writers[:statistics] =
     JLD2OutputWriter(model, merge(turbulence_statistics, tke_budget_statistics),
-                     schedule = AveragedTimeInterval(1hour, window=15minute),
+                     schedule = AveragedTimeInterval(2minute, window=1minute),
                        prefix = prefix * "_statistics",
                           dir = data_directory,
                         force = true)
@@ -146,12 +147,10 @@ e  = file["timeseries/e/$iter"][1, 1, :]
 buoyancy_flux =   file["timeseries/tke_buoyancy_flux/$iter"][1, 1, :]
   dissipation = - file["timeseries/tke_dissipation/$iter"][1, 1, :]
 
- pressure_flux = - file["timeseries/tke_pressure_flux/$iter"][1, 1, :]
-advective_flux = - file["timeseries/tke_advective_flux/$iter"][1, 1, :]
+ pressure_flux_divergence = - file["timeseries/tke_pressure_flux_divergence/$iter"][1, 1, :]
+advective_flux_divergence = - file["timeseries/tke_advective_flux_divergence/$iter"][1, 1, :]
 
-transport = zeros(grid.Nz)
-transport = (pressure_flux[2:end] .+ advective_flux[2:end]
-             .- pressure_flux[1:end-1] .- advective_flux[1:end-1]) / grid.Δz
+transport = pressure_flux_divergence .+ advective_flux_divergence
 
 ## For mixing length calculation
 wT = file["timeseries/wT/$iter"][1, 1, 2:end-1]
@@ -204,3 +203,5 @@ mixing_length = plot([ℓ_measured ℓ_estimated], zF[2:end-1], size = plot_size
                                                            label = ["measured" "estimated"])
 
 plot(temperature, variances, budget, mixing_length, layout=(1, 4))
+
+end # module
