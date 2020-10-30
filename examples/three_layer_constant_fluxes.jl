@@ -165,7 +165,7 @@ dθdz_deep          = N²_deep          / (α * g)
 θ_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᶿ),
                                        bottom = BoundaryCondition(Gradient, dθdz_deep))
 
-u_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᵘ))
+u_bcs = UVelocityBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᵘ))
 
 # Tracer forcing
 
@@ -288,14 +288,14 @@ mkpath(data_directory)
 cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
 
 simulation.output_writers[:fields] = JLD2OutputWriter(model, merge(model.velocities, model.tracers); 
-                                                      time_interval = 24hour, # every quarter period
+                                                           schedule = TimeInterval(24hour), # every quarter period
                                                              prefix = prefix * "_fields",
                                                                 dir = data_directory,
                                                        max_filesize = 2GiB,
                                                               force = true)
 
 simulation.output_writers[:slices] = JLD2OutputWriter(model, merge(model.velocities, model.tracers),
-                                                      time_interval = slice_interval,
+                                                           schedule = TimeInterval(slice_interval),
                                                              prefix = prefix * "_slices",
                                                        field_slicer = FieldSlicer(j=floor(Int, grid.Ny/2)),
                                                                 dir = data_directory,
@@ -335,17 +335,16 @@ turbulent_kinetic_energy = TurbulentKineticEnergy(model,
 turbulence_statistics[:tke] = AveragedField(turbulent_kinetic_energy, dims=(1, 2))
 
 simulation.output_writers[:statistics] = JLD2OutputWriter(model, turbulence_statistics,
-                                                          time_interval = slice_interval,
+                                                               schedule = TimeInterval(slice_interval),
                                                                  prefix = prefix * "_statistics",
                                                                     dir = data_directory,
                                                                   force = true)
 
 simulation.output_writers[:averaged_statistics] = JLD2OutputWriter(model, turbulence_statistics,
-                                                                   time_averaging_window = 30minute,
-                                                                           time_interval = 3hour,
-                                                                                  prefix = prefix * "_averaged_statistics",
-                                                                                     dir = data_directory,
-                                                                                   force = true)
+                                                                   schedule = AveragedTimeInterval(3hour, window=30minute),
+                                                                     prefix = prefix * "_averaged_statistics",
+                                                                        dir = data_directory,
+                                                                      force = true)
 
 # # Run
 

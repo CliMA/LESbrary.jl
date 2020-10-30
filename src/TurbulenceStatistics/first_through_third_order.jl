@@ -1,13 +1,5 @@
-using Oceananigans.Fields: XFaceField, YFaceField, ZFaceField, CellField
+using Oceananigans.Fields: XFaceField, YFaceField, ZFaceField, CellField, PressureField
 using Oceananigans.Buoyancy: BuoyancyField
-
-# Replace with PressureField once available in Oceananigans
-# using Oceananigans.Fields: PressureField
-
-function pressure(model)
-    p_hyd, p_non = model.pressures
-    return p_hyd + p_non
-end
 
 has_buoyancy_tracer(model) = :b ∈ keys(model.tracers)
 
@@ -133,7 +125,8 @@ end
     third_order_velocity_statistics(model, u_scratch = XFaceField(model.architecture, model.grid),
                                            v_scratch = YFaceField(model.architecture, model.grid),
                                            w_scratch = ZFaceField(model.architecture, model.grid),
-                                           c_scratch = CellField(model.architecture, model.grid))
+                                           c_scratch = CellField(model.architecture, model.grid),
+                                           p = PressureField(model))
 
 Returns a dictionary of functions that calculate horizontally-averaged third-order statistics
 that involve the velocity field. Includes statistics associated with pressure.
@@ -144,16 +137,15 @@ scratch space for computations at `u`, `v`, `w`, and tracer ("`c`") locations, r
 function third_order_velocity_statistics(model; u_scratch = XFaceField(model.architecture, model.grid),
                                                 v_scratch = YFaceField(model.architecture, model.grid),
                                                 w_scratch = ZFaceField(model.architecture, model.grid),
-                                                c_scratch = CellField(model.architecture, model.grid))
+                                                c_scratch = CellField(model.architecture, model.grid),
+                                                p = PressureField(model))
 
     u, v, w = model.velocities
 
     # Pressure-strain terms
-    p = pressure(model)
-
-    Σˣʸ = (∂y(u) + ∂x(v)) / 2 # FFC
-    Σˣᶻ = (∂z(u) + ∂x(w)) / 2 # FCF
-    Σʸᶻ = (∂z(v) + ∂y(w)) / 2 # CFF
+    Σˣʸ = 0.5 * (∂y(u) + ∂x(v)) # FFC
+    Σˣᶻ = 0.5 * (∂z(u) + ∂x(w)) # FCF
+    Σʸᶻ = 0.5 * (∂z(v) + ∂y(w)) # CFF
 
     third_order_statistics = Dict(
                                    :uuu => AveragedField(u * u * u, dims=(1, 2), operand_data=u_scratch.data),
@@ -173,13 +165,17 @@ function third_order_velocity_statistics(model; u_scratch = XFaceField(model.arc
                                     :vp => AveragedField(v * p,     dims=(1, 2), operand_data=v_scratch.data),
                                     :wp => AveragedField(w * p,     dims=(1, 2), operand_data=w_scratch.data),
   
-                                  :pΣˣˣ => AveragedField(p * ∂x(u), dims=(1, 2), operand_data=c_scratch.data),
-                                  :pΣʸʸ => AveragedField(p * ∂y(v), dims=(1, 2), operand_data=c_scratch.data),
-                                  :pΣᶻᶻ => AveragedField(p * ∂z(w), dims=(1, 2), operand_data=c_scratch.data),
+                                  :pux => AveragedField(p * ∂x(u), dims=(1, 2), operand_data=c_scratch.data),
+                                  :puy => AveragedField(p * ∂y(u), dims=(1, 2), operand_data=c_scratch.data),
+                                  :puz => AveragedField(p * ∂z(u), dims=(1, 2), operand_data=c_scratch.data),
 
-                                  :pΣˣʸ => AveragedField(p * Σˣʸ,   dims=(1, 2), operand_data=c_scratch.data),
-                                  :pΣˣᶻ => AveragedField(p * Σˣᶻ,   dims=(1, 2), operand_data=c_scratch.data),
-                                  :pΣʸᶻ => AveragedField(p * Σʸᶻ,   dims=(1, 2), operand_data=c_scratch.data)
+                                  :pvx => AveragedField(p * ∂x(v), dims=(1, 2), operand_data=c_scratch.data),
+                                  :pvy => AveragedField(p * ∂y(v), dims=(1, 2), operand_data=c_scratch.data),
+                                  :pvz => AveragedField(p * ∂z(v), dims=(1, 2), operand_data=c_scratch.data),
+
+                                  :pwx => AveragedField(p * ∂x(w), dims=(1, 2), operand_data=c_scratch.data),
+                                  :pwy => AveragedField(p * ∂y(w), dims=(1, 2), operand_data=c_scratch.data),
+                                  :pwz => AveragedField(p * ∂z(w), dims=(1, 2), operand_data=c_scratch.data),
                                  )
 
     return third_order_statistics
@@ -200,12 +196,10 @@ scratch space for computations at `u`, `v`, `w`, and tracer ("`c`") locations, r
 function third_order_tracer_statistics(model; u_scratch = XFaceField(model.architecture, model.grid),
                                               v_scratch = YFaceField(model.architecture, model.grid),
                                               w_scratch = ZFaceField(model.architecture, model.grid),
-                                              c_scratch = CellField(model.architecture, model.grid))
+                                              c_scratch = CellField(model.architecture, model.grid),
+                                              p = PressureField(model))
 
     u, v, w = model.velocities
-
-    # For pressure-tracer terms
-    p = pressure(model)
 
     third_order_statistics = Dict()
 
@@ -233,15 +227,15 @@ function first_order_statistics(model; b = BuoyancyField(model),
                                        u_scratch = XFaceField(model.architecture, model.grid),
                                        v_scratch = YFaceField(model.architecture, model.grid),
                                        w_scratch = ZFaceField(model.architecture, model.grid),
-                                       c_scratch = CellField(model.architecture, model.grid))
+                                       c_scratch = CellField(model.architecture, model.grid),
+                                       p = PressureField(model))
 
     output = merge(
                    horizontally_averaged_velocities(model),
                    horizontally_averaged_tracers(model),
                    )
 
-    p = pressure(model)
-    output[:p] = AveragedField(p, dims=(1, 2), operand_data=c_scratch.data)
+    output[:p] = AveragedField(p, dims=(1, 2))
 
     if !has_buoyancy_tracer(model)
         output[:b] = AveragedField(b, dims=(1, 2))
@@ -284,16 +278,17 @@ end
 function third_order_statistics(model; u_scratch = XFaceField(model.architecture, model.grid),
                                        v_scratch = YFaceField(model.architecture, model.grid),
                                        w_scratch = ZFaceField(model.architecture, model.grid),
-                                       c_scratch = CellField(model.architecture, model.grid))
+                                       c_scratch = CellField(model.architecture, model.grid),
+                                       p = PressureField(model))
 
     output = merge(
-                   third_order_velocity_statistics(model,
+                   third_order_velocity_statistics(model, p = p,
                                                    u_scratch = u_scratch,
                                                    v_scratch = v_scratch,
                                                    w_scratch = w_scratch,
                                                    c_scratch = c_scratch),
 
-                   third_order_tracer_statistics(model,
+                   third_order_tracer_statistics(model, p = p,
                                                  u_scratch = u_scratch,
                                                  v_scratch = v_scratch,
                                                  w_scratch = w_scratch,
@@ -303,19 +298,19 @@ function third_order_statistics(model; u_scratch = XFaceField(model.architecture
     return output
 end
 
-function first_through_second_order(model; b = BuoyancyField(model),
+function first_through_second_order(model; b = BuoyancyField(model), p = PressureField(model),
                                            u_scratch = XFaceField(model.architecture, model.grid),
                                            v_scratch = YFaceField(model.architecture, model.grid),
                                            w_scratch = ZFaceField(model.architecture, model.grid),
                                            c_scratch = CellField(model.architecture, model.grid))
+                                       
 
     output = merge(
-                   first_order_statistics(model,
+                   first_order_statistics(model, b = b, p = p,
                                           u_scratch = u_scratch,
                                           v_scratch = v_scratch,
                                           w_scratch = w_scratch,
-                                          c_scratch = c_scratch,
-                                                  b = b),
+                                          c_scratch = c_scratch),
 
                    second_order_statistics(model,
                                            u_scratch = u_scratch,
@@ -329,7 +324,7 @@ function first_through_second_order(model; b = BuoyancyField(model),
     return output
 end
 
-function first_through_third_order(model; b = BuoyancyField(model),
+function first_through_third_order(model; b = BuoyancyField(model), p = PressureField(model),
                                           u_scratch = XFaceField(model.architecture, model.grid),
                                           v_scratch = YFaceField(model.architecture, model.grid),
                                           w_scratch = ZFaceField(model.architecture, model.grid),
@@ -337,12 +332,11 @@ function first_through_third_order(model; b = BuoyancyField(model),
                                           
 
     output = merge(
-                   first_order_statistics(model,
+                   first_order_statistics(model, b = b, p = p,
                                           u_scratch = u_scratch,
                                           v_scratch = v_scratch,
                                           w_scratch = w_scratch,
-                                          c_scratch = c_scratch,
-                                                  b = b),
+                                          c_scratch = c_scratch),
 
                    second_order_statistics(model,
                                            u_scratch = u_scratch,
@@ -351,7 +345,7 @@ function first_through_third_order(model; b = BuoyancyField(model),
                                            c_scratch = c_scratch,
                                                    b = b),
 
-                   third_order_statistics(model,
+                   third_order_statistics(model, p = p,
                                           u_scratch = u_scratch,
                                           v_scratch = v_scratch,
                                           w_scratch = w_scratch,
