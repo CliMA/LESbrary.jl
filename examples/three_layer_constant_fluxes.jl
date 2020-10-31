@@ -182,19 +182,11 @@ z_deep = grid.zC[k_deep]
 θ_transition = θ_surface + z_transition * dθdz_surface_layer
 θ_deep = θ_transition + (z_deep - z_transition) * dθdz_thermocline
 
-# Relax `c` to an exponential profile with decay rate `λᶜ`.
-const λᶜ = 24.0
-
-@inline c_target(x, y, z, t) = exp(z / λᶜ)
-@inline d_target(x, y, z, t) = exp(-(z + 96.0) / λᶜ)
-
-c1_forcing  = Relaxation(rate = 1 / 1hour,  target=c_target)
-c3_forcing  = Relaxation(rate = 1 / 3hour,  target=c_target)
-c24_forcing = Relaxation(rate = 1 / 24hour, target=c_target)
-
-d1_forcing  = Relaxation(rate = 1 / 1hour,  target=d_target)
-d3_forcing  = Relaxation(rate = 1 / 3hour,  target=d_target)
-d24_forcing = Relaxation(rate = 1 / 24hour, target=d_target)
+@inline passive_tracer_forcing(x, y, z, t, p) =
+    1 / p.τ_source * exp((z - p.z₀)/ p.λ) - 1 / p.τ_damping
+ 
+c_forcing  = Forcing(passive_tracer_forcing, parameters=(z₀=  0.0, λ=24.0, τ_source=12hour, τ_damping=24hour))
+d_forcing  = Forcing(passive_tracer_forcing, parameters=(z₀=-96.0, λ=24.0, τ_source=12hour, τ_damping=24hour))
 
 # Sponge layer for u, v, w, and T
 gaussian_mask = GaussianMask{:z}(center=-grid.Lz, width=grid.Lz/10)
@@ -218,14 +210,13 @@ model = IncompressibleModel(architecture = GPU(),
                              timestepper = :RungeKutta3,
                                advection = WENO5(),
                                     grid = grid,
-                                 tracers = (:T, :c1, :c3, :c24, :d1, :d3, :d24),
+                                 tracers = (:T, :c, :d),
                                 buoyancy = buoyancy,
                                 coriolis = FPlane(f=1e-4),
                                  closure = AnisotropicMinimumDissipation(C=Cᴬᴹᴰ),
                      boundary_conditions = (T=θ_bcs, u=u_bcs),
                                  forcing = (u=u_sponge, v=v_sponge, w=w_sponge, T=T_sponge,
-                                            c1=c1_forcing, c3=c3_forcing, c24=c24_forcing,
-                                            d1=d1_forcing, d3=d3_forcing, d24=d24_forcing)
+                                            c=c_forcing, d=d_forcing)
                                 )
 
 # # Set Initial condition
@@ -255,15 +246,7 @@ function initial_temperature(x, y, z)
     end
 end
 
-set!(model,
-     T   = initial_temperature,
-     c1  = (x, y, z) -> c_target(x, y, z, 0),
-     c3  = (x, y, z) -> c_target(x, y, z, 0),
-     c24 = (x, y, z) -> c_target(x, y, z, 0),
-     d1  = (x, y, z) -> d_target(x, y, z, 0),
-     d3  = (x, y, z) -> d_target(x, y, z, 0),
-     d24 = (x, y, z) -> d_target(x, y, z, 0),
-    )
+set!(model, T = initial_temperature)
 
 # # Prepare the simulation
 
@@ -363,7 +346,7 @@ if make_animation
 
     xw, yw, zw = nodes(model.velocities.w)
     xu, yu, zu = nodes(model.velocities.u)
-    xc, yc, zc = nodes(model.tracers.c1)
+    xc, yc, zc = nodes(model.tracers.c)
 
     xw, yw, zw = xw[:], yw[:], zw[:]
     xu, yu, zu = xu[:], yu[:], zu[:]
@@ -403,24 +386,19 @@ if make_animation
         w = file["timeseries/w/$iter"][:, 1, :]
         u = file["timeseries/u/$iter"][:, 1, :]
         v = file["timeseries/v/$iter"][:, 1, :]
-        c1 = file["timeseries/c1/$iter"][:, 1, :]
-        d1 = file["timeseries/d1/$iter"][:, 1, :]
+        c = file["timeseries/c/$iter"][:, 1, :]
 
         U = statistics_file["timeseries/u/$iter"][1, 1, :]
         V = statistics_file["timeseries/v/$iter"][1, 1, :]
         E = statistics_file["timeseries/tke/$iter"][1, 1, :]
         T = statistics_file["timeseries/T/$iter"][1, 1, :]
-        C1  = statistics_file["timeseries/c1/$iter"][1, 1, :]
-        C3  = statistics_file["timeseries/c3/$iter"][1, 1, :]
-        C24 = statistics_file["timeseries/c24/$iter"][1, 1, :]
-        D1  = statistics_file["timeseries/d1/$iter"][1, 1, :]
-        D3  = statistics_file["timeseries/d3/$iter"][1, 1, :]
-        D24 = statistics_file["timeseries/d24/$iter"][1, 1, :]
+        C = statistics_file["timeseries/c/$iter"][1, 1, :]
+        D = statistics_file["timeseries/d/$iter"][1, 1, :]
 
         wlim = 0.02
         clim = 0.8
 
-        cmax = maximum(abs, c1)
+        cmax = maximum(abs, c)
 
         wlevels = nice_divergent_levels(w, wlim)
 
@@ -431,8 +409,8 @@ if make_animation
 
         U_plot = plot([U, V, sqrt.(E)], zc, label=["u" "v" "√E"], linewidth=[1 1 2], legend=:bottom)
 
-        C_plot = plot([C1 C3 C24 D1 D3 D24], zc,
-                      label = ["C₁" "C₃" "C₁₂" "C₂₄" "D₁" "D₃" "D₁₂" "D₂₄"],
+        C_plot = plot([C D], zc,
+                      label = ["C" "D"],
                       legend=:bottom,
                        xlim = (0, 1))
 
@@ -446,7 +424,7 @@ if make_animation
                                  xlabel = "x (m)",
                                  ylabel = "z (m)")
 
-        c1xz_plot = contourf(xc, zc, c1';
+        cxz_plot = contourf(xc, zc, c';
                                   color = :thermal,
                             aspectratio = :equal,
                                   clims = (0, clim),
@@ -456,7 +434,7 @@ if make_animation
                                  xlabel = "x (m)",
                                  ylabel = "z (m)")
 
-        d1xz_plot = contourf(xc, zc, d1';
+        dxz_plot = contourf(xc, zc, d';
                                   color = :thermal,
                             aspectratio = :equal,
                                   clims = (0, clim),
@@ -468,15 +446,15 @@ if make_animation
 
         w_title = @sprintf("w(x, y=0, z, t=%s) (m/s)", prettytime(t))
         T_title = "T"
-        c1_title = @sprintf("c₁(x, y=0, z, t=%s)", prettytime(t))
+        c_title = @sprintf("c(x, y=0, z, t=%s)", prettytime(t))
         U_title = "U and V"
-        d1_title = @sprintf("d₁(x, y=0, z, t=%s)", prettytime(t))
-        C_title = "C's and D's"
+        d_title = @sprintf("d(x, y=0, z, t=%s)", prettytime(t))
+        C_title = "C and D"
 
-        plot(wxz_plot, T_plot, c1xz_plot, U_plot, d1xz_plot, C_plot, layout=(3, 2),
+        plot(wxz_plot, T_plot, cxz_plot, U_plot, dxz_plot, C_plot, layout=(3, 2),
              size = (1000, 1000),
              link = :y,
-             title = [w_title T_title c1_title U_title d1_title C_title])
+             title = [w_title T_title c_title U_title d_title C_title])
 
         iter == iterations[end] && close(file)
     end
