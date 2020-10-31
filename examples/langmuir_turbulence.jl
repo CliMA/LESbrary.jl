@@ -35,7 +35,7 @@ using Oceananigans.Fields: PressureField
 using Oceananigans.Buoyancy: BuoyancyTracer
 using Oceananigans.SurfaceWaves: UniformStokesDrift
 
-using LESbrary.TurbulenceStatistics: TurbulentKineticEnergy
+using LESbrary.TurbulenceStatistics: TurbulentKineticEnergy, ShearProduction, ViscousDissipation
 using LESbrary.TurbulenceStatistics: first_through_second_order, turbulent_kinetic_energy_budget
 
 "Returns a dictionary of command line arguments."
@@ -217,7 +217,6 @@ simulation = Simulation(model, iteration_interval = 10,
 prefix = @sprintf("langmuir_turbulence_Nx%d_Nz%d", grid.Nx, grid.Nz)
 data_directory = joinpath(@__DIR__, "..", "data", prefix) # save data in /data/prefix
 
-#=
 # "Primitive" statistics
 
 b = BuoyancyField(model)
@@ -282,13 +281,15 @@ simulation.output_writers[:xy] =
 simulation.output_writers[:statistics] =
     JLD2OutputWriter(model, statistics_to_output,
                      schedule = TimeInterval(snapshot_time_interval),
-                       prefix = prefix * "_statistics",
+                           prefix = prefix * "_statistics",
                           dir = data_directory,
                         force = force)
 
 simulation.output_writers[:averaged_statistics] =
     JLD2OutputWriter(model, statistics_to_output,
-                     schedule = AveragedTimeInterval(averages_time_interval, window=averages_time_window, stride=averages_stride),
+                     schedule = AveragedTimeInterval(averages_time_interval,
+                                                     window = averages_time_window,
+                                                     stride = averages_stride),
                        prefix = prefix * "_averaged_statistics",
                           dir = data_directory,
                         force = force)
@@ -317,6 +318,15 @@ function divergent_levels(c, clim, nlevels=31)
     cmax = maximum(abs, c)
     clim < cmax && (levels = vcat([-cmax], levels, [cmax]))
     return (-clim, clim), levels
+end
+
+function sequential_levels(c, clims, nlevels=31)
+    levels = collect(range(clims[1], stop=clims[2], length=nlevels))
+    cmin = minimum(c)
+    cmax = maximum(c)
+    cmin < clims[1] && pushfirst!(levels, cmin)
+    cmax > clims[2] && push!(levels, cmax)
+    return clims, levels
 end
 
 @info "Making an animation from the saved data..."
@@ -357,7 +367,7 @@ anim = @animate for (i, iter) in enumerate(iterations)
                              xlabel = "x (m)",
                              ylabel = "z (m)")
 
-    exz_plot = contourf(xe, ze, clamp.(exz, elims[1], elims[2])';
+    exz_plot = contourf(xc, zc, clamp.(exz, elims[1], elims[2])';
                               color = :thermal,
                           linewidth = 0,
                         aspectratio = :equal,
@@ -372,7 +382,7 @@ anim = @animate for (i, iter) in enumerate(iterations)
     u_title = @sprintf("u(y=0, t=%s) (m s⁻¹)", prettytime(t))
     e_title = @sprintf("e(y=0, t=%s) (m s⁻¹)", prettytime(t))
 
-    plot(wxy_plot, uxz_plot, exz_plot, layout=(1, 2), size=(1000, 600),
+    plot(wxy_plot, uxz_plot, exz_plot, layout=(3, 1), size=(1200, 1000),
          title = [w_title u_title e_title])
 
     if iter == iterations[end]
@@ -382,7 +392,6 @@ anim = @animate for (i, iter) in enumerate(iterations)
 end
 
 mp4(anim, prefix * ".mp4", fps = 8)
-=#
 
 ##### Turbulent kinetic energy budget analysis
 
