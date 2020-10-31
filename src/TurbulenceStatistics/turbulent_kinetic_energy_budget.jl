@@ -35,17 +35,16 @@ Note that these diagnostics do not compile on the GPU currently.
 """
 function turbulent_kinetic_energy_budget(model;
                                          with_flux_divergences = false,
+                                         w_scratch = ZFaceField(model.architecture, model.grid),
+                                         c_scratch = CellField(model.architecture, model.grid),
                                          b = BuoyancyField(model),
                                          p = PressureField(model),
                                          U = AveragedField(model.velocities.u, dims=(1, 2)),
                                          V = AveragedField(model.velocities.v, dims=(1, 2)),
-                                         w_scratch = ZFaceField(model.architecture, model.grid),
-                                         c_scratch = CellField(model.architecture, model.grid),
+                                         e = TurbulentKineticEnergy(model, U=U, V=V),
+                                         shear_production = ShearProduction(model, data=c_scratch.data, U=U, V=V),
+                                         dissipation = ViscousDissipation(model, data=c_scratch.data),
                                         )
-
-    e = TurbulentKineticEnergy(model, U=U, V=V)
-    shear_production = ShearProduction(model, data=c_scratch.data, U=U, V=V)
-    dissipation = ViscousDissipation(model, data=c_scratch.data)
 
     u, v, w = model.velocities
 

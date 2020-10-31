@@ -48,10 +48,12 @@ function compute!(sp::ShearProduction)
     return nothing
 end
 
+@inline w∂zΨ(i, j, k, grid, w, Ψ) = @inbounds w[i, j, k] * ∂zᵃᵃᶠ(i, j, k, grid, Ψ)
+
 @kernel function compute_shear_production!(shear_production, grid, u, v, w, U, V)
     i, j, k = @index(Global, NTuple)
 
-    @inbounds shear_production[i, j, k] = (
+    @inbounds shear_production[i, j, k] = - (
         ℑxᶜᵃᵃ(i, j, k, grid, ψ′, u, U) * ℑzᵃᵃᶜ(i, j, k, grid, w∂zΨ, w, U) +
         ℑyᵃᶜᵃ(i, j, k, grid, ψ′, v, U) * ℑzᵃᵃᶜ(i, j, k, grid, w∂zΨ, w, V) )
 end

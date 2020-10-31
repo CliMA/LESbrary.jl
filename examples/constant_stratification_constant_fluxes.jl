@@ -200,6 +200,7 @@ data_directory = joinpath(@__DIR__, "..", "data", prefix) # save data in /data/p
 
 slice_interval = 15minute
 
+#=
 # Copy this file into the directory with data
 mkpath(data_directory)
 cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
@@ -259,6 +260,7 @@ simulation.output_writers[:averaged_statistics] = JLD2OutputWriter(model, statis
 LESbrary.Utils.print_banner(simulation)
 
 run!(simulation)
+=#
 
 # # Load and plot turbulence statistics
 
@@ -281,15 +283,10 @@ iterations = parse.(Int, keys(file["timeseries/t"]))
 
 # This utility is handy for calculating nice contour intervals:
 
-function nice_divergent_levels(c, clim)
-    levels = range(-clim, stop=clim, length=40)
-
+function divergent_levels(c, clim, nlevels=31)
+    levels = range(-clim, stop=clim, length=nlevels)
     cmax = maximum(abs, c)
-
-    if clim < cmax # add levels on either end
-        levels = vcat([-cmax], range(-clim, stop=clim, length=40), [cmax])
-    end
-
+    clim < cmax && (levels = vcat([-cmax], levels, [cmax]))
     return levels
 end
 
@@ -317,35 +314,41 @@ anim = @animate for (i, iter) in enumerate(iterations)
     C  = statistics_file["timeseries/c/$iter"][1, 1, :]
     D  = statistics_file["timeseries/d/$iter"][1, 1, :]
 
-    wlim = 0.02
-    clim = 0.8
-    dlim = 1.2
-
-    cmax = maximum(abs, c)
-    dmax = maximum(abs, d)
+    cmax = maximum(abs, c) + 1e-9
+    clim = 0.8 * cmax
 
     clevels = cmax > clim ? vcat(range(0, stop=clim, length=40), [cmax]) :
                                  range(0, stop=clim, length=40)
 
-    dlevels = dmax > dlim ? vcat(range(0, stop=dlim, length=40), [dmax]) :
-                                 range(0, stop=dlim, length=40)
+    wlim = 0.02
+    ulim = 0.8 * maximum(abs, u) + 1e-9
 
-    wlevels = nice_divergent_levels(w, wlim)
+    wlevels = divergent_levels(w, wlim)
+    ulevels = divergent_levels(u, ulim)
 
-    T_plot = plot(T, zc, label="T", xlim=(initial_temperature(0, 0, -grid.Lz), θ_surface), legend=:bottom)
+    T_plot = plot(T, zc, label="T", legend=:bottom)
 
     U_plot = plot([U, V, sqrt.(E)], zc, label=["u" "v" "√E"], linewidth=[1 1 2], legend=:bottom)
 
     C_plot = plot([C D], zc,
                   label = ["C" "D"],
-                  legend=:bottom,
-                   xlim = (0, 1))
+                  legend=:bottom)
 
     wxz_plot = contourf(xw, zw, w';
                               color = :balance,
                         aspectratio = :equal,
                               clims = (-wlim, wlim),
                              levels = wlevels,
+                              xlims = (0, grid.Lx),
+                              ylims = (-grid.Lz, 0),
+                             xlabel = "x (m)",
+                             ylabel = "z (m)")
+
+    uxz_plot = contourf(xu, zu, u';
+                              color = :balance,
+                        aspectratio = :equal,
+                              clims = (-ulim, ulim),
+                             levels = ulevels,
                               xlims = (0, grid.Lx),
                               ylims = (-grid.Lz, 0),
                              xlabel = "x (m)",
@@ -361,29 +364,22 @@ anim = @animate for (i, iter) in enumerate(iterations)
                              xlabel = "x (m)",
                              ylabel = "z (m)")
 
-    dxz_plot = contourf(xc, zc, d';
-                              color = :thermal,
-                        aspectratio = :equal,
-                              clims = (0, clim),
-                             levels = clevels,
-                              xlims = (0, grid.Lx),
-                              ylims = (-grid.Lz, 0),
-                             xlabel = "x (m)",
-                             ylabel = "z (m)")
-
     w_title = @sprintf("w(x, y=0, z, t=%s) (m/s)", prettytime(t))
     T_title = "T"
-    c_title = @sprintf("c(x, y=0, z, t=%s)", prettytime(t))
+    u_title = @sprintf("u(x, y=0, z, t=%s)", prettytime(t))
     U_title = "U and V"
-    d_title = @sprintf("d(x, y=0, z, t=%s)", prettytime(t))
+    c_title = @sprintf("c(x, y=0, z, t=%s)", prettytime(t))
     C_title = "C's and D's"
 
-    plot(wxz_plot, T_plot, cxz_plot, U_plot, dxz_plot, C_plot, layout=(3, 2),
+    plot(wxz_plot, T_plot, uxz_plot, U_plot, cxz_plot, C_plot, layout=(3, 2),
          size = (1000, 1000),
          link = :y,
-         title = [w_title T_title c_title U_title d_title C_title])
+         title = [w_title T_title u_title U_title c_title C_title])
 
-    iter == iterations[end] && close(file)
+    if iter == iterations[end]
+        close(file)
+        close(statistics_file)
+    end
 end
 
 gif(anim, prefix * ".gif", fps = 8)
