@@ -380,16 +380,16 @@ if make_animation
         D[i, :] .= statistics_file["timeseries/d/$iter"][1, 1, :]
     end
 
-    cmin = minimum(C)
-    cmax = maximum(C)
-    dmin = minimum(D)
-    dmax = maximum(D)
+    cmin = minimum(C) - 1e-9
+    cmax = maximum(C) + 1e-9
+    dmin = minimum(D) - 1e-9
+    dmax = maximum(D) + 1e-9
 
     umax = max(
                maximum(abs, U),
                maximum(abs, V),
                maximum(abs, sqrt.(E))
-              )
+              ) + 1e-9
 
     # Finally, we're ready to animate.
 
