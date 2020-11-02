@@ -20,16 +20,17 @@ using Oceananigans.Buoyancy
 using Oceananigans.BoundaryConditions
 using Oceananigans.Grids
 using Oceananigans.Forcings
+using Oceananigans.Utils
+using Oceananigans.Advection
+using Oceananigans.Fields
 
-using Oceananigans.Fields: AveragedField
-using Oceananigans.Advection: WENO5
-using Oceananigans.Utils: minute, hour, GiB, prettytime
-using Oceananigans.OutputWriters: JLD2OutputWriter, FieldSlicer
+using Oceananigans.Fields: PressureField
+using Oceananigans.OutputWriters
 
 using LESbrary.Utils: SimulationProgressMessenger
 using LESbrary.NearSurfaceTurbulenceModels: SurfaceEnhancedModelConstant
-using LESbrary.TurbulenceStatistics: first_through_second_order
-using LESbrary.TurbulenceStatistics: TurbulentKineticEnergy
+using LESbrary.TurbulenceStatistics: first_through_second_order, turbulent_kinetic_energy_budget
+using LESbrary.TurbulenceStatistics: TurbulentKineticEnergy, ShearProduction, ViscousDissipation
 
 # To start, we ensure that all packages in the LESbrary environment are installed:
 
@@ -130,9 +131,8 @@ end
 args = parse_command_line_arguments()
 
 snapshot_time_interval = 10minutes
-averages_time_interval = 24hours
-averages_time_window = inertial_period
-averages_stride = 100
+averages_time_interval = 3hours
+averages_time_window = 15minutes
 
 slice_depth = 8.0
 
@@ -152,6 +152,9 @@ grid = RegularCartesianGrid(size=(Nh, Nh, Nz), x=(0, 512), y=(0, 512), z=(-256, 
 
 Qᵇ = args["buoyancy-flux"]
 Qᵘ = args["momentum-flux"]
+
+prefix = @sprintf("three_layer_constant_fluxes_Qu%.1e_Qb%.1e_Nh%d_Nz%d", abs(Qᵘ), Qᵇ, grid.Nx, grid.Nz)
+data_directory = joinpath(@__DIR__, "..", "data", prefix) # save data in /data/prefix
 
 surface_layer_depth = args["surface-layer-depth"]
 thermocline_width = args["thermocline-width"]
@@ -190,11 +193,10 @@ z_deep = grid.zC[k_deep]
 θ_transition = θ_surface + z_transition * dθdz_surface_layer
 θ_deep = θ_transition + (z_deep - z_transition) * dθdz_thermocline
 
-@inline passive_tracer_forcing(x, y, z, t, p) =
-    1 / p.τ_source * exp((z - p.z₀)/ p.λ) - 1 / p.τ_damping
- 
-c_forcing  = Forcing(passive_tracer_forcing, parameters=(z₀=  0.0, λ=24.0, τ_source=12hour, τ_damping=24hour))
-d_forcing  = Forcing(passive_tracer_forcing, parameters=(z₀=-96.0, λ=24.0, τ_source=12hour, τ_damping=24hour))
+@inline passive_tracer_forcing(x, y, z, t, p) = 1 / p.τ_source * exp(-(z - p.z₀)^2 / (2 * p.λ^2)) - 1 / p.τ_damping
+
+c_forcing  = Forcing(passive_tracer_forcing, parameters=(z₀=  0.0, λ=10.0, τ_source=12hour, τ_damping=24hour))
+d_forcing  = Forcing(passive_tracer_forcing, parameters=(z₀=-64.0, λ=10.0, τ_source=12hour, τ_damping=24hour))
 
 # Sponge layer for u, v, w, and T
 gaussian_mask = GaussianMask{:z}(center=-grid.Lz, width=grid.Lz/10)
@@ -268,12 +270,8 @@ simulation = Simulation(model, Δt=wizard, stop_time=stop_time, iteration_interv
 
 # # Prepare Output
 
-pickup = args["pickup"]
+pickup = false
 force = pickup ? false : true
-
-prefix = @sprintf("three_layer_constant_fluxes_Qu%.1e_Qb%.1e_Nh%d_Nz%d", abs(Qᵘ), Qᵇ, grid.Nx, grid.Nz)
-
-data_directory = joinpath(@__DIR__, "..", "data", prefix) # save data in /data/prefix
 
 simulation.output_writers[:checkpointer] =
     Checkpointer(model, schedule = TimeInterval(stop_time/3), prefix = prefix * "_checkpointer", dir = data_directory)
@@ -340,15 +338,12 @@ simulation.output_writers[:statistics] =
 simulation.output_writers[:averaged_statistics] =
     JLD2OutputWriter(model, statistics_to_output,
                      schedule = AveragedTimeInterval(averages_time_interval,
-                                                     window = averages_time_window,
-                                                     stride = averages_stride),
+                                                     window = averages_time_window),
                        prefix = prefix * "_averaged_statistics",
                           dir = data_directory,
                         force = force)
 
 # # Run
-
-LESbrary.Utils.print_banner(simulation)
 
 run!(simulation)
 
@@ -369,25 +364,32 @@ if make_animation
     xu, yu, zu = xu[:], yu[:], zu[:]
     xc, yc, zc = xc[:], yc[:], zc[:]
 
-    #file = jldopen(simulation.output_writers[:slices].filepath)
-    file = jldopen(joinpath(data_directory, prefix * "_slices.jld2"))
+    file = jldopen(joinpath(data_directory, prefix * "_xz.jld2"))
     statistics_file = jldopen(joinpath(data_directory, prefix * "_statistics.jld2"))
 
     iterations = parse.(Int, keys(file["timeseries/t"]))
 
-    # This utility is handy for calculating nice contour intervals:
+    U, V, E, T, C, D = [zeros(length(iterations), grid.Nz) for i = 1:6]
 
-    function nice_divergent_levels(c, clim)
-        levels = range(-clim, stop=clim, length=40)
-
-        cmax = maximum(abs, c)
-
-        if clim < cmax # add levels on either end
-            levels = vcat([-cmax], range(-clim, stop=clim, length=40), [cmax])
-        end
-
-        return levels
+    for (i, iter) in enumerate(iterations)
+        U[i, :] .= statistics_file["timeseries/u/$iter"][1, 1, :]
+        V[i, :] .= statistics_file["timeseries/v/$iter"][1, 1, :]
+        E[i, :] .= statistics_file["timeseries/e/$iter"][1, 1, :]
+        T[i, :] .= statistics_file["timeseries/T/$iter"][1, 1, :]
+        C[i, :] .= statistics_file["timeseries/c/$iter"][1, 1, :]
+        D[i, :] .= statistics_file["timeseries/d/$iter"][1, 1, :]
     end
+
+    cmin = minimum(C)
+    cmax = maximum(C)
+    dmin = minimum(D)
+    dmax = maximum(D)
+
+    umax = max(
+               maximum(abs, U),
+               maximum(abs, V),
+               maximum(abs, sqrt.(E))
+              )
 
     # Finally, we're ready to animate.
 
@@ -399,39 +401,29 @@ if make_animation
 
         t = file["timeseries/t/$iter"]
 
-        ## Load 3D fields from file
         w = file["timeseries/w/$iter"][:, 1, :]
         u = file["timeseries/u/$iter"][:, 1, :]
         v = file["timeseries/v/$iter"][:, 1, :]
         c = file["timeseries/c/$iter"][:, 1, :]
+        d = file["timeseries/d/$iter"][:, 1, :]
 
-        U = statistics_file["timeseries/u/$iter"][1, 1, :]
-        V = statistics_file["timeseries/v/$iter"][1, 1, :]
-        E = statistics_file["timeseries/tke/$iter"][1, 1, :]
-        T = statistics_file["timeseries/T/$iter"][1, 1, :]
-        C = statistics_file["timeseries/c/$iter"][1, 1, :]
-        D = statistics_file["timeseries/d/$iter"][1, 1, :]
+        wlim = 2 * umax
+        wlevels = range(-wlim, stop=wlim, length=41)
+        clevels = range(cmin, stop=cmax, length=40)
+        dlevels = range(dmin, stop=dmax, length=40)
 
-        wlim = 0.02
-        clim = 0.8
+        T_plot = plot(T[i, :], zc, label=nothing, xlim=(initial_temperature(0, 0, -grid.Lz), θ_surface),
+                      xlabel = "T (ᵒC)", ylabel = "z (m)")
 
-        cmax = maximum(abs, c)
+        U_plot = plot([U[i, :] V[i, :] sqrt.(E[i, :])], zc,
+                      label=["u" "v" "√E"], linewidth=[1 1 2], xlim=(-umax, umax),
+                      legend=:bottomleft,
+                      xlabel = "Velocities (m s⁻¹)", ylabel = "z (m)")
 
-        wlevels = nice_divergent_levels(w, wlim)
+        C_plot = plot([C[i, :] D[i, :]], zc, label = ["C" "D"], legend=:bottom,
+                      xlabel = "Tracers", ylabel = "z (m)")
 
-        clevels = cmax > clim ? vcat(range(0, stop=clim, length=40), [cmax]) :
-                                     range(0, stop=clim, length=40)
-
-        T_plot = plot(T, zc, label="T", xlim=(initial_temperature(0, 0, -grid.Lz), θ_surface), legend=:bottom)
-
-        U_plot = plot([U, V, sqrt.(E)], zc, label=["u" "v" "√E"], linewidth=[1 1 2], legend=:bottom)
-
-        C_plot = plot([C D], zc,
-                      label = ["C" "D"],
-                      legend=:bottom,
-                       xlim = (0, 1))
-
-        wxz_plot = contourf(xw, zw, w';
+        wxz_plot = contourf(xw, zw, clamp.(w, -wlim, wlim)';
                                   color = :balance,
                             aspectratio = :equal,
                                   clims = (-wlim, wlim),
@@ -441,34 +433,35 @@ if make_animation
                                  xlabel = "x (m)",
                                  ylabel = "z (m)")
 
-        cxz_plot = contourf(xc, zc, c';
+        cxz_plot = contourf(xc, zc, clamp.(c, cmin, cmax)';
                                   color = :thermal,
                             aspectratio = :equal,
-                                  clims = (0, clim),
                                  levels = clevels,
+                                  clims = (cmin, cmax),
                                   xlims = (0, grid.Lx),
                                   ylims = (-grid.Lz, 0),
                                  xlabel = "x (m)",
                                  ylabel = "z (m)")
 
-        dxz_plot = contourf(xc, zc, d';
+        dxz_plot = contourf(xc, zc, clamp.(d, dmin, dmax)';
                                   color = :thermal,
                             aspectratio = :equal,
-                                  clims = (0, clim),
-                                 levels = clevels,
+                                 levels = dlevels,
+                                  clims = (dmin, dmax),
                                   xlims = (0, grid.Lx),
                                   ylims = (-grid.Lz, 0),
                                  xlabel = "x (m)",
                                  ylabel = "z (m)")
 
         w_title = @sprintf("w(x, y=0, z, t=%s) (m/s)", prettytime(t))
-        T_title = "T"
+        T_title = ""
         c_title = @sprintf("c(x, y=0, z, t=%s)", prettytime(t))
-        U_title = "U and V"
+        U_title = ""
         d_title = @sprintf("d(x, y=0, z, t=%s)", prettytime(t))
-        C_title = "C and D"
+        C_title = ""
 
-        plot(wxz_plot, T_plot, cxz_plot, U_plot, dxz_plot, C_plot, layout=(3, 2),
+        plot(wxz_plot, T_plot, cxz_plot, U_plot, dxz_plot, C_plot,
+             layout = Plots.grid(3, 2, widths=(0.7, 0.3)),
              size = (1000, 1000),
              link = :y,
              title = [w_title T_title c_title U_title d_title C_title])
