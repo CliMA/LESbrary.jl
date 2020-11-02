@@ -90,7 +90,7 @@ function parse_command_line_arguments()
 
         "--surface-layer-buoyancy-gradient"
             help = "The buoyancy gradient in the surface layer in units s⁻²."
-            default = 1e-6
+            default = 2e-6
             arg_type = Float64
 
         "--thermocline-buoyancy-gradient"
@@ -100,7 +100,7 @@ function parse_command_line_arguments()
 
         "--deep-buoyancy-gradient"
             help = "The buoyancy gradient below the thermocline in units s⁻²."
-            default = 1e-6
+            default = 2e-6
             arg_type = Float64
 
         "--hours"
@@ -115,7 +115,7 @@ function parse_command_line_arguments()
 
         "--plot-statistics"
             help = "Plot some turbulence statistics after the simulation is complete."
-            default = false
+            default = true
             arg_type = Bool
     end
 
@@ -124,9 +124,17 @@ end
 
 # # Setup
 #
-# We start by parsing the arguments received on the command line.
+# We start by parsing the arguments received on the command line, and prescribing
+# a few additional output-related arguments.
 
 args = parse_command_line_arguments()
+
+snapshot_time_interval = 10minutes
+averages_time_interval = 24hours
+averages_time_window = inertial_period
+averages_stride = 100
+
+slice_depth = 8.0
 
 # Domain
 #
@@ -213,7 +221,7 @@ model = IncompressibleModel(architecture = GPU(),
                                  tracers = (:T, :c, :d),
                                 buoyancy = buoyancy,
                                 coriolis = FPlane(f=1e-4),
-                                 closure = AnisotropicMinimumDissipation(C=Cᴬᴹᴰ),
+                                 closure = AnisotropicMinimumDissipation(),
                      boundary_conditions = (T=θ_bcs, u=u_bcs),
                                  forcing = (u=u_sponge, v=v_sponge, w=w_sponge, T=T_sponge,
                                             c=c_forcing, d=d_forcing)
@@ -253,81 +261,90 @@ set!(model, T = initial_temperature)
 # Adaptive time-stepping
 wizard = TimeStepWizard(cfl=0.8, Δt=1.0, max_change=1.1, max_Δt=30.0)
 
-stop_hours = args["hours"]
+stop_time = args["hours"] * hour
 
-simulation = Simulation(model, Δt=wizard, stop_time=stop_hours * hour, iteration_interval=10,
+simulation = Simulation(model, Δt=wizard, stop_time=stop_time, iteration_interval=10,
                         progress=SimulationProgressMessenger(model, wizard))
 
-# Prepare Output
+# # Prepare Output
+
+pickup = args["pickup"]
+force = pickup ? false : true
 
 prefix = @sprintf("three_layer_constant_fluxes_Qu%.1e_Qb%.1e_Nh%d_Nz%d", abs(Qᵘ), Qᵇ, grid.Nx, grid.Nz)
 
 data_directory = joinpath(@__DIR__, "..", "data", prefix) # save data in /data/prefix
 
-slice_interval = 15minute
+simulation.output_writers[:checkpointer] =
+    Checkpointer(model, schedule = TimeInterval(stop_time/3), prefix = prefix * "_checkpointer", dir = data_directory)
 
 # Copy this file into the directory with data
 mkpath(data_directory)
 cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
 
-simulation.output_writers[:fields] = JLD2OutputWriter(model, merge(model.velocities, model.tracers); 
-                                                           schedule = TimeInterval(24hour), # every quarter period
-                                                             prefix = prefix * "_fields",
-                                                                dir = data_directory,
-                                                       max_filesize = 2GiB,
-                                                              force = true)
+# Prepare turbulence statistics
+k_xy_slice = searchsortedfirst(grid.zF[:], -slice_depth)
 
-simulation.output_writers[:slices] = JLD2OutputWriter(model, merge(model.velocities, model.tracers),
-                                                           schedule = TimeInterval(slice_interval),
-                                                             prefix = prefix * "_slices",
-                                                       field_slicer = FieldSlicer(j=floor(Int, grid.Ny/2)),
-                                                                dir = data_directory,
-                                                              force = true)
-# Horizontally-averaged turbulence statistics
-
-# Create scratch space for online calculations
 b = BuoyancyField(model)
-c_scratch = CellField(model.architecture, model.grid)
-u_scratch = XFaceField(model.architecture, model.grid)
-v_scratch = YFaceField(model.architecture, model.grid)
+p = PressureField(model)
 w_scratch = ZFaceField(model.architecture, model.grid)
+c_scratch = CellField(model.architecture, model.grid)
 
-# Build output dictionaries
-turbulence_statistics = first_through_second_order(model, c_scratch = c_scratch,
-                                                          u_scratch = u_scratch,
-                                                          v_scratch = v_scratch,
-                                                          w_scratch = w_scratch,
-                                                                  b = b)
+primitive_statistics = first_through_second_order(model, b=b, p=p, w_scratch=w_scratch, c_scratch=c_scratch)
 
-# The AveragedFields defined by `turbulent_kinetic_energy_budget` cannot be computed
-# on the GPU yet, so this block is commented out.
+U = primitive_statistics[:u]
+V = primitive_statistics[:v]
 
-# tke_budget_statistics = turbulent_kinetic_energy_budget(model, c_scratch = c_scratch,
-#                                                                u_scratch = u_scratch,
-#                                                                v_scratch = v_scratch,
-#                                                                w_scratch = w_scratch,
-#                                                                        b = b)
-# 
-# turbulence_statistics = merge(turbulence_statistics, tke_budget_statistics)
+e = TurbulentKineticEnergy(model, U=U, V=V)
+shear_production = ShearProduction(model, data=c_scratch.data, U=U, V=V)
+dissipation = ViscousDissipation(model, data=c_scratch.data)
 
-turbulent_kinetic_energy = TurbulentKineticEnergy(model,
-                                                  data = c_scratch.data,
-                                                  U = turbulence_statistics[:u],
-                                                  V = turbulence_statistics[:v])
+tke_budget_statistics = turbulent_kinetic_energy_budget(model, b=b, p=p, U=U, V=V, e=e,
+                                                        shear_production=shear_production, dissipation=dissipation)
 
-turbulence_statistics[:tke] = AveragedField(turbulent_kinetic_energy, dims=(1, 2))
+fields_to_output = merge(model.velocities, model.tracers, (e=e, ϵ=dissipation))
 
-simulation.output_writers[:statistics] = JLD2OutputWriter(model, turbulence_statistics,
-                                                               schedule = TimeInterval(slice_interval),
-                                                                 prefix = prefix * "_statistics",
-                                                                    dir = data_directory,
-                                                                  force = true)
+statistics_to_output = merge(primitive_statistics, tke_budget_statistics)
 
-simulation.output_writers[:averaged_statistics] = JLD2OutputWriter(model, turbulence_statistics,
-                                                                   schedule = AveragedTimeInterval(3hour, window=30minute),
-                                                                     prefix = prefix * "_averaged_statistics",
-                                                                        dir = data_directory,
-                                                                      force = true)
+simulation.output_writers[:xz] =
+    JLD2OutputWriter(model, fields_to_output,
+                         schedule = TimeInterval(snapshot_time_interval),
+                           prefix = prefix * "_xz",
+                     field_slicer = FieldSlicer(j=1),
+                              dir = data_directory,
+                            force = force)
+
+simulation.output_writers[:yz] =
+    JLD2OutputWriter(model, fields_to_output,
+                         schedule = TimeInterval(snapshot_time_interval),
+                           prefix = prefix * "_yz",
+                     field_slicer = FieldSlicer(i=1),
+                              dir = data_directory,
+                            force = force)
+
+simulation.output_writers[:xy] =
+    JLD2OutputWriter(model, fields_to_output,
+                         schedule = TimeInterval(snapshot_time_interval),
+                           prefix = prefix * "_xy",
+                     field_slicer = FieldSlicer(k=k_xy_slice),
+                              dir = data_directory,
+                            force = force)
+
+simulation.output_writers[:statistics] =
+    JLD2OutputWriter(model, statistics_to_output,
+                     schedule = TimeInterval(snapshot_time_interval),
+                       prefix = prefix * "_statistics",
+                          dir = data_directory,
+                        force = force)
+
+simulation.output_writers[:averaged_statistics] =
+    JLD2OutputWriter(model, statistics_to_output,
+                     schedule = AveragedTimeInterval(averages_time_interval,
+                                                     window = averages_time_window,
+                                                     stride = averages_stride),
+                       prefix = prefix * "_averaged_statistics",
+                          dir = data_directory,
+                        force = force)
 
 # # Run
 

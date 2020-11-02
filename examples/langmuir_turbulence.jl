@@ -252,7 +252,6 @@ fields_to_output = merge(model.velocities, model.tracers,
 pickup = args["pickup"]
 force = pickup ? false : true
 
-
 k_xy_slice = searchsortedfirst(grid.zF[:], -slice_depth)
 
 simulation.output_writers[:checkpointer] =
@@ -285,7 +284,7 @@ simulation.output_writers[:xy] =
 simulation.output_writers[:statistics] =
     JLD2OutputWriter(model, statistics_to_output,
                      schedule = TimeInterval(snapshot_time_interval),
-                           prefix = prefix * "_statistics",
+                       prefix = prefix * "_statistics",
                           dir = data_directory,
                         force = force)
 
