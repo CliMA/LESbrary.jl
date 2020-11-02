@@ -195,8 +195,13 @@ z_deep = grid.zC[k_deep]
 
 @inline passive_tracer_forcing(x, y, z, t, p) = 1 / p.τ_source * exp(-(z - p.z₀)^2 / (2 * p.λ^2)) - 1 / p.τ_damping
 
-c_forcing  = Forcing(passive_tracer_forcing, parameters=(z₀=  0.0, λ=10.0, τ_source=12hour, τ_damping=24hour))
-d_forcing  = Forcing(passive_tracer_forcing, parameters=(z₀=-64.0, λ=10.0, τ_source=12hour, τ_damping=24hour))
+λ = 10.0
+τ = 12hour
+c_damping = √(2π) * λ / τ / 2
+d_damping = √(2π) * λ / τ
+
+c_forcing = Forcing(passive_tracer_forcing, parameters=(z₀=  0.0, λ=λ, τ_source=τ, τ_damping=c_damping))
+d_forcing = Forcing(passive_tracer_forcing, parameters=(z₀=-64.0, λ=λ, τ_source=τ, τ_damping=d_damping))
 
 # Sponge layer for u, v, w, and T
 gaussian_mask = GaussianMask{:z}(center=-grid.Lz, width=grid.Lz/10)
