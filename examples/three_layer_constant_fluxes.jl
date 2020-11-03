@@ -193,15 +193,15 @@ z_deep = grid.zC[k_deep]
 θ_transition = θ_surface + z_transition * dθdz_surface_layer
 θ_deep = θ_transition + (z_deep - z_transition) * dθdz_thermocline
 
-@inline passive_tracer_forcing(x, y, z, t, p) = 1 / p.τ_source * exp(-(z - p.z₀)^2 / (2 * p.λ^2)) - 1 / p.τ_damping
+@inline passive_tracer_forcing(x, y, z, t, p) = p.γ * exp(-(z - p.z₀)^2 / (2 * p.λ^2)) - p.μ
 
 λ = 10.0
-τ = 12hour
-c_damping = √(2π) * λ / τ / 2
-d_damping = √(2π) * λ / τ
+γ = 1 / 12hour
+μᶜ = √(2π) * λ / grid.Lz * γ / 2
+μᵈ = √(2π) * λ / grid.Lz * γ
 
-c_forcing = Forcing(passive_tracer_forcing, parameters=(z₀=  0.0, λ=λ, τ_source=τ, τ_damping=c_damping))
-d_forcing = Forcing(passive_tracer_forcing, parameters=(z₀=-64.0, λ=λ, τ_source=τ, τ_damping=d_damping))
+c_forcing = Forcing(passive_tracer_forcing, parameters=(z₀=  0.0, γ=γ, λ=λ, μ=μᶜ))
+d_forcing = Forcing(passive_tracer_forcing, parameters=(z₀=-64.0, γ=γ, λ=λ, μ=μᵈ))
 
 # Sponge layer for u, v, w, and T
 gaussian_mask = GaussianMask{:z}(center=-grid.Lz, width=grid.Lz/10)
