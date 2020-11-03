@@ -118,6 +118,11 @@ function parse_command_line_arguments()
             help = "Plot some turbulence statistics after the simulation is complete."
             default = true
             arg_type = Bool
+
+        "--pickup"
+            help = "Whether or not to pick the simulation up from latest checkpoint"
+            default = false
+            arg_type = Bool
     end
 
     return parse_args(settings)
@@ -193,15 +198,16 @@ z_deep = grid.zC[k_deep]
 θ_transition = θ_surface + z_transition * dθdz_surface_layer
 θ_deep = θ_transition + (z_deep - z_transition) * dθdz_thermocline
 
-@inline passive_tracer_forcing(x, y, z, t, p) = p.γ * exp(-(z - p.z₀)^2 / (2 * p.λ^2)) - p.μ
+@inline passive_tracer_forcing(x, y, z, t, p) = p.μ⁺ * exp(-(z - p.z₀)^2 / (2 * p.λ^2)) - p.μ⁻
 
-λ = 10.0
-γ = 1 / 12hour
-μᶜ = √(2π) * λ / grid.Lz * γ / 2
-μᵈ = √(2π) * λ / grid.Lz * γ
+λ = 4.0
+μ⁺ = 1 / 6hour
+μ₀ = √(2π) * λ / grid.Lz * μ⁺ / 2
+μ∞ = √(2π) * λ / grid.Lz * μ⁺
 
-c_forcing = Forcing(passive_tracer_forcing, parameters=(z₀=  0.0, γ=γ, λ=λ, μ=μᶜ))
-d_forcing = Forcing(passive_tracer_forcing, parameters=(z₀=-64.0, γ=γ, λ=λ, μ=μᵈ))
+c₀_forcing = Forcing(passive_tracer_forcing, parameters=(z₀=  0.0, λ=λ, μ⁺=μ⁺, μ⁻=μ₀))
+c₁_forcing = Forcing(passive_tracer_forcing, parameters=(z₀=-48.0, λ=λ, μ⁺=μ⁺, μ⁻=μ∞))
+c₂_forcing = Forcing(passive_tracer_forcing, parameters=(z₀=-96.0, λ=λ, μ⁺=μ⁺, μ⁻=μ∞))
 
 # Sponge layer for u, v, w, and T
 gaussian_mask = GaussianMask{:z}(center=-grid.Lz, width=grid.Lz/10)
@@ -225,13 +231,13 @@ model = IncompressibleModel(architecture = GPU(),
                              timestepper = :RungeKutta3,
                                advection = WENO5(),
                                     grid = grid,
-                                 tracers = (:T, :c, :d),
+                                 tracers = (:T, :c₀, :c₁, :c₂),
                                 buoyancy = buoyancy,
                                 coriolis = FPlane(f=1e-4),
                                  closure = AnisotropicMinimumDissipation(),
                      boundary_conditions = (T=θ_bcs, u=u_bcs),
                                  forcing = (u=u_sponge, v=v_sponge, w=w_sponge, T=T_sponge,
-                                            c=c_forcing, d=d_forcing)
+                                            c₀=c₀_forcing, c₁=c₁_forcing, c₂=c₂_forcing)
                                 )
 
 # # Set Initial condition
@@ -275,7 +281,7 @@ simulation = Simulation(model, Δt=wizard, stop_time=stop_time, iteration_interv
 
 # # Prepare Output
 
-pickup = false
+pickup = args["pickup"]
 force = pickup ? false : true
 
 simulation.output_writers[:checkpointer] =
@@ -362,33 +368,31 @@ plot_statistics = args["plot-statistics"]
 if make_animation
 
     xw, yw, zw = nodes(model.velocities.w)
-    xu, yu, zu = nodes(model.velocities.u)
-    xc, yc, zc = nodes(model.tracers.c)
-
-    xw, yw, zw = xw[:], yw[:], zw[:]
-    xu, yu, zu = xu[:], yu[:], zu[:]
-    xc, yc, zc = xc[:], yc[:], zc[:]
+    xc, yc, zc = nodes(model.tracers.c₀)
 
     file = jldopen(joinpath(data_directory, prefix * "_xz.jld2"))
     statistics_file = jldopen(joinpath(data_directory, prefix * "_statistics.jld2"))
 
     iterations = parse.(Int, keys(file["timeseries/t"]))
 
-    U, V, E, T, C, D = [zeros(length(iterations), grid.Nz) for i = 1:6]
+    U, V, E, T, C₀, C₁, C₂ = [zeros(length(iterations), grid.Nz) for i = 1:7]
 
     for (i, iter) in enumerate(iterations)
         U[i, :] .= statistics_file["timeseries/u/$iter"][1, 1, :]
         V[i, :] .= statistics_file["timeseries/v/$iter"][1, 1, :]
         E[i, :] .= statistics_file["timeseries/e/$iter"][1, 1, :]
         T[i, :] .= statistics_file["timeseries/T/$iter"][1, 1, :]
-        C[i, :] .= statistics_file["timeseries/c/$iter"][1, 1, :]
-        D[i, :] .= statistics_file["timeseries/d/$iter"][1, 1, :]
+        C₀[i, :] .= statistics_file["timeseries/c₀/$iter"][1, 1, :]
+        C₁[i, :] .= statistics_file["timeseries/c₁/$iter"][1, 1, :]
+        C₂[i, :] .= statistics_file["timeseries/c₂/$iter"][1, 1, :]
     end
 
-    cmin = minimum(C) - 1e-9
-    cmax = maximum(C) + 1e-9
-    dmin = minimum(D) - 1e-9
-    dmax = maximum(D) + 1e-9
+    c₀min = minimum(C₀) - 1e-9
+    c₀max = maximum(C₀) + 1e-9
+    c₁min = minimum(C₁) - 1e-9
+    c₁max = maximum(C₁) + 1e-9
+    c₂min = minimum(C₂) - 1e-9
+    c₂max = maximum(C₂) + 1e-9
 
     umax = max(
                maximum(abs, U),
@@ -409,13 +413,13 @@ if make_animation
         w = file["timeseries/w/$iter"][:, 1, :]
         u = file["timeseries/u/$iter"][:, 1, :]
         v = file["timeseries/v/$iter"][:, 1, :]
-        c = file["timeseries/c/$iter"][:, 1, :]
-        d = file["timeseries/d/$iter"][:, 1, :]
+        c₀ = file["timeseries/c₀/$iter"][:, 1, :]
+        c₁ = file["timeseries/c₁/$iter"][:, 1, :]
 
         wlim = 2 * umax
         wlevels = range(-wlim, stop=wlim, length=41)
-        clevels = range(cmin, stop=cmax, length=40)
-        dlevels = range(dmin, stop=dmax, length=40)
+        c₀levels = range(c₀min, stop=c₀max, length=40)
+        c₁levels = range(c₁min, stop=c₁max, length=40)
 
         T_plot = plot(T[i, :], zc, label=nothing, xlim=(initial_temperature(0, 0, -grid.Lz), θ_surface),
                       xlabel = "T (ᵒC)", ylabel = "z (m)")
@@ -425,7 +429,7 @@ if make_animation
                       legend=:bottomleft,
                       xlabel = "Velocities (m s⁻¹)", ylabel = "z (m)")
 
-        C_plot = plot([C[i, :] D[i, :]], zc, label = ["C" "D"], legend=:bottom,
+        C_plot = plot([C₀[i, :] C₁[i, :] C₂[i, :]], zc, label = ["C₀" "C₁" "C₂"], legend=:bottom,
                       xlabel = "Tracers", ylabel = "z (m)")
 
         wxz_plot = contourf(xw, zw, clamp.(w, -wlim, wlim)';
@@ -438,38 +442,38 @@ if make_animation
                                  xlabel = "x (m)",
                                  ylabel = "z (m)")
 
-        cxz_plot = contourf(xc, zc, clamp.(c, cmin, cmax)';
-                                  color = :thermal,
-                            aspectratio = :equal,
-                                 levels = clevels,
-                                  clims = (cmin, cmax),
-                                  xlims = (0, grid.Lx),
-                                  ylims = (-grid.Lz, 0),
-                                 xlabel = "x (m)",
-                                 ylabel = "z (m)")
+        c₀xz_plot = contourf(xc, zc, clamp.(c₀, c₀min, c₀max)';
+                                   color = :thermal,
+                             aspectratio = :equal,
+                                  levels = c₀levels,
+                                   clims = (c₀min, c₀max),
+                                   xlims = (0, grid.Lx),
+                                   ylims = (-grid.Lz, 0),
+                                  xlabel = "x (m)",
+                                  ylabel = "z (m)")
 
-        dxz_plot = contourf(xc, zc, clamp.(d, dmin, dmax)';
-                                  color = :thermal,
-                            aspectratio = :equal,
-                                 levels = dlevels,
-                                  clims = (dmin, dmax),
-                                  xlims = (0, grid.Lx),
-                                  ylims = (-grid.Lz, 0),
-                                 xlabel = "x (m)",
-                                 ylabel = "z (m)")
+        c₁xz_plot = contourf(xc, zc, clamp.(c₁, c₁min, c₁max)';
+                                   color = :thermal,
+                             aspectratio = :equal,
+                                  levels = c₁levels,
+                                   clims = (c₁min, c₁max),
+                                   xlims = (0, grid.Lx),
+                                   ylims = (-grid.Lz, 0),
+                                  xlabel = "x (m)",
+                                  ylabel = "z (m)")
 
         w_title = @sprintf("w(x, y=0, z, t=%s) (m/s)", prettytime(t))
         T_title = ""
-        c_title = @sprintf("c(x, y=0, z, t=%s)", prettytime(t))
+        c₀_title = @sprintf("c₀(x, y=0, z, t=%s)", prettytime(t))
         U_title = ""
-        d_title = @sprintf("d(x, y=0, z, t=%s)", prettytime(t))
+        c₁_title = @sprintf("c₁(x, y=0, z, t=%s)", prettytime(t))
         C_title = ""
 
-        plot(wxz_plot, T_plot, cxz_plot, U_plot, dxz_plot, C_plot,
+        plot(wxz_plot, T_plot, c₀xz_plot, U_plot, c₁xz_plot, C_plot,
              layout = Plots.grid(3, 2, widths=(0.7, 0.3)),
              size = (1000, 1000),
              link = :y,
-             title = [w_title T_title c_title U_title d_title C_title])
+             title = [w_title T_title c₀_title U_title c₁_title C_title])
 
         iter == iterations[end] && close(file)
     end
