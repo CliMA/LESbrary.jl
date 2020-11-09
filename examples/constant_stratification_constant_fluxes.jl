@@ -200,7 +200,6 @@ data_directory = joinpath(@__DIR__, "..", "data", prefix) # save data in /data/p
 
 slice_interval = 15minute
 
-#=
 # Copy this file into the directory with data
 mkpath(data_directory)
 cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
@@ -260,7 +259,6 @@ simulation.output_writers[:averaged_statistics] = JLD2OutputWriter(model, statis
 LESbrary.Utils.print_banner(simulation)
 
 run!(simulation)
-=#
 
 # # Load and plot turbulence statistics
 
