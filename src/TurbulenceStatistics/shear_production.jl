@@ -55,7 +55,7 @@ end
 
     @inbounds shear_production[i, j, k] = - (
         ℑxᶜᵃᵃ(i, j, k, grid, ψ′, u, U) * ℑzᵃᵃᶜ(i, j, k, grid, w∂zΨ, w, U) +
-        ℑyᵃᶜᵃ(i, j, k, grid, ψ′, v, U) * ℑzᵃᵃᶜ(i, j, k, grid, w∂zΨ, w, V) )
+        ℑyᵃᶜᵃ(i, j, k, grid, ψ′, v, V) * ℑzᵃᵃᶜ(i, j, k, grid, w∂zΨ, w, V) )
 end
 
 Adapt.adapt_structure(to, sp::ShearProduction) = Adapt.adapt(to, sp.data)
