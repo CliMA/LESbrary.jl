@@ -178,7 +178,7 @@ model = IncompressibleModel(architecture = GPU(),
 ## Noise with 8 m decay scale
 Ξ(z) = rand() * exp(z / 8)
 
-initial_temperature(x, y, z) = θ_surface + dθdz + 1e-6 * Ξ(z) * dθdz * grid.Lz
+initial_temperature(x, y, z) = θ_surface + dθdz * z + 1e-6 * Ξ(z) * dθdz * grid.Lz
                    
 set!(model, T = initial_temperature)
 

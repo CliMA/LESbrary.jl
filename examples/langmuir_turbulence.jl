@@ -98,6 +98,8 @@ Qᵘ = -3.72e-5 # m² s⁻²
 Qᵇ = 2.307e-9 # m³ s⁻²
 N² = 1.936e-5 # s⁻²
 
+initial_mixed_layer_depth = 33 # m
+
 inertial_period = 2π / f
 
 stop_time = args["stop-hours"] * hours
@@ -168,7 +170,9 @@ model = IncompressibleModel(
 
 Ξ(z) = randn() * exp(z / 4)
 
-bᵢ(x, y, z) = N² * z                + 1e-2 * Ξ(z) * N² * model.grid.Lz
+stratification(z) = z < - initial_mixed_layer_depth ? N² * z : - N² * initial_mixed_layer_depth
+
+bᵢ(x, y, z) = stratification(z)     + 1e-2 * Ξ(z) * N² * model.grid.Lz
 uᵢ(x, y, z) = uˢ(z) + sqrt(abs(Qᵘ)) * 1e-2 * Ξ(z)
 wᵢ(x, y, z) =         sqrt(abs(Qᵘ)) * 1e-2 * Ξ(z)
 
@@ -248,7 +252,6 @@ fields_to_output = merge(model.velocities, model.tracers,
 pickup = args["pickup"]
 force = pickup ? false : true
 
-
 k_xy_slice = searchsortedfirst(grid.zF[:], -slice_depth)
 
 simulation.output_writers[:checkpointer] =
@@ -281,7 +284,7 @@ simulation.output_writers[:xy] =
 simulation.output_writers[:statistics] =
     JLD2OutputWriter(model, statistics_to_output,
                      schedule = TimeInterval(snapshot_time_interval),
-                           prefix = prefix * "_statistics",
+                       prefix = prefix * "_statistics",
                           dir = data_directory,
                         force = force)
 
