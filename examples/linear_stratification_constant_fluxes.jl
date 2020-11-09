@@ -1,7 +1,7 @@
 # # Turbulent mixing of a linearly stratified boundary layer driven by constant surface fluxes
 
-# This script runs a simulation of a turbulent oceanic boundary layer with an initial
-# three-layer temperature stratification. Turbulent mixing is driven by constant fluxes
+# This script runs a simulation of a turbulent oceanic boundary layer with an initially
+# linear temperature stratification. Turbulent mixing is driven by constant fluxes
 # of momentum and heat at the surface.
 #
 # This script is set up to be configurable on the command line --- a useful property
