@@ -1,4 +1,4 @@
-# # Turbulent mixing of a three layer boundary layer driven by constant surface fluxes
+# # Turbulent mixing of a linearly stratified boundary layer driven by constant surface fluxes
 
 # This script runs a simulation of a turbulent oceanic boundary layer with an initial
 # three-layer temperature stratification. Turbulent mixing is driven by constant fluxes
