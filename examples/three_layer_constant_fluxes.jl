@@ -27,7 +27,7 @@ using Oceananigans.Fields
 using Oceananigans.Fields: PressureField
 using Oceananigans.OutputWriters
 
-using LESbrary.Utils: SimulationProgressMessenger
+using LESbrary.Utils: SimulationProgressMessenger, fit_cubic, poly
 using LESbrary.NearSurfaceTurbulenceModels: SurfaceEnhancedModelConstant
 using LESbrary.TurbulenceStatistics: first_through_second_order, turbulent_kinetic_energy_budget
 using LESbrary.TurbulenceStatistics: TurbulentKineticEnergy, ShearProduction, ViscousDissipation
@@ -86,12 +86,12 @@ function parse_command_line_arguments()
 
         "--thermocline-width"
             help = "The width of the thermocline in units of m."
-            default = 24.0
+            default = 96.0
             arg_type = Float64
 
         "--surface-layer-buoyancy-gradient"
             help = "The buoyancy gradient in the surface layer in units s⁻²."
-            default = 2e-6
+            default = 1e-6
             arg_type = Float64
 
         "--thermocline-buoyancy-gradient"
@@ -101,7 +101,7 @@ function parse_command_line_arguments()
 
         "--deep-buoyancy-gradient"
             help = "The buoyancy gradient below the thermocline in units s⁻²."
-            default = 2e-6
+            default = 1e-6
             arg_type = Float64
 
         "--hours"
@@ -244,7 +244,12 @@ model = IncompressibleModel(architecture = GPU(),
 
 ## Noise with 8 m decay scale
 Ξ(z) = rand() * exp(z / 8)
-                    
+
+p1 = (z_transition, θ_transition)
+p2 = (z_deep, θ_deep)
+coeffs = fit_cubic(p1, p2, dθdz_surface_layer, dθdz_deep)
+θ_thermocline(z) = poly(z, coeffs)
+
 """
     initial_temperature(x, y, z)
 
@@ -255,11 +260,11 @@ function initial_temperature(x, y, z)
 
     noise = 1e-6 * Ξ(z) * dθdz_surface_layer * grid.Lz
 
-    if z > z_transition
+    if z_transition < z <= 0
         return θ_surface + dθdz_surface_layer * z + noise
 
-    elseif z > z_deep
-        return θ_transition + dθdz_thermocline * (z - z_transition) + noise
+    elseif z_deep < z <= z_transition
+        return θ_thermocline(z) + noise
 
     else
         return θ_deep + dθdz_deep * (z - z_deep) + noise
