@@ -88,6 +88,8 @@ end
     using LESbrary.TurbulenceStatistics: third_order_statistics
     using LESbrary.TurbulenceStatistics: first_through_second_order
     using LESbrary.TurbulenceStatistics: first_through_third_order
+    using LESbrary.TurbulenceStatistics: subfilter_momentum_fluxes
+    using LESbrary.TurbulenceStatistics: subfilter_tracer_fluxes
 
     for arch in (GPU(),) #architectures
         model = IncompressibleModel(architecture = arch,
@@ -109,6 +111,11 @@ end
         ψ¹_ψ² = first_through_second_order(model)     
         ψ¹_ψ³ = first_through_third_order(model)      
 
+        Qᵘ = subfilter_momentum_fluxes(model)      
+        Qᶜ = subfilter_tracer_fluxes(model)      
+
+        tke_budget = LESbrary.TurbulenceStatistics.turbulent_kinetic_energy_budget(model)
+
         @test all(ϕ isa AveragedField for ϕ in values( C     ))
         @test all(ϕ isa AveragedField for ϕ in values( u²    ))
         @test all(ϕ isa AveragedField for ϕ in values( c²    ))
@@ -122,18 +129,28 @@ end
         @test all(ϕ isa AveragedField for ϕ in values( ψ¹_ψ² ))
         @test all(ϕ isa AveragedField for ϕ in values( ψ¹_ψ³ ))
 
+        @test all(ϕ isa AveragedField for ϕ in values( Qᵘ ))
+        @test all(ϕ isa AveragedField for ϕ in values( Qᶜ ))
+
         @test output_works(simulation, C, "Horizontally averaged tracers")
         @test output_works(simulation, u², "Velocity covariances")
         @test output_works(simulation, c², "Tracer covariances")
         @test output_works(simulation, ψ¹, "First-order statistics")
 
+        # Individually test outputs for better failure messages
         for (name, output) in ψ³
             @test output_works(simulation, Dict(name => output), name)
         end
 
-        tke_budget = LESbrary.TurbulenceStatistics.turbulent_kinetic_energy_budget(model)
-
         for (name, output) in tke_budget
+            @test output_works(simulation, Dict(name => output), name)
+        end
+
+        for (name, output) in Qᵘ
+            @test output_works(simulation, Dict(name => output), name)
+        end
+
+        for (name, output) in Qᶜ
             @test output_works(simulation, Dict(name => output), name)
         end
     end

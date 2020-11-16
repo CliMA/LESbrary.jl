@@ -1,20 +1,19 @@
 using Oceananigans.Fields: ZFaceField, CellField
 using Oceananigans.TurbulenceClosures: AnisotropicMinimumDissipation
 
-has_buoyancy_tracer(model) = :b ∈ keys(model.tracers)
-
 subfilter_diffusivity(::AnisotropicMinimumDissipation, diffusivities, name) =
     getproperty(diffusivities.κₑ, name)
 
 """
-    horizontally_averaged_subfilter_momentum_fluxes(model)
+    subfilter_momentum_fluxes(model,
+                              w_scratch=ZFaceField(model.architecture, model.grid),
+                              c_scratch=CellField(model.architecture, model.grid))
 
 Returns a dictionary of horizontally-averaged subfilter momentum fluxes.
 """
-function horizontally_averaged_subfilter_momentum_fluxes(model,
-                                                         w_scratch=ZFaceField(model.architecture, model.grid),
-                                                         c_scratch=CellField(model.architecture, model.grid),
-                                                        )
+function subfilter_momentum_fluxes(model;
+                                   w_scratch=ZFaceField(model.architecture, model.grid),
+                                   c_scratch=CellField(model.architecture, model.grid))
 
     u, v, w = model.velocities
 
@@ -30,12 +29,11 @@ function horizontally_averaged_subfilter_momentum_fluxes(model,
 end
 
 """
-    horizontally_averaged_subfilter_tracer_fluxes(model)
+    subfilter_tracer_fluxes(model, w_scratch=ZFaceField(model.architecture, model.grid))
 
-Returns a dictionary of horizontally-averaged subfilter momentum fluxes.
+Returns a dictionary of horizontally-averaged subfilter tracer fluxes.
 """
-function horizontally_averaged_subfilter_momentum_fluxes(model,
-                                                         w_scratch=ZFaceField(model.architecture, model.grid))
+function subfilter_tracer_fluxes(model; w_scratch=ZFaceField(model.architecture, model.grid))
 
     averages = Dict()
 
