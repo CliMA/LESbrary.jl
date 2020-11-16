@@ -7,7 +7,9 @@ export
     select_device!,
 
     # progress_messenger.jl
-    SimulationProgressMessenger
+    SimulationProgressMessenger,
+
+    fit_cubic
 
 using Printf    
 
@@ -73,5 +75,6 @@ function prefix_tuple_names(prefix, tup)
 end
 
 include("progress_messenger.jl")
+include("fit_cubic.jl")
 
 end # module
