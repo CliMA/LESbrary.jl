@@ -9,6 +9,7 @@ using Oceananigans,
       Oceananigans.Operators
 
 include("first_through_third_order.jl")
+include("subfilter_fluxes.jl")
 
 @inline ψ′(i, j, k, grid, ψ, Ψ) = @inbounds ψ[i, j, k] - Ψ[i, j, k]
 @inline ψ′²(i, j, k, grid, ψ, Ψ) = @inbounds ψ′(i, j, k, grid, ψ, Ψ)^2

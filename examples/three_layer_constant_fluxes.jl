@@ -30,6 +30,8 @@ using Oceananigans.OutputWriters
 using LESbrary.Utils: SimulationProgressMessenger, fit_cubic, poly
 using LESbrary.NearSurfaceTurbulenceModels: SurfaceEnhancedModelConstant
 using LESbrary.TurbulenceStatistics: first_through_second_order, turbulent_kinetic_energy_budget
+using LESbrary.TurbulenceStatistics: subfilter_momentum_fluxes
+using LESbrary.TurbulenceStatistics: subfilter_tracer_fluxes
 using LESbrary.TurbulenceStatistics: TurbulentKineticEnergy, ShearProduction, ViscousDissipation
 
 # To start, we ensure that all packages in the LESbrary environment are installed:
@@ -306,6 +308,11 @@ c_scratch = CellField(model.architecture, model.grid)
 
 primitive_statistics = first_through_second_order(model, b=b, p=p, w_scratch=w_scratch, c_scratch=c_scratch)
 
+subfilter_flux_statistics = merge(
+    subfilter_momentum_fluxes(model, w_scratch=w_scratch.data, c_scratch=c_scratch.data),
+    subfilter_tracer_fluxes(model, w_scratch=w_scratch.data),
+)
+
 U = primitive_statistics[:u]
 V = primitive_statistics[:v]
 
@@ -318,7 +325,7 @@ tke_budget_statistics = turbulent_kinetic_energy_budget(model, b=b, p=p, U=U, V=
 
 fields_to_output = merge(model.velocities, model.tracers, (e=e, ϵ=dissipation))
 
-statistics_to_output = merge(primitive_statistics, tke_budget_statistics)
+statistics_to_output = merge(primitive_statistics, subfilter_flux_statistics, tke_budget_statistics)
 
 simulation.output_writers[:xz] =
     JLD2OutputWriter(model, fields_to_output,
