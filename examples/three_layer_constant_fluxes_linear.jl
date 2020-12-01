@@ -27,7 +27,7 @@ using Oceananigans.Fields
 using Oceananigans.Fields: PressureField
 using Oceananigans.OutputWriters
 
-using LESbrary.Utils: SimulationProgressMessenger, fit_cubic, poly
+using LESbrary.Utils: SimulationProgressMessenger
 using LESbrary.NearSurfaceTurbulenceModels: SurfaceEnhancedModelConstant
 using LESbrary.TurbulenceStatistics: first_through_second_order, turbulent_kinetic_energy_budget
 using LESbrary.TurbulenceStatistics: subfilter_momentum_fluxes
@@ -93,12 +93,12 @@ function parse_command_line_arguments()
 
         "--thermocline-width"
             help = "The width of the thermocline in units of m."
-            default = 96.0
+            default = 24.0
             arg_type = Float64
 
         "--surface-layer-buoyancy-gradient"
             help = "The buoyancy gradient in the surface layer in units s⁻²."
-            default = 1e-6
+            default = 2e-6
             arg_type = Float64
 
         "--thermocline-buoyancy-gradient"
@@ -108,7 +108,7 @@ function parse_command_line_arguments()
 
         "--deep-buoyancy-gradient"
             help = "The buoyancy gradient below the thermocline in units s⁻²."
-            default = 1e-6
+            default = 2e-6
             arg_type = Float64
 
         "--hours"
@@ -174,7 +174,7 @@ grid = RegularCartesianGrid(size=(Nh, Nh, Nz), x=(0, 512), y=(0, 512), z=(-256, 
 Qᵇ = args["buoyancy-flux"]
 Qᵘ = args["momentum-flux"]
 
-prefix = @sprintf("three_layer_constant_fluxes_hr%d_Qu%.1e_Qb%.1e_f%.1e_Nh%d_Nz%d_", hrs, abs(Qᵘ), Qᵇ, f, grid.Nx, grid.Nz)*name
+prefix = @sprintf("three_layer_constant_fluxes_linear_hr%d_Qu%.1e_Qb%.1e_f%.1e_Nh%d_Nz%d_", hrs, abs(Qᵘ), Qᵇ, f, grid.Nx, grid.Nz)*name
 data_directory = joinpath(@__DIR__, "..", "data", prefix) # save data in /data/prefix
 
 surface_layer_depth = args["surface-layer-depth"]
@@ -261,11 +261,6 @@ model = IncompressibleModel(architecture = GPU(),
 ## Noise with 8 m decay scale
 Ξ(z) = rand() * exp(z / 8)
 
-p1 = (z_transition, θ_transition)
-p2 = (z_deep, θ_deep)
-coeffs = fit_cubic(p1, p2, dθdz_surface_layer, dθdz_deep)
-θ_thermocline(z) = poly(z, coeffs)
-
 """
     initial_temperature(x, y, z)
 
@@ -276,11 +271,11 @@ function initial_temperature(x, y, z)
 
     noise = 1e-6 * Ξ(z) * dθdz_surface_layer * grid.Lz
 
-    if z_transition < z <= 0
+    if z > z_transition
         return θ_surface + dθdz_surface_layer * z + noise
 
-    elseif z_deep < z <= z_transition
-        return θ_thermocline(z) + noise
+    elseif z > z_deep
+        return θ_transition + dθdz_thermocline * (z - z_transition) + noise
 
     else
         return θ_deep + dθdz_deep * (z - z_deep) + noise
@@ -342,8 +337,8 @@ fields_to_output = merge(model.velocities, model.tracers, (e=e, ϵ=dissipation))
 statistics_to_output = merge(primitive_statistics, subfilter_flux_statistics, tke_budget_statistics)
 
 function init_save_some_metadata!(file, model)
-    file["parameters/coriolis_parameter"] = f
-    file["parameters/density"] = 1027.0
+    file["parameters/coriolis_parameter"] = 1e-4
+    file["parameters/density"] = 1027
     file["boundary_conditions/θ_top"] = Qᶿ
     file["boundary_conditions/θ_bottom"] = dθdz_deep
     file["boundary_conditions/u_top"] = Qᵘ
@@ -460,7 +455,6 @@ if make_animation
         c₀ = file["timeseries/c₀/$iter"][:, 1, :]
         c₁ = file["timeseries/c₁/$iter"][:, 1, :]
 
-        wlim = 2 * umax
         wlevels = range(-wlim, stop=wlim, length=41)
         c₀levels = range(c₀min, stop=c₀max, length=40)
         c₁levels = range(c₁min, stop=c₁max, length=40)
