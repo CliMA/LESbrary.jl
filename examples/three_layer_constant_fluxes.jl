@@ -295,7 +295,7 @@ set!(model, T = initial_temperature)
 # Adaptive time-stepping
 wizard = TimeStepWizard(cfl=0.8, Δt=1.0, max_change=1.1, max_Δt=30.0)
 
-stop_time = hrs * hour
+stop_time = stop_hours * hour
 
 simulation = Simulation(model, Δt=wizard, stop_time=stop_time, iteration_interval=10,
                         progress=SimulationProgressMessenger(model, wizard))
