@@ -174,7 +174,7 @@ grid = RegularCartesianGrid(size=(Nh, Nh, Nz), x=(0, 512), y=(0, 512), z=(-256, 
 Qᵇ = args["buoyancy-flux"]
 Qᵘ = args["momentum-flux"]
 
-prefix = @sprintf("three_layer_constant_fluxes_hr%d_Qu%.1e_Qb%.1e_f%.1e_Nh%d_Nz%d_", hrs, abs(Qᵘ), Qᵇ, f, grid.Nx, grid.Nz)*name
+prefix = @sprintf("three_layer_constant_fluxes_hr%d_Qu%.1e_Qb%.1e_f%.1e_Nh%d_Nz%d_", stop_hours, abs(Qᵘ), Qᵇ, f, grid.Nx, grid.Nz)*name
 data_directory = joinpath(@__DIR__, "..", "data", prefix) # save data in /data/prefix
 
 surface_layer_depth = args["surface-layer-depth"]
