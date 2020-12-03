@@ -91,7 +91,7 @@ end
     using LESbrary.TurbulenceStatistics: subfilter_momentum_fluxes
     using LESbrary.TurbulenceStatistics: subfilter_tracer_fluxes
 
-    for arch in (GPU(),) #architectures
+    for arch in architectures
         model = IncompressibleModel(architecture = arch,
                                     grid = RegularCartesianGrid(size=(1, 1, 1), extent=(1, 1, 1)),
                                     closure = AnisotropicMinimumDissipation())
