@@ -1016,9 +1016,9 @@ version = "2.7.2"
 
 [[RecursiveFactorization]]
 deps = ["LinearAlgebra", "LoopVectorization", "VectorizationBase"]
-git-tree-sha1 = "4ca0bdad1d69abbd59c35af89a9a2ab6cd5ef0f1"
+git-tree-sha1 = "cbb63d3f1b631021117ef3b98b04d5556b354ee5"
 uuid = "f2c3362d-daeb-58d1-803e-2bc74f2840b4"
-version = "0.1.4"
+version = "0.1.5"
 
 [[Reexport]]
 deps = ["Pkg"]
@@ -1135,9 +1135,9 @@ uuid = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [[SparseDiffTools]]
 deps = ["Adapt", "ArrayInterface", "Compat", "DataStructures", "FiniteDiff", "ForwardDiff", "LightGraphs", "LinearAlgebra", "Requires", "SparseArrays", "VertexSafeGraphs"]
-git-tree-sha1 = "1d93f44332d3270963d7f4d87217367397cb8746"
+git-tree-sha1 = "a8fe04fc9048d1c1e25d4b13ec374987b0599b7b"
 uuid = "47a9eef4-7e08-11e9-0b38-333d64bd3804"
-version = "1.10.1"
+version = "1.10.2"
 
 [[SpecialFunctions]]
 deps = ["OpenSpecFun_jll"]
