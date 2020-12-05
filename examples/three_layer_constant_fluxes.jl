@@ -96,8 +96,8 @@ function parse_command_line_arguments()
 
         "--thermocline"
             help = """Two choices for the thermocline structure:
-                      linear: a thermocline with a linear buoyancy structure (constant stratification)
-                      cubic: a thermocline with a fitted cubic structure"""
+                        * linear: a thermocline with a linear buoyancy structure (constant stratification)
+                        * cubic: a thermocline with a fitted cubic structure"""
             default = "linear"
             arg_type = String
 
