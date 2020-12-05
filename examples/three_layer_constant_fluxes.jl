@@ -10,6 +10,7 @@
 using Pkg
 using Statistics
 using Printf
+using Logging
 using ArgParse
 using JLD2
 using Plots
@@ -31,6 +32,8 @@ using LESbrary.NearSurfaceTurbulenceModels: SurfaceEnhancedModelConstant
 using LESbrary.TurbulenceStatistics: first_through_second_order, turbulent_kinetic_energy_budget,
                                      subfilter_momentum_fluxes, subfilter_tracer_fluxes,
                                      TurbulentKineticEnergy, ShearProduction, ViscousDissipation
+
+Logging.global_logger(OceananigansLogger())
 
 # To start, we ensure that all packages in the LESbrary environment are installed:
 
@@ -91,14 +94,21 @@ function parse_command_line_arguments()
             default = 48.0
             arg_type = Float64
 
+        "--thermocline"
+            help = """Two choices for the thermocline structure:
+                      linear: a thermocline with a linear buoyancy structure (constant stratification)
+                      cubic: a thermocline with a fitted cubic structure"""
+            default = "linear"
+            arg_type = String
+
         "--thermocline-width"
             help = "The width of the thermocline in units of m."
-            default = 96.0
+            default = 24.0
             arg_type = Float64
 
         "--surface-layer-buoyancy-gradient"
             help = "The buoyancy gradient in the surface layer in units s⁻²."
-            default = 1e-6
+            default = 2e-6
             arg_type = Float64
 
         "--thermocline-buoyancy-gradient"
@@ -108,7 +118,7 @@ function parse_command_line_arguments()
 
         "--deep-buoyancy-gradient"
             help = "The buoyancy gradient below the thermocline in units s⁻²."
-            default = 1e-6
+            default = 2e-6
             arg_type = Float64
 
         "--hours"
@@ -170,7 +180,7 @@ slice_depth = 8.0
 
 @info "Mapping grid..."
 
-grid = RegularCartesianGrid(size=(Nh, Nh, Nz), x=(0, Lx), y=(0, Ly), z=(-Lz, 0))
+grid = RegularCartesianGrid(size=(Nx, Ny, Nz), x=(0, Lx), y=(0, Ly), z=(-Lz, 0))
 
 # Buoyancy and boundary conditions
 
@@ -275,10 +285,25 @@ model = IncompressibleModel(
 ## Noise with 8 m decay scale
 Ξ(z) = rand() * exp(z / 8)
 
-p1 = (z_transition, θ_transition)
-p2 = (z_deep, θ_deep)
-coeffs = fit_cubic(p1, p2, dθdz_surface_layer, dθdz_deep)
-θ_thermocline(z) = poly(z, coeffs)
+function thermocline_structure_function(thermocline_type, z_transition, θ_transition, z_deep, θ_deep, dθdz_surface_layer, dθdz_thermocline, dθdz_deep)
+    if thermocline_type == "linear"
+        return z -> θ_transition + dθdz_thermocline * (z - z_transition)
+
+    elseif thermocline_type == "cubic"
+        p1 = (z_transition, θ_transition)
+        p2 = (z_deep, θ_deep)
+        coeffs = fit_cubic(p1, p2, dθdz_surface_layer, dθdz_deep)
+        return z -> poly(z, coeffs)
+
+    else
+        @error "Invalid thermocline type: $thermocline"
+    end
+end
+
+thermocline_type = args["thermocline"]
+
+θ_thermocline = thermocline_structure_function(thermocline_type, z_transition, θ_transition, z_deep, θ_deep,
+                                               dθdz_surface_layer, dθdz_thermocline, dθdz_deep)
 
 """
     initial_temperature(x, y, z)
