@@ -404,12 +404,11 @@ run!(simulation)
 
 # # Load and plot turbulence statistics
 
-pyplot()
-
 make_animation = args["animation"]
 plot_statistics = args["plot-statistics"]
 
 if make_animation
+    pyplot()
 
     xw, yw, zw = nodes(model.velocities.w)
     xc, yc, zc = nodes(model.tracers.c₀)
