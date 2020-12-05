@@ -5,7 +5,7 @@ using Oceananigans
 using Oceananigans.Fields
 using Oceananigans.OutputWriters
 
-architectures = (CPU(), GPU())
+architectures = [CPU()]
 
 function run_script(replace_strings, script_name, script_filepath, module_suffix="")
     file_content = read(script_filepath, String)
@@ -98,21 +98,21 @@ end
 
         simulation = Simulation(model, Δt=1.0, stop_iteration=1)
 
-        C  = horizontally_averaged_tracers(model)  
-        u² = velocity_covariances(model)           
-        c² = tracer_covariances(model)             
+        C  = horizontally_averaged_tracers(model)
+        u² = velocity_covariances(model)
+        c² = tracer_covariances(model)
         u³ = third_order_velocity_statistics(model)
-        u³ = third_order_tracer_statistics(model)  
-                                              
-        ψ¹ = first_order_statistics(model)         
-        ψ² = second_order_statistics(model)        
-        ψ³ = third_order_statistics(model)         
-                                              
-        ψ¹_ψ² = first_through_second_order(model)     
-        ψ¹_ψ³ = first_through_third_order(model)      
+        u³ = third_order_tracer_statistics(model)
 
-        Qᵘ = subfilter_momentum_fluxes(model)      
-        Qᶜ = subfilter_tracer_fluxes(model)      
+        ψ¹ = first_order_statistics(model)
+        ψ² = second_order_statistics(model)
+        ψ³ = third_order_statistics(model)
+
+        ψ¹_ψ² = first_through_second_order(model)
+        ψ¹_ψ³ = first_through_third_order(model)
+
+        Qᵘ = subfilter_momentum_fluxes(model)
+        Qᶜ = subfilter_tracer_fluxes(model)
 
         tke_budget = LESbrary.TurbulenceStatistics.turbulent_kinetic_energy_budget(model)
 
@@ -121,11 +121,11 @@ end
         @test all(ϕ isa AveragedField for ϕ in values( c²    ))
         @test all(ϕ isa AveragedField for ϕ in values( u³    ))
         @test all(ϕ isa AveragedField for ϕ in values( u³    ))
-                                                          
+
         @test all(ϕ isa AveragedField for ϕ in values( ψ¹    ))
         @test all(ϕ isa AveragedField for ϕ in values( ψ²    ))
         @test all(ϕ isa AveragedField for ϕ in values( ψ³    ))
-                                                          
+
         @test all(ϕ isa AveragedField for ϕ in values( ψ¹_ψ² ))
         @test all(ϕ isa AveragedField for ϕ in values( ψ¹_ψ³ ))
 
@@ -161,7 +161,7 @@ end
     #####
     ##### Free convection example
     #####
-    
+
     free_convection_example = joinpath(@__DIR__, "..", "examples", "free_convection.jl")
 
     replace_strings = [
@@ -181,7 +181,7 @@ end
     #####
     ##### Three layer constant fluxes example
     #####
-    
+
     three_layer_constant_fluxes_example = joinpath(@__DIR__, "..", "examples", "three_layer_constant_fluxes.jl")
 
     replace_strings = [
