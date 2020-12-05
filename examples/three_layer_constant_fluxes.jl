@@ -8,31 +8,29 @@
 # when launching multiple jobs at on a cluster.
 
 using Pkg
-using ArgParse
 using Statistics
 using Printf
+using ArgParse
 using JLD2
 using Plots
 
 using LESbrary
 using Oceananigans
+using Oceananigans.Grids
 using Oceananigans.Buoyancy
 using Oceananigans.BoundaryConditions
-using Oceananigans.Grids
-using Oceananigans.Forcings
-using Oceananigans.Utils
-using Oceananigans.Advection
 using Oceananigans.Fields
+using Oceananigans.Advection
+using Oceananigans.OutputWriters
+using Oceananigans.Utils
 
 using Oceananigans.Fields: PressureField
-using Oceananigans.OutputWriters
 
 using LESbrary.Utils: SimulationProgressMessenger, fit_cubic, poly
 using LESbrary.NearSurfaceTurbulenceModels: SurfaceEnhancedModelConstant
-using LESbrary.TurbulenceStatistics: first_through_second_order, turbulent_kinetic_energy_budget
-using LESbrary.TurbulenceStatistics: subfilter_momentum_fluxes
-using LESbrary.TurbulenceStatistics: subfilter_tracer_fluxes
-using LESbrary.TurbulenceStatistics: TurbulentKineticEnergy, ShearProduction, ViscousDissipation
+using LESbrary.TurbulenceStatistics: first_through_second_order, turbulent_kinetic_energy_budget,
+                                     subfilter_momentum_fluxes, subfilter_tracer_fluxes,
+                                     TurbulentKineticEnergy, ShearProduction, ViscousDissipation
 
 # To start, we ensure that all packages in the LESbrary environment are installed:
 
@@ -45,15 +43,17 @@ function parse_command_line_arguments()
     settings = ArgParseSettings()
 
     @add_arg_table! settings begin
-        "--Nh"
-            help = "The number of grid points in x, y."
-            default = 32
+        "--size"
+            help = "The number of grid points in x, y, and z."
+            nargs = 3
+            default = [32, 32, 32]
             arg_type = Int
 
-        "--Nz"
-            help = "The number of grid points in z."
-            default = 32
-            arg_type = Int
+        "--extent"
+            help = "The length of the x, y, and z dimensions."
+            nargs = 3
+            default = [512meters, 512meters, 256meters]
+            arg_type = Float64
 
         "--buoyancy-flux"
             help = """The surface buoyancy flux in units of m² s⁻³.
@@ -135,7 +135,6 @@ function parse_command_line_arguments()
             help = "A name to add to the end of the output filename, e.g. weak_wind_strong_cooling."
             default = ""
             arg_type = String
-
     end
 
     return parse_args(settings)
@@ -146,7 +145,15 @@ end
 # We start by parsing the arguments received on the command line, and prescribing
 # a few additional output-related arguments.
 
+@info "Parsing command line arguments..."
+
 args = parse_command_line_arguments()
+
+Nx, Ny, Nz = args["size"]
+Lx, Ly, Lz = args["extent"]
+stop_hours = args["hours"]
+f = args["coriolis"]
+name = args["name"]
 
 snapshot_time_interval = 10minutes
 averages_time_interval = 3hours
@@ -161,15 +168,13 @@ slice_depth = 8.0
 # than the boundary layer depth when the boundary layer penetrates half
 # the domain depth.
 
-Nh = args["Nh"]
-Nz = args["Nz"]
-f = args["coriolis"]
-stop_hours = args["hours"]
-name = args["name"]
+@info "Mapping grid..."
 
-grid = RegularCartesianGrid(size=(Nh, Nh, Nz), x=(0, 512), y=(0, 512), z=(-256, 0))
+grid = RegularCartesianGrid(size=(Nh, Nh, Nz), x=(0, Lx), y=(0, Ly), z=(-Lz, 0))
 
 # Buoyancy and boundary conditions
+
+@info "Enforcing boundary conditions..."
 
 Qᵇ = args["buoyancy-flux"]
 Qᵘ = args["momentum-flux"]
@@ -200,6 +205,8 @@ dθdz_deep          = N²_deep          / (α * g)
 u_bcs = UVelocityBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᵘ))
 
 # Tracer forcing
+
+@info "Forcing and sponging tracers..."
 
 # # Initial condition and sponge layer
 
@@ -239,24 +246,31 @@ T_sponge = Relaxation(rate = 4/hour,
 # Wall-aware AMD model constant which is 'enhanced' near the upper boundary.
 # Necessary to obtain a smooth temperature distribution.
 
+@info "Building the wall model..."
+
 Cᴬᴹᴰ = SurfaceEnhancedModelConstant(grid.Δz, C₀ = 1/12, enhancement = 7, decay_scale = 4 * grid.Δz)
 
 # # Instantiate Oceananigans.IncompressibleModel
 
-model = IncompressibleModel(architecture = GPU(),
-                             timestepper = :RungeKutta3,
-                               advection = WENO5(),
-                                    grid = grid,
-                                 tracers = (:T, :c₀, :c₁, :c₂),
-                                buoyancy = buoyancy,
-                                coriolis = FPlane(f=f),
-                                 closure = AnisotropicMinimumDissipation(),
-                     boundary_conditions = (T=θ_bcs, u=u_bcs),
-                                 forcing = (u=u_sponge, v=v_sponge, w=w_sponge, T=T_sponge,
-                                            c₀=c₀_forcing, c₁=c₁_forcing, c₂=c₂_forcing)
-                                )
+@info "Framing the model..."
+
+model = IncompressibleModel(
+           architecture = GPU(),
+            timestepper = :RungeKutta3,
+              advection = WENO5(),
+                   grid = grid,
+                tracers = (:T, :c₀, :c₁, :c₂),
+               buoyancy = buoyancy,
+               coriolis = FPlane(f=f),
+                closure = AnisotropicMinimumDissipation(),
+    boundary_conditions = (T=θ_bcs, u=u_bcs),
+                forcing = (u=u_sponge, v=v_sponge, w=w_sponge, T=T_sponge,
+                           c₀=c₀_forcing, c₁=c₁_forcing, c₂=c₂_forcing)
+)
 
 # # Set Initial condition
+
+@info "Setting initial conditions..."
 
 ## Noise with 8 m decay scale
 Ξ(z) = rand() * exp(z / 8)
@@ -292,21 +306,31 @@ set!(model, T = initial_temperature)
 
 # # Prepare the simulation
 
+@info "Gesticulating mimes..."
+
 # Adaptive time-stepping
-wizard = TimeStepWizard(cfl=0.8, Δt=1.0, max_change=1.1, max_Δt=30.0)
+wizard = TimeStepWizard(cfl=0.8, Δt=1.0, max_change=1.1, min_Δt=0.01, max_Δt=30.0)
 
 stop_time = stop_hours * hour
 
-simulation = Simulation(model, Δt=wizard, stop_time=stop_time, iteration_interval=10,
-                        progress=SimulationProgressMessenger(model, wizard))
+simulation = Simulation(model,
+                    Δt = wizard,
+             stop_time = stop_time,
+    iteration_interval = 10,
+              progress = SimulationProgressMessenger(model, wizard)
+)
 
 # # Prepare Output
+
+@info "Strapping on checkpointer..."
 
 pickup = args["pickup"]
 force = pickup ? false : true
 
 simulation.output_writers[:checkpointer] =
     Checkpointer(model, schedule = TimeInterval(stop_time/3), prefix = prefix * "_checkpointer", dir = data_directory)
+
+@info "Squeezing out statistics..."
 
 # Copy this file into the directory with data
 mkpath(data_directory)
@@ -354,6 +378,8 @@ function init_save_some_metadata!(file, model)
     return nothing
 end
 
+@info "Garnishing output writers..."
+
 simulation.output_writers[:xz] =
     JLD2OutputWriter(model, fields_to_output,
                          schedule = TimeInterval(snapshot_time_interval),
@@ -399,6 +425,8 @@ simulation.output_writers[:averaged_statistics] =
                          init = init_save_some_metadata!)
 
 # # Run
+
+@info "Reticulating splines..."
 
 run!(simulation)
 
