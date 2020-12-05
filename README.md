@@ -10,7 +10,7 @@ To add `LESbrary.jl` to your julia environment, type
 ```julia
 julia> using Pkg
 
-julia> Pkg.add("https://github.com/CliMA/LESbrary.jl.git")
+julia> Pkg.add(url="https://github.com/CliMA/LESbrary.jl.git")
 ```
 
 at the REPL.
