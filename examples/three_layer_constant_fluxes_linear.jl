@@ -312,22 +312,25 @@ k_xy_slice = searchsortedfirst(grid.zF[:], -slice_depth)
 
 b = BuoyancyField(model)
 p = PressureField(model)
-w_scratch = ZFaceField(model.architecture, model.grid)
-c_scratch = CellField(model.architecture, model.grid)
 
-primitive_statistics = first_through_second_order(model, b=b, p=p, w_scratch=w_scratch, c_scratch=c_scratch)
+ccc_scratch = Field(Cell, Cell, Cell, model.architecture, model.grid)
+ccf_scratch = Field(Cell, Cell, Face, model.architecture, model.grid)
+fcf_scratch = Field(Face, Cell, Face, model.architecture, model.grid)
+cff_scratch = Field(Cell, Face, Face, model.architecture, model.grid)
+
+primitive_statistics = first_through_second_order(model, b=b, p=p, w_scratch=ccf_scratch, c_scratch=ccc_scratch)
 
 subfilter_flux_statistics = merge(
-    subfilter_momentum_fluxes(model, w_scratch=w_scratch.data, c_scratch=c_scratch.data),
-    subfilter_tracer_fluxes(model, w_scratch=w_scratch.data),
+    subfilter_momentum_fluxes(model, uz_scratch=ccf_scratch, vz_scratch=cff_scratch, c_scratch=ccc_scratch),
+    subfilter_tracer_fluxes(model, w_scratch=ccf_scratch),
 )
 
 U = primitive_statistics[:u]
 V = primitive_statistics[:v]
 
 e = TurbulentKineticEnergy(model, U=U, V=V)
-shear_production = ShearProduction(model, data=c_scratch.data, U=U, V=V)
-dissipation = ViscousDissipation(model, data=c_scratch.data)
+shear_production = ShearProduction(model, data=ccc_scratch.data, U=U, V=V)
+dissipation = ViscousDissipation(model, data=ccc_scratch.data)
 
 tke_budget_statistics = turbulent_kinetic_energy_budget(model, b=b, p=p, U=U, V=V, e=e,
                                                         shear_production=shear_production, dissipation=dissipation)
