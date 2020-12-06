@@ -29,7 +29,7 @@ include("run_script.jl")
     replace_strings = [
         ("Pkg.instantiate()", ""),
         ("using Pkg", ""),
-        ("""Nh = args["Nh"]""", "Nh = 1"),
+        ("default = [32, 32, 32]", "default = [1, 1, 1]"),
         ("architecture = GPU()", "architecture = CPU()"),
         ("if make_animation", "if false")
     ]

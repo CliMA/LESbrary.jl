@@ -1,25 +1,26 @@
-mutable struct SimulationProgressMessenger{T, U, V, W, N, A, D, Z} <: Function
-    wall_time :: T
-         umax :: U
-         vmax :: V
-         wmax :: W
-         νmax :: N
-      adv_cfl :: A
-      dif_cfl :: D
-           Δt :: Z
+mutable struct SimulationProgressMessenger{T, U, V, W, N, A, D, Δ} <: Function
+    wall_time₀ :: T  # Wall time at simulation start
+    wall_time⁻ :: T  # Wall time at previous calback
+          umax :: U
+          vmax :: V
+          wmax :: W
+          νmax :: N
+       adv_cfl :: A
+       dif_cfl :: D
+            Δt :: Δ
 end
 
 SimulationProgressMessenger(model, Δt) =
     SimulationProgressMessenger(
-                      time_ns(),
+                      1e-9 * time_ns(),
+                      1e-9 * time_ns(),
                       FieldMaximum(abs, model.velocities.u),
                       FieldMaximum(abs, model.velocities.v),
                       FieldMaximum(abs, model.velocities.w),
                       FieldMaximum(abs, model.diffusivities.νₑ),
                       AdvectiveCFL(Δt),
                       DiffusiveCFL(Δt),
-                      Δt
-                     )
+                      Δt)
 
 get_Δt(Δt) = Δt
 get_Δt(wizard::TimeStepWizard) = wizard.Δt
@@ -31,17 +32,18 @@ function (pm::SimulationProgressMessenger)(simulation)
 
     progress = 100 * (t / simulation.stop_time)
 
-    elapsed_wall_time = 1e-9 * (time_ns() - pm.wall_time)
-    pm.wall_time = time_ns()
+    current_wall_time = 1e-9 * time_ns() - pm.wall_time₀
+    time_since_last_callback = 1e-9 * time_ns() - pm.wall_time⁻
+    wall_time_per_step = time_since_last_callback / simulation.iteration_interval
+    pm.wall_time⁻ = 1e-9 * time_ns()
 
-    msg1 = @sprintf("[%06.2f%%] i: % 6d, sim time: % 10s, Δt: % 10s, wall time: % 8s,",
-                    progress, i, prettytime(t), prettytime(get_Δt(pm.Δt)), prettytime(elapsed_wall_time))
+    @info @sprintf("[%06.2f%%] iteration: % 6d, time: % 10s, Δt: % 10s, wall time: % 8s (% 8s / time step)",
+                    progress, i, prettytime(t), prettytime(get_Δt(pm.Δt)), prettytime(current_wall_time), prettytime(wall_time_per_step))
 
-    msg2 = @sprintf("umax: (%.2e, %.2e, %.2e) m/s, CFL: %.2e, νmax: %.2e m² s⁻¹, νCFL: %.2e,\n",
-                    pm.umax(model), pm.vmax(model), pm.wmax(model), pm.adv_cfl(model), pm.νmax(model),
-                    pm.dif_cfl(model))
+    @info @sprintf("          └── umax: (%.2e, %.2e, %.2e) m/s, CFL: %.2e, νmax: %.2e m²/s, νCFL: %.2e",
+                    pm.umax(model), pm.vmax(model), pm.wmax(model), pm.adv_cfl(model), pm.νmax(model), pm.dif_cfl(model))
 
-    @printf("%s %s", msg1, msg2)
+    @info ""
 
     return nothing
 end
