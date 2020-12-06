@@ -6,7 +6,7 @@ poly(x, p) = sum(p[n] * x^(n-1) for n in 1:length(p))
 """
         fit_cubic(p1, p2, s1, s2)
 
-Return the coeficients c such that f(x) = c₁ + c₂x + c₃x² + c₄x³ is a cubic polynomial that passes through the points p1 = (x1, y1) and p2 = (x2, y2) with slope s1 at p1 and slope s2 at p2. 
+Return the coeficients c such that f(x) = c₁ + c₂x + c₃x² + c₄x³ is a cubic polynomial that passes through the points p1 = (x1, y1) and p2 = (x2, y2) with slope s1 at p1 and slope s2 at p2.
 """
 function fit_cubic(p1, p2, s1, s2)
     x1, y1 = p1
@@ -19,7 +19,7 @@ function fit_cubic(p1, p2, s1, s2)
         F[4] = ∂poly(x2, c) - s2
     end
 
-    results = nlsolve(f!, zeros(4), show_trace=true)
+    results = nlsolve(f!, zeros(4))
     return results.zero
 end
 
