@@ -189,8 +189,11 @@ grid = RegularCartesianGrid(size=(Nx, Ny, Nz), x=(0, Lx), y=(0, Ly), z=(-Lz, 0))
 Qᵇ = args["buoyancy-flux"]
 Qᵘ = args["momentum-flux"]
 
-prefix = @sprintf("three_layer_constant_fluxes_hr%d_Qu%.1e_Qb%.1e_f%.1e_Nh%d_Nz%d_", stop_hours, abs(Qᵘ), Qᵇ, f, grid.Nx, grid.Nz)*name
-data_directory = joinpath(@__DIR__, "..", "data", prefix) # save data in /data/prefix
+thermocline_type = args["thermocline"]
+
+prefix = @sprintf("three_layer_constant_fluxes_%s_hr%d_Qu%.1e_Qb%.1e_f%.1e_Nh%d_Nz%d_",
+                  thermocline_type, stop_hours, abs(Qᵘ), Qᵇ, f, grid.Nx, grid.Nz)
+data_directory = joinpath(@__DIR__, "..", "data", prefix * name) # save data in /data/prefix
 
 surface_layer_depth = args["surface-layer-depth"]
 thermocline_width = args["thermocline-width"]
@@ -300,8 +303,6 @@ function thermocline_structure_function(thermocline_type, z_transition, θ_trans
     end
 end
 
-thermocline_type = args["thermocline"]
-
 θ_thermocline = thermocline_structure_function(thermocline_type, z_transition, θ_transition, z_deep, θ_deep,
                                                dθdz_surface_layer, dθdz_thermocline, dθdz_deep)
 
@@ -392,62 +393,72 @@ tke_budget_statistics = turbulent_kinetic_energy_budget(model, b=b, p=p, U=U, V=
 fields_to_output = merge(model.velocities, model.tracers, (e=e, ϵ=dissipation))
 
 statistics_to_output = merge(primitive_statistics, subfilter_flux_statistics, tke_budget_statistics)
-
-function init_save_some_metadata!(file, model)
-    file["parameters/coriolis_parameter"] = f
-    file["parameters/density"] = 1027.0
-    file["boundary_conditions/θ_top"] = Qᶿ
-    file["boundary_conditions/θ_bottom"] = dθdz_deep
-    file["boundary_conditions/u_top"] = Qᵘ
-    file["boundary_conditions/u_bottom"] = 0.0
-    return nothing
-end
+statistics_to_output = Dict(string(k) => v for (k, v) in statistics_to_output)
 
 @info "Garnishing output writers..."
 
-simulation.output_writers[:xz] =
-    JLD2OutputWriter(model, fields_to_output,
-                         schedule = TimeInterval(snapshot_time_interval),
-                           prefix = prefix * "_xz",
-                     field_slicer = FieldSlicer(j=1),
-                              dir = data_directory,
-                            force = force,
-                             init = init_save_some_metadata!)
-
-simulation.output_writers[:yz] =
-    JLD2OutputWriter(model, fields_to_output,
-                         schedule = TimeInterval(snapshot_time_interval),
-                           prefix = prefix * "_yz",
-                     field_slicer = FieldSlicer(i=1),
-                              dir = data_directory,
-                            force = force,
-                             init = init_save_some_metadata!)
+global_attributes = (
+    name = name,
+    thermocline_type = thermocline_type,
+    buoynacy_flux = Qᵇ,
+    momentum_flux = Qᵘ,
+    heat_flux = Qᶿ,
+    coriolis_parameter = f,
+    thermal_expansion_coefficient = α,
+    gravitational_acceleration = g,
+    boundary_condition_θ_top = Qᶿ,
+    boundary_condition_θ_bottom = dθdz_deep,
+    boundary_condition_u_top = Qᵘ,
+    boundary_condition_u_bottom = 0.0,
+    surface_layer_depth = surface_layer_depth,
+    thermocline_width = thermocline_width,
+    N²_surface_layer = N²_surface_layer,
+    N²_thermocline = N²_thermocline,
+    N²_deep = N²_deep,
+    dθdz_surface_layer = dθdz_surface_layer,
+    dθdz_thermocline = dθdz_thermocline,
+    dθdz_deep = dθdz_deep,
+    θ_surface = θ_surface,
+    θ_transition = θ_transition,
+    θ_deep = θ_deep,
+    z_transition = z_transition,
+    z_deep = z_deep,
+    k_transition = k_transition,
+    k_deep = k_deep
+)
 
 simulation.output_writers[:xy] =
-    JLD2OutputWriter(model, fields_to_output,
-                         schedule = TimeInterval(snapshot_time_interval),
-                           prefix = prefix * "_xy",
-                     field_slicer = FieldSlicer(k=k_xy_slice),
-                              dir = data_directory,
-                            force = force,
-                             init = init_save_some_metadata!)
+    NetCDFOutputWriter(model, fields_to_output,
+                 filepath = joinpath(data_directory, "xy_slice.nc"),
+                 schedule = TimeInterval(snapshot_time_interval),
+             field_slicer = FieldSlicer(k=k_xy_slice),
+        global_attributes = global_attributes)
+
+simulation.output_writers[:xz] =
+    NetCDFOutputWriter(model, fields_to_output,
+                 filepath = joinpath(data_directory, "xz_slice.nc"),
+                 schedule = TimeInterval(snapshot_time_interval),
+             field_slicer = FieldSlicer(j=1),
+        global_attributes = global_attributes)
+
+simulation.output_writers[:yz] =
+    NetCDFOutputWriter(model, fields_to_output,
+                 filepath = joinpath(data_directory, "yz_slice.nc"),
+                 schedule = TimeInterval(snapshot_time_interval),
+             field_slicer = FieldSlicer(i=1),
+        global_attributes = global_attributes)
 
 simulation.output_writers[:statistics] =
-    JLD2OutputWriter(model, statistics_to_output,
-                     schedule = TimeInterval(snapshot_time_interval),
-                       prefix = prefix * "_statistics",
-                          dir = data_directory,
-                        force = force,
-                         init = init_save_some_metadata!)
+    NetCDFOutputWriter(model, statistics_to_output,
+                 filepath = joinpath(data_directory, "statistics.nc"),
+                 schedule = TimeInterval(snapshot_time_interval),
+        global_attributes = global_attributes)
 
 simulation.output_writers[:averaged_statistics] =
-    JLD2OutputWriter(model, statistics_to_output,
-                     schedule = AveragedTimeInterval(averages_time_interval,
-                                                     window = averages_time_window),
-                       prefix = prefix * "_averaged_statistics",
-                          dir = data_directory,
-                        force = force,
-                         init = init_save_some_metadata!)
+    NetCDFOutputWriter(model, statistics_to_output,
+                 filepath = joinpath(data_directory, "averaged_statistics.nc"),
+                 schedule = AveragedTimeInterval(averages_time_interval, window = averages_time_window),
+        global_attributes = global_attributes)
 
 # # Run
 
@@ -460,7 +471,7 @@ run!(simulation)
 make_animation = args["animation"]
 plot_statistics = args["plot-statistics"]
 
-if make_animation
+if false
     pyplot()
 
     xw, yw, zw = nodes(model.velocities.w)
