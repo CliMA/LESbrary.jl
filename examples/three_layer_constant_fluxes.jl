@@ -17,7 +17,6 @@ using Plots
 
 using LESbrary
 using Oceananigans
-using Oceananigans.Grids
 using Oceananigans.Buoyancy
 using Oceananigans.BoundaryConditions
 using Oceananigans.Fields
@@ -471,122 +470,156 @@ run!(simulation)
 make_animation = args["animation"]
 plot_statistics = args["plot-statistics"]
 
-if false
-    pyplot()
+if make_animation
+    using Plots
+    using GeoData
+    using NCDatasets
+    using GeoData: GeoXDim, GeoYDim, GeoZDim
 
-    xw, yw, zw = nodes(model.velocities.w)
-    xc, yc, zc = nodes(model.tracers.c₀)
+    @dim xC GeoXDim "x"
+    @dim xF GeoXDim "x"
+    @dim yC GeoYDim "y"
+    @dim yF GeoYDim "y"
+    @dim zC GeoZDim "z"
+    @dim zF GeoZDim "z"
 
-    file = jldopen(joinpath(data_directory, prefix * "_xz.jld2"))
-    statistics_file = jldopen(joinpath(data_directory, prefix * "_statistics.jld2"))
-
-    iterations = parse.(Int, keys(file["timeseries/t"]))
-
-    U, V, E, T, C₀, C₁, C₂ = [zeros(length(iterations), grid.Nz) for i = 1:7]
-
-    for (i, iter) in enumerate(iterations)
-        U[i, :] .= statistics_file["timeseries/u/$iter"][1, 1, :]
-        V[i, :] .= statistics_file["timeseries/v/$iter"][1, 1, :]
-        E[i, :] .= statistics_file["timeseries/e/$iter"][1, 1, :]
-        T[i, :] .= statistics_file["timeseries/T/$iter"][1, 1, :]
-        C₀[i, :] .= statistics_file["timeseries/c₀/$iter"][1, 1, :]
-        C₁[i, :] .= statistics_file["timeseries/c₁/$iter"][1, 1, :]
-        C₂[i, :] .= statistics_file["timeseries/c₂/$iter"][1, 1, :]
+    function squeeze(A)
+        singleton_dims = tuple((d for d in 1:ndims(A) if size(A, d) == 1)...)
+        return dropdims(A, dims=singleton_dims)
     end
 
-    c₀min = minimum(C₀) - 1e-9
-    c₀max = maximum(C₀) + 1e-9
-    c₁min = minimum(C₁) - 1e-9
-    c₁max = maximum(C₁) + 1e-9
-    c₂min = minimum(C₂) - 1e-9
-    c₂max = maximum(C₂) + 1e-9
+    data_directory = joinpath(@__DIR__, "data", "three_layer_constant_fluxes_linear_hr48_Qu1.0e-04_Qb1.0e-08_f1.0e-04_Nh256_Nz128_pilot")
 
-    umax = max(
-               maximum(abs, U),
-               maximum(abs, V),
-               maximum(abs, sqrt.(E))
-              ) + 1e-9
+    ds_xy = NCDstack(joinpath(data_directory, "xy_slice.nc"))
+    ds_xz = NCDstack(joinpath(data_directory, "xz_slice.nc"))
 
-    # Set wlim based on maximum across all time steps
-    wlim = maximum([maximum(abs, file["timeseries/w/$(iterations[i])"]) for i=1:length(iterations)])
+    _, _, _, times = dims(ds_xy[:u])
+    Nt = length(times)
 
-    # Finally, we're ready to animate.
+    kwargs = (xlabel="", ylabel="", xticks=[], yticks=[], colorbar=false, framestyle=:box)
 
-    @info "Making an animation from the saved data..."
+    anim = @animate for n in 1:Nt
+        @info "Plotting xy/xz movie frame $n/$Nt..."
 
-    anim = @animate for (i, iter) in enumerate(iterations)
+        xy_xz_plots = (
+            plot(ds_xy[:u][Ti=n] |> squeeze; title="u-velocity", color=:balance, clims=(-0.1, 0.1), kwargs...),
+            plot(ds_xy[:v][Ti=n] |> squeeze; title="v-velocity", color=:balance, clims=(-0.1, 0.1), kwargs...),
+            plot(ds_xy[:w][Ti=n] |> squeeze; title="w-velocity", color=:balance, clims=(-0.1, 0.1), kwargs...),
+            plot(ds_xy[:T][Ti=n] |> squeeze; title="temperature", color=:thermal, kwargs...),
+            plot(ds_xy[:c₀][Ti=n] |> squeeze; title="tracer 0", color=:ice, kwargs...),
+            plot(ds_xy[:c₁][Ti=n] |> squeeze; title="tracer 1", color=:ice, kwargs...),
+            plot(ds_xy[:c₂][Ti=n] |> squeeze; title="tracer 2", color=:ice, kwargs...),
+            plot(ds_xy[:e][Ti=n] .|> log10 |> squeeze; title="log TKE", color=:deep, clims=(-5, -2), kwargs...),
+            plot(ds_xy[:ϵ][Ti=n] .|> log10 |> squeeze; title="log ε", color=:dense, clims=(-10, -5), kwargs...),
+            plot(ds_xz[:u][Ti=n] |> squeeze; title="", color=:balance, clims=(-0.1, 0.1), kwargs...),
+            plot(ds_xz[:v][Ti=n] |> squeeze; title="", color=:balance, clims=(-0.1, 0.1), kwargs...),
+            plot(ds_xz[:w][Ti=n] |> squeeze; title="", color=:balance, clims=(-0.1, 0.1), kwargs...),
+            plot(ds_xz[:T][Ti=n] |> squeeze; title="", color=:thermal, kwargs...),
+            plot(ds_xz[:c₀][Ti=n] |> squeeze; title="", color=:ice, kwargs...),
+            plot(ds_xz[:c₁][Ti=n] |> squeeze; title="", color=:ice, kwargs...),
+            plot(ds_xz[:c₂][Ti=n] |> squeeze; title="", color=:ice, kwargs...),
+            plot(ds_xz[:e][Ti=n] .|> log10 |> squeeze; title="", color=:deep, clims=(-8, -2), kwargs...),
+            plot(ds_xz[:ϵ][Ti=n] .|> log10 |> squeeze; title="", color=:dense, clims=(-15, -5), kwargs...),
+        )
 
-        @info "Drawing frame $i from iteration $iter \n"
-
-        t = file["timeseries/t/$iter"]
-
-        w = file["timeseries/w/$iter"][:, 1, :]
-        u = file["timeseries/u/$iter"][:, 1, :]
-        v = file["timeseries/v/$iter"][:, 1, :]
-        c₀ = file["timeseries/c₀/$iter"][:, 1, :]
-        c₁ = file["timeseries/c₁/$iter"][:, 1, :]
-
-        wlim = 2 * umax
-        wlevels = range(-wlim, stop=wlim, length=41)
-        c₀levels = range(c₀min, stop=c₀max, length=40)
-        c₁levels = range(c₁min, stop=c₁max, length=40)
-
-        T_plot = plot(T[i, :], zc, label=nothing, xlim=(initial_temperature(0, 0, -grid.Lz), θ_surface),
-                      xlabel = "T (ᵒC)", ylabel = "z (m)")
-
-        U_plot = plot([U[i, :] V[i, :] sqrt.(E[i, :])], zc,
-                      label=["u" "v" "√E"], linewidth=[1 1 2], xlim=(-umax, umax),
-                      legend=:bottomleft,
-                      xlabel = "Velocities (m s⁻¹)", ylabel = "z (m)")
-
-        C_plot = plot([C₀[i, :] C₁[i, :] C₂[i, :]], zc, label = ["C₀" "C₁" "C₂"], legend=:bottom,
-                      xlabel = "Tracers", ylabel = "z (m)")
-
-        wxz_plot = contourf(xw, zw, clamp.(w, -wlim, wlim)';
-                                  color = :balance,
-                            aspectratio = :equal,
-                                  clims = (-wlim, wlim),
-                                 levels = wlevels,
-                                  xlims = (0, grid.Lx),
-                                  ylims = (-grid.Lz, 0),
-                                 xlabel = "x (m)",
-                                 ylabel = "z (m)")
-
-        c₀xz_plot = contourf(xc, zc, clamp.(c₀, c₀min, c₀max)';
-                                   color = :thermal,
-                             aspectratio = :equal,
-                                  levels = c₀levels,
-                                   clims = (c₀min, c₀max),
-                                   xlims = (0, grid.Lx),
-                                   ylims = (-grid.Lz, 0),
-                                  xlabel = "x (m)",
-                                  ylabel = "z (m)")
-
-        c₁xz_plot = contourf(xc, zc, clamp.(c₁, c₁min, c₁max)';
-                                   color = :thermal,
-                             aspectratio = :equal,
-                                  levels = c₁levels,
-                                   clims = (c₁min, c₁max),
-                                   xlims = (0, grid.Lx),
-                                   ylims = (-grid.Lz, 0),
-                                  xlabel = "x (m)",
-                                  ylabel = "z (m)")
-
-        w_title = @sprintf("w(x, y=0, z, t=%s) (m/s)", prettytime(t))
-        T_title = ""
-        c₀_title = @sprintf("c₀(x, y=0, z, t=%s)", prettytime(t))
-        U_title = ""
-        c₁_title = @sprintf("c₁(x, y=0, z, t=%s)", prettytime(t))
-        C_title = ""
-
-        plot(wxz_plot, T_plot, c₀xz_plot, U_plot, c₁xz_plot, C_plot,
-             layout = Plots.grid(3, 2, widths=(0.7, 0.3)),
-             size = (1000, 1000),
-             link = :y,
-             title = [w_title T_title c₀_title U_title c₁_title C_title])
-
-        iter == iterations[end] && close(file)
+        plot(xy_xz_plots..., layout=(2, 9), size=(2000, 400))
     end
 
-    gif(anim, prefix * ".gif", fps = 8)
+    mp4(anim, joinpath(data_directory, "xy_xz_movie.mp4"), fps=15)
+    gif(anim, joinpath(data_directory, "xy_xz_movie.gif"), fps=15)
+end
+
+if plot_statistics
+    ds = NCDstack(joinpath(data_directory, "statistics.nc"))
+
+    kwargs = (linewidth=3, linealpha=0.7, ylabel="", yticks=[], ylims=(-128, 0), title="",
+              grid=false, legend=:bottomright, legendfontsize=12, framestyle=:box,
+              foreground_color_legend=nothing, background_color_legend=nothing)
+
+    _, times = dims(ds[:u])
+    Nt = length(times)
+
+    anim = @animate for n in 1:Nt
+        @info "Plotting statistics $n/$Nt..."
+
+        uv_plot = plot(ds[:u][Ti=n]; label="u", xlims=(-0.1, 0.1), xticks=[-0.1, 0, 0.1], kwargs...)
+                  plot!(ds[:v][Ti=n]; label="v", xlabel="m/s", kwargs..., yticks=-128:32:0)
+
+        T_plot = plot(ds[:T][Ti=n]; label="T", xlabel="°C", kwargs...)
+
+        c_plot = plot(ds[:c₀][Ti=n]; label="c₀", xlims=(-0.32, 2), xticks=[0, 1, 2], kwargs...)
+                 plot!(ds[:c₁][Ti=n]; label="c₁", kwargs...)
+                 plot!(ds[:c₂][Ti=n]; label="c₂", xlabel="c", kwargs...)
+
+        ke_plot = plot(ds[:uu][Ti=n]; label="uu", xlims=(-1e-3, 0.01), xticks=[0, 0.01], kwargs...)
+                  plot!(ds[:vv][Ti=n]; label="vv", kwargs...)
+                  plot!(ds[:ww][Ti=n]; label="ww", xlabel="m²/s²", kwargs...)
+
+        U_Σ_plot = plot(ds[:uv][Ti=n]; label="uv", xlims=(-0.005, 0.002), xticks=[-0.005, 0], kwargs...)
+                   plot!(ds[:wu][Ti=n]; label="uw", kwargs...)
+                   plot!(ds[:wv][Ti=n]; label="vw", xlabel="m²/s²", kwargs...)
+
+        UT_plot = plot(ds[:uT][Ti=n]; label="uT", xlims=(-2, 2), xticks=[-2, 0, 2], kwargs...)
+                  plot!(ds[:vT][Ti=n]; label="vT", kwargs...)
+                  plot!(ds[:wT][Ti=n]; label="wT", xlabel="m·K/s", kwargs...)
+
+        Ub_plot = plot(ds[:ub][Ti=n]; label="ub", xlims=(-0.003, 0.003), xticks=[-0.003, 0, 0.003], kwargs...)
+                  plot!(ds[:vb][Ti=n]; label="vb", kwargs...)
+                  plot!(ds[:wb][Ti=n]; label="wb", xlabel="m²/s³", kwargs...)
+
+        cc_plot = plot(ds[:c₀c₀][Ti=n]; label="c₀c₀", xlims=(-0.5, 10), xticks=[0, 10], kwargs...)
+                  plot!(ds[:c₁c₁][Ti=n]; label="c₁c₁", kwargs...)
+                  plot!(ds[:c₂c₂][Ti=n]; label="c₂c₂", xlabel="c²", kwargs...)
+
+        Uc₀_plot = plot(ds[:uc₀][Ti=n]; label="uc₀", xlims=(-0.08, 0.08), xticks=[-0.08, 0, 0.08], kwargs...)
+                   plot!(ds[:vc₀][Ti=n]; label="vc₀", kwargs...)
+                   plot!(ds[:wc₀][Ti=n]; label="wc₀", xlabel="m⋅c/s", kwargs...)
+
+        Uc₁_plot = plot(ds[:uc₁][Ti=n]; label="uc₁", xlims=(-0.04, 0.04), xticks=[-0.04, 0, 0.04], kwargs...)
+                   plot!(ds[:vc₁][Ti=n]; label="vc₁", kwargs...)
+                   plot!(ds[:wc₁][Ti=n]; label="wc₁", xlabel="m⋅c/s", kwargs...)
+
+        Uc₂_plot = plot(ds[:uc₂][Ti=n]; label="uc₂", xlims=(-0.03, 0.03), xticks=[-0.03, 0, 0.03], kwargs...)
+                   plot!(ds[:vc₂][Ti=n]; label="vc₂", kwargs...)
+                   plot!(ds[:wc₂][Ti=n]; label="wc₂", xlabel="m⋅c/s", kwargs...)
+
+        bc_plot = plot(ds[:bc₀][Ti=n]; label="bc₀", xlims=(-0.02, 0.15), xticks=[0, 0.1], kwargs...)
+                  plot!(ds[:bc₁][Ti=n]; label="bc₁", kwargs...)
+                  plot!(ds[:bc₂][Ti=n]; label="bc₂", xlabel="m⋅c/s", kwargs..., yticks=-256:64:0)
+
+        νₑ∂zU_plots = plot(ds[:νₑ_∂z_u][Ti=n]; label="νₑ ∂z(u)", xlims=(-1e-5, 4e-5), xticks=[0, 4e-5], kwargs...)
+                      plot!(ds[:νₑ_∂z_v][Ti=n]; label="νₑ ∂z(v)", kwargs...)
+                      plot!(ds[:νₑ_∂z_w][Ti=n]; label="νₑ ∂z(w)", xlabel="m²/s²", kwargs...)
+
+        κₑ∂zT_plot = plot(ds[:κₑ_∂z_T][Ti=n]; label="κₑ ∂z(T)", xlabel="m⋅°C/s",
+                          xlims=(-2e-6, 2e-6), xticks=[-2e-6, 0, 2e-6], kwargs...)
+
+        κₑ∂zC_plots = plot(ds[:κₑ_∂z_c₀][Ti=n]; label="κₑ ∂z(c₀)", xlims=(-6e-5, 6e-5), xticks=[-6e-5, 0, 6e-5], kwargs...)
+                      plot!(ds[:κₑ_∂z_c₁][Ti=n]; label="κₑ ∂z(c₁)", kwargs...)
+                      plot!(ds[:κₑ_∂z_c₂][Ti=n]; label="κₑ ∂z(c₂)", xlabel="m⋅c/s", kwargs...)
+
+        e_plot = plot(ds[:e][Ti=n]; xlabel="TKE", xaxis=:log, xlims=(1e-9, 1e-2), xticks=[1e-9, 1e-2], kwargs...)
+
+        ϵ_plot = plot(ds[:tke_dissipation][Ti=n]; label="", xlabel="TKE\ndissipation", xaxis=:log,
+                      xlims=(1e-15, 1e-6), xticks=[1e-15, 1e-6], kwargs...)
+
+        Uk_plot = plot(ds[:tke_advective_flux][Ti=n]; label="", xlabel="TKE\nadvective flux",
+                      xlims=(-6e-7, 1e-7), xticks=[-6e-7, 0], kwargs...)
+
+        bk_plot = plot(ds[:tke_buoyancy_flux][Ti=n]; label="", xlabel="TKE\nbuoyancy flux",
+                      xlims=(-1e-8, 1e-8), xticks=[-1e-8, 0, 1e-8], kwargs...)
+
+        pk_plot = plot(ds[:tke_pressure_flux][Ti=n]; label="", xlabel="TKE\npressure flux",
+                      xlims=(-3e-7, 3e-7), xticks=[-3e-7, 0, 3e-7], kwargs...)
+
+        sp_plot = plot(ds[:tke_shear_production][Ti=n]; label="", xlabel="TKE\nshear production",
+                      xlims=(-1e-7, 1e-6), xticks=[0, 1e-6], kwargs...)
+
+        plot(uv_plot, c_plot, ke_plot, U_Σ_plot, UT_plot, Ub_plot, cc_plot, Uc₀_plot, Uc₁_plot, Uc₂_plot,
+             bc_plot, νₑ∂zU_plots, κₑ∂zT_plot, κₑ∂zC_plots, e_plot, ϵ_plot, Uk_plot, bk_plot, pk_plot, sp_plot,
+             layout=(2, 10), size=(1600, 1100))
+    end
+
+    mp4(anim, joinpath(data_directory, "statistics.mp4"), fps=15)
+    gif(anim, joinpath(data_directory, "statistics.gif"), fps=15)
 end
