@@ -29,4 +29,5 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 [compat]
 DifferentialEquations = "6.15"
 JLD2 = "0.3"
+KernelAbstractions = "0.4"
 OffsetArrays = "1.4"
