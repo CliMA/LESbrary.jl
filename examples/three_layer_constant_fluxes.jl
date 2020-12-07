@@ -470,26 +470,24 @@ run!(simulation)
 make_animation = args["animation"]
 plot_statistics = args["plot-statistics"]
 
+using Plots
+using GeoData
+using NCDatasets
+using GeoData: GeoXDim, GeoYDim, GeoZDim
+
+@dim xC GeoXDim "x"
+@dim xF GeoXDim "x"
+@dim yC GeoYDim "y"
+@dim yF GeoYDim "y"
+@dim zC GeoZDim "z"
+@dim zF GeoZDim "z"
+
+function squeeze(A)
+    singleton_dims = tuple((d for d in 1:ndims(A) if size(A, d) == 1)...)
+    return dropdims(A, dims=singleton_dims)
+end
+
 if make_animation
-    using Plots
-    using GeoData
-    using NCDatasets
-    using GeoData: GeoXDim, GeoYDim, GeoZDim
-
-    @dim xC GeoXDim "x"
-    @dim xF GeoXDim "x"
-    @dim yC GeoYDim "y"
-    @dim yF GeoYDim "y"
-    @dim zC GeoZDim "z"
-    @dim zF GeoZDim "z"
-
-    function squeeze(A)
-        singleton_dims = tuple((d for d in 1:ndims(A) if size(A, d) == 1)...)
-        return dropdims(A, dims=singleton_dims)
-    end
-
-    data_directory = joinpath(@__DIR__, "data", "three_layer_constant_fluxes_linear_hr48_Qu1.0e-04_Qb1.0e-08_f1.0e-04_Nh256_Nz128_pilot")
-
     ds_xy = NCDstack(joinpath(data_directory, "xy_slice.nc"))
     ds_xz = NCDstack(joinpath(data_directory, "xz_slice.nc"))
 
