@@ -224,9 +224,9 @@ uuid = "ade2ca70-3891-5945-98fb-dc099432e06a"
 
 [[DelayDiffEq]]
 deps = ["DataStructures", "DiffEqBase", "LinearAlgebra", "Logging", "OrdinaryDiffEq", "Printf", "RecursiveArrayTools", "Reexport", "Roots", "UnPack"]
-git-tree-sha1 = "f1f71b13ddf8e7df892925fa3d8bbf2fef121fd6"
+git-tree-sha1 = "a7e586d996c7f48c0ab59d0b87f7b76e66dcbe09"
 uuid = "bcd4f6db-9728-5f36-b5f7-82caef46ccdb"
-version = "5.25.2"
+version = "5.26.0"
 
 [[DelimitedFiles]]
 deps = ["Mmap"]
@@ -473,9 +473,9 @@ version = "0.3.0"
 
 [[GeometryBasics]]
 deps = ["EarCut_jll", "IterTools", "LinearAlgebra", "StaticArrays", "StructArrays", "Tables"]
-git-tree-sha1 = "876a906eab3be990fdcbfe1e43bb3a76f4776f72"
+git-tree-sha1 = "5f439f707352a988411d44cbb146fe23674e28b7"
 uuid = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
-version = "0.3.3"
+version = "0.3.4"
 
 [[Gettext_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Libiconv_jll", "Pkg", "XML2_jll"]
@@ -818,9 +818,9 @@ version = "0.1.0"
 
 [[Oceananigans]]
 deps = ["Adapt", "CUDA", "Crayons", "Dates", "FFTW", "Glob", "InteractiveUtils", "JLD2", "KernelAbstractions", "LinearAlgebra", "Logging", "NCDatasets", "OffsetArrays", "OrderedCollections", "Pkg", "Printf", "Random", "SafeTestsets", "SeawaterPolynomials", "Statistics"]
-git-tree-sha1 = "8f0922abd8978d1d7d27ddfe8ce26d541adf96af"
+git-tree-sha1 = "b2e90112a1e012fbe5148e65d68facf92c63a2a7"
 uuid = "9e8cae18-63c1-5223-a75c-80ca9d6e9a09"
-version = "0.45.0"
+version = "0.45.1"
 
 [[OffsetArrays]]
 deps = ["Adapt"]
@@ -956,10 +956,10 @@ uuid = "d330b81b-6aea-500a-939a-2ce795aea3ee"
 version = "2.9.0"
 
 [[Qt_jll]]
-deps = ["Artifacts", "Fontconfig_jll", "Glib_jll", "JLLWrappers", "Libdl", "Pkg", "Xorg_libXext_jll", "Xorg_libxcb_jll", "Xorg_xcb_util_image_jll", "Xorg_xcb_util_keysyms_jll", "Xorg_xcb_util_renderutil_jll", "Xorg_xcb_util_wm_jll", "Zlib_jll", "xkbcommon_jll"]
-git-tree-sha1 = "72244a8e084251aea25968c61bbf5c001aaa7d5a"
+deps = ["Artifacts", "CompilerSupportLibraries_jll", "Fontconfig_jll", "Glib_jll", "JLLWrappers", "Libdl", "Pkg", "Xorg_libXext_jll", "Xorg_libxcb_jll", "Xorg_xcb_util_image_jll", "Xorg_xcb_util_keysyms_jll", "Xorg_xcb_util_renderutil_jll", "Xorg_xcb_util_wm_jll", "Zlib_jll", "xkbcommon_jll"]
+git-tree-sha1 = "c0efbd50dd55f6ac89ae5a81b114e54ab6754100"
 uuid = "ede63266-ebff-546c-83e0-1c6fb6d0efc8"
-version = "5.15.1+0"
+version = "5.15.2+0"
 
 [[QuadGK]]
 deps = ["DataStructures", "LinearAlgebra"]
