@@ -396,14 +396,18 @@ statistics_to_output = Dict(string(k) => v for (k, v) in statistics_to_output)
 
 @info "Garnishing output writers..."
 
+ρ₀ = 1027
+cₚ = 4000
+
 global_attributes = (
     name = name,
     thermocline_type = thermocline_type,
-    reference_density = 1027,
-    specific_heat_capacity = 4000,
+    reference_density = ρ₀,
+    specific_heat_capacity = cₚ,
     buoyancy_flux = Qᵇ,
     momentum_flux = Qᵘ,
     heat_flux = Qᶿ,
+    heat_flux_Wm⁻² = - ρ₀ * cₚ * Qᶿ,
     coriolis_parameter = f,
     thermal_expansion_coefficient = α,
     gravitational_acceleration = g,
