@@ -399,7 +399,8 @@ statistics_to_output = Dict(string(k) => v for (k, v) in statistics_to_output)
 global_attributes = (
     name = name,
     thermocline_type = thermocline_type,
-    buoynacy_flux = Qᵇ,
+    reference_density = 1027,
+    buoyancy_flux = Qᵇ,
     momentum_flux = Qᵘ,
     heat_flux = Qᶿ,
     coriolis_parameter = f,
