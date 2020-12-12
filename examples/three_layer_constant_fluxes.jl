@@ -400,6 +400,7 @@ global_attributes = (
     name = name,
     thermocline_type = thermocline_type,
     reference_density = 1027,
+    specific_heat_capacity = 4000,
     buoyancy_flux = Qᵇ,
     momentum_flux = Qᵘ,
     heat_flux = Qᶿ,
