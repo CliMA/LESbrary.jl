@@ -127,12 +127,7 @@ function parse_command_line_arguments()
 
         "--animation"
             help = "Make an animation of the horizontal and vertical velocity when the simulation completes."
-            default = true
-            arg_type = Bool
-
-        "--plot-statistics"
-            help = "Plot some turbulence statistics after the simulation is complete."
-            default = true
+            default = false
             arg_type = Bool
 
         "--pickup"
@@ -455,13 +450,13 @@ simulation.output_writers[:yz] =
 
 simulation.output_writers[:statistics] =
     NetCDFOutputWriter(model, statistics_to_output,
-                 filepath = joinpath(data_directory, "statistics.nc"),
+                 filepath = joinpath(data_directory, "instantaneous_statistics.nc"),
                  schedule = TimeInterval(snapshot_time_interval),
         global_attributes = global_attributes)
 
 simulation.output_writers[:averaged_statistics] =
     NetCDFOutputWriter(model, statistics_to_output,
-                 filepath = joinpath(data_directory, "averaged_statistics.nc"),
+                 filepath = joinpath(data_directory, "time_averaged_statistics.nc"),
                  schedule = AveragedTimeInterval(averages_time_interval, window = averages_time_window),
         global_attributes = global_attributes)
 
