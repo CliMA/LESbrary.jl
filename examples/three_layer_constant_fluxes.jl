@@ -474,7 +474,8 @@ run!(simulation)
 # # Load and plot turbulence statistics
 
 make_animation = args["animation"]
-plot_statistics = args["plot-statistics"]
+
+ENV["GKSwstype"] = "100"
 
 using Plots
 using GeoData
@@ -533,7 +534,7 @@ if make_animation
     gif(anim, joinpath(data_directory, "xy_xz_movie.gif"), fps=15)
 end
 
-if plot_statistics
+if make_animation
     ds = NCDstack(joinpath(data_directory, "statistics.nc"))
 
     kwargs = (linewidth=3, linealpha=0.7, ylabel="", yticks=[], ylims=(-128, 0), title="",
