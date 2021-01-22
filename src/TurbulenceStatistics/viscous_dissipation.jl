@@ -22,10 +22,10 @@ kinetic energy of `model`.
 Calling `compute!(ϵ::ViscousDissipation)` computes the viscous dissipation of
 turbulent kinetic energy associated with `model` and stores it in `ϵ.data`.
 
-The viscous dissipation ``\epsilon`` is defined
+The viscous dissipation ``\\epsilon`` is defined
 
 ```math
-ϵ ≡ ∫ uⱼ ∂ⱼ τᵢⱼ \, \rm{d} V
+ϵ ≡ ∫ uⱼ ∂ⱼ τᵢⱼ \\, \\rm{d} V
 ```
 
 where ``τᵢⱼ`` is the subfilter substress tensor, defined by
