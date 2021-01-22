@@ -21,6 +21,21 @@ kinetic energy of `model`.
 
 Calling `compute!(ϵ::ViscousDissipation)` computes the viscous dissipation of
 turbulent kinetic energy associated with `model` and stores it in `ϵ.data`.
+
+The viscous dissipation ``\epsilon`` is defined
+
+```math
+ϵ ≡ ∫ uⱼ ∂ⱼ τᵢⱼ \, \rm{d} V
+```
+
+where ``τᵢⱼ`` is the subfilter substress tensor, defined by
+
+```math
+τᵢⱼ = 2 νₑ Σᵢⱼ
+```
+
+where ``νₑ`` is the eddy viscosity and ``Σᵢⱼ = (∂ᵢ uⱼ + ∂ⱼ uⱼ) / 2``
+is the rate-of-strain tensor.
 """
 function ViscousDissipation(model; data = nothing)
 
