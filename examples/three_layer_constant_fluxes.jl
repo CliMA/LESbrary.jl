@@ -356,6 +356,8 @@ simulation.output_writers[:checkpointer] =
 mkpath(data_directory)
 cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
 
+# TODO: Save command line arguments used to a file
+
 # Prepare turbulence statistics
 k_xy_slice = searchsortedfirst(grid.zF[:], -slice_depth)
 
@@ -397,7 +399,6 @@ global_attributes = (
     buoyancy_flux = Qᵇ,
     momentum_flux = Qᵘ,
     temperature_flux = Qᶿ,
-    heat_flux = ρ₀ * cₚ * Qᶿ,
     coriolis_parameter = f,
     thermal_expansion_coefficient = α,
     gravitational_acceleration = g,
@@ -422,34 +423,89 @@ global_attributes = (
     k_deep = k_deep
 )
 
-simulation.output_writers[:xy] =
+function init_save_some_metadata!(file, model)
+    for (name, value) in pairs(global_attributes)
+        file["parameters/$(string(name))"] = value
+    end
+    return nothing
+end
+
+## Add JLD2 output writers
+
+simulation.output_writers[:xy_jld2] =
+    JLD2OutputWriter(model, fields_to_output,
+                              dir = data_directory,
+                           prefix = "xy_slice",
+                         schedule = TimeInterval(snapshot_time_interval),
+                     field_slicer = FieldSlicer(k=k_xy_slice),
+                            force = force,
+                             init = init_save_some_metadata!)
+
+simulation.output_writers[:xz_jld2] =
+    JLD2OutputWriter(model, fields_to_output,
+                              dir = data_directory,
+                           prefix = "xz_slice",
+                         schedule = TimeInterval(snapshot_time_interval),
+                     field_slicer = FieldSlicer(j=1),
+                            force = force,
+                             init = init_save_some_metadata!)
+
+simulation.output_writers[:yz_jld2] =
+    JLD2OutputWriter(model, fields_to_output,
+                              dir = data_directory,
+                           prefix = "yz_slice",
+                         schedule = TimeInterval(snapshot_time_interval),
+                     field_slicer = FieldSlicer(i=1),
+                            force = force,
+                             init = init_save_some_metadata!)
+
+simulation.output_writers[:statistics_jld2] =
+    JLD2OutputWriter(model, statistics_to_output,
+                          dir = data_directory,
+                       prefix = "instantaneous_statistics",
+                     schedule = TimeInterval(snapshot_time_interval),
+                        force = force,
+                         init = init_save_some_metadata!)
+
+simulation.output_writers[:averaged_statistics_jld2] =
+    JLD2OutputWriter(model, statistics_to_output,
+                          dir = data_directory,
+                       prefix = "averaged_statistics",
+                     schedule = AveragedTimeInterval(averages_time_interval,
+                                                     window = averages_time_window),
+                        force = force,
+                         init = init_save_some_metadata!)
+
+## Add NetCDF output writers
+
+simulation.output_writers[:xy_nc] =
     NetCDFOutputWriter(model, fields_to_output,
                  filepath = joinpath(data_directory, "xy_slice.nc"),
                  schedule = TimeInterval(snapshot_time_interval),
              field_slicer = FieldSlicer(k=k_xy_slice),
         global_attributes = global_attributes)
 
-simulation.output_writers[:xz] =
+simulation.output_writers[:xz_nc] =
     NetCDFOutputWriter(model, fields_to_output,
                  filepath = joinpath(data_directory, "xz_slice.nc"),
                  schedule = TimeInterval(snapshot_time_interval),
              field_slicer = FieldSlicer(j=1),
         global_attributes = global_attributes)
 
-simulation.output_writers[:yz] =
+simulation.output_writers[:yz_nc] =
     NetCDFOutputWriter(model, fields_to_output,
                  filepath = joinpath(data_directory, "yz_slice.nc"),
                  schedule = TimeInterval(snapshot_time_interval),
              field_slicer = FieldSlicer(i=1),
         global_attributes = global_attributes)
 
-simulation.output_writers[:statistics] =
+simulation.output_writers[:statistics_nc] =
     NetCDFOutputWriter(model, statistics_to_output,
                  filepath = joinpath(data_directory, "instantaneous_statistics.nc"),
                  schedule = TimeInterval(snapshot_time_interval),
         global_attributes = global_attributes)
 
-simulation.output_writers[:averaged_statistics] =
+simulation.output_writers[:averaged_statistics_nc] =
     NetCDFOutputWriter(model, statistics_to_output,
                  filepath = joinpath(data_directory, "time_averaged_statistics.nc"),
                  schedule = AveragedTimeInterval(averages_time_interval, window = averages_time_window),
