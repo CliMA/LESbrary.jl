@@ -165,6 +165,27 @@ averages_time_window = 15minutes
 
 slice_depth = 8.0
 
+## Determine filepath prefix
+
+Qᵇ = args["buoyancy-flux"]
+Qᵘ = args["momentum-flux"]
+
+thermocline_type = args["thermocline"]
+
+prefix = @sprintf("three_layer_constant_fluxes_%s_hr%d_Qu%.1e_Qb%.1e_f%.1e_Nh%d_Nz%d_",
+                  thermocline_type, stop_hours, abs(Qᵘ), Qᵇ, f, Nx, Nz)
+data_directory = joinpath(@__DIR__, "..", "data", prefix * name) # save data in /data/prefix
+
+# Copy this file into the directory with data
+mkpath(data_directory)
+cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
+
+# Save command line arguments used to an executable bash script
+open("run_three_layer_constant_fluxes.sh", "w") do io
+    write(io, "#!/bin/sh\n")
+    write(io, join(ARGS, " "))
+end
+
 # Domain
 #
 # We use a three-dimensional domain that's twice as wide as it is deep.
@@ -179,15 +200,6 @@ grid = RegularCartesianGrid(size=(Nx, Ny, Nz), x=(0, Lx), y=(0, Ly), z=(-Lz, 0))
 # Buoyancy and boundary conditions
 
 @info "Enforcing boundary conditions..."
-
-Qᵇ = args["buoyancy-flux"]
-Qᵘ = args["momentum-flux"]
-
-thermocline_type = args["thermocline"]
-
-prefix = @sprintf("three_layer_constant_fluxes_%s_hr%d_Qu%.1e_Qb%.1e_f%.1e_Nh%d_Nz%d_",
-                  thermocline_type, stop_hours, abs(Qᵘ), Qᵇ, f, grid.Nx, grid.Nz)
-data_directory = joinpath(@__DIR__, "..", "data", prefix * name) # save data in /data/prefix
 
 surface_layer_depth = args["surface-layer-depth"]
 thermocline_width = args["thermocline-width"]
@@ -352,12 +364,6 @@ simulation.output_writers[:checkpointer] =
 
 @info "Squeezing out statistics..."
 
-# Copy this file into the directory with data
-mkpath(data_directory)
-cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
-
-# TODO: Save command line arguments used to a file
-
 # Prepare turbulence statistics
 k_xy_slice = searchsortedfirst(grid.zF[:], -slice_depth)
 
@@ -389,11 +395,22 @@ tke_budget_statistics = turbulent_kinetic_energy_budget(model, b=b, p=p, U=U, V=
 fields_to_output = merge(model.velocities, model.tracers, (e=e, ϵ=dissipation))
 
 statistics_to_output = merge(primitive_statistics, subfilter_flux_statistics, tke_budget_statistics)
-statistics_to_output = Dict(string(k) => v for (k, v) in statistics_to_output)
 
 @info "Garnishing output writers..."
 
+# Code credit: https://discourse.julialang.org/t/collecting-all-output-from-shell-commands/15592
+function execute(cmd::Cmd)
+    out, err = Pipe(), Pipe()
+
+    process = run(pipeline(ignorestatus(cmd), stdout=out, stderr=err))
+    close(out.in)
+    close(err.in)
+
+    return (stdout = out |> read |> String, stderr = err |> read |> String, code = process.exitcode)
+end
+
 global_attributes = (
+    LESbrary_jl_commit_SHA1 => execute(`git rev-parse HEAD`).stdout |> strip,
     name = name,
     thermocline_type = thermocline_type,
     buoyancy_flux = Qᵇ,
