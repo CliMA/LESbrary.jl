@@ -375,11 +375,11 @@ version = "0.53.0+0"
 
 [[GeoData]]
 deps = ["Adapt", "ArchGDAL", "Dates", "DimensionalData", "GeoFormatTypes", "HDF5", "Missings", "Mmap", "NCDatasets", "ProgressMeter", "RecipesBase", "Reexport", "Requires"]
-git-tree-sha1 = "9caf2b73b5decd16e29721552e0ddb810e7e060e"
-repo-rev = "ali/xyz-geoplot"
-repo-url = "https://github.com/ali-ramadhan/GeoData.jl"
+git-tree-sha1 = "e4ee05b4bbed52dc88299a4dc2eb2571f19da419"
+repo-rev = "xyz-geoplot"
+repo-url = "https://github.com/rafaqz/GeoData.jl.git"
 uuid = "9b6fcbb8-86d6-11e9-1ce7-23a6bb139a78"
-version = "0.3.0"
+version = "0.3.3"
 
 [[GeoFormatTypes]]
 git-tree-sha1 = "bb75ce99c9d6fb2edd8ef8ee474991cdacf12221"

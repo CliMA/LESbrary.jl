@@ -181,9 +181,9 @@ mkpath(data_directory)
 cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
 
 # Save command line arguments used to an executable bash script
-open("run_three_layer_constant_fluxes.sh", "w") do io
+open(joinpath(data_directory, "run_three_layer_constant_fluxes.sh"), "w") do io
     write(io, "#!/bin/sh\n")
-    write(io, join(ARGS, " "))
+    write(io, "julia " * basename(@__FILE__) * " " * join(ARGS, " ") * "\n")
 end
 
 # Domain
@@ -410,7 +410,7 @@ function execute(cmd::Cmd)
 end
 
 global_attributes = (
-    LESbrary_jl_commit_SHA1 => execute(`git rev-parse HEAD`).stdout |> strip,
+    LESbrary_jl_commit_SHA1 = execute(`git rev-parse HEAD`).stdout |> strip,
     name = name,
     thermocline_type = thermocline_type,
     buoyancy_flux = Qᵇ,
@@ -494,6 +494,8 @@ simulation.output_writers[:averaged_statistics_jld2] =
                          init = init_save_some_metadata!)
 
 ## Add NetCDF output writers
+
+statistics_to_output = Dict(string(k) => v for (k, v) in statistics_to_output)
 
 simulation.output_writers[:xy_nc] =
     NetCDFOutputWriter(model, fields_to_output,
