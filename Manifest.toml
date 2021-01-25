@@ -217,7 +217,9 @@ version = "1.0.2"
 
 [[DimensionalData]]
 deps = ["Adapt", "ConstructionBase", "Dates", "LinearAlgebra", "RecipesBase", "SparseArrays", "Statistics", "Tables"]
-git-tree-sha1 = "c3cc16d6b6b8c63d79c59d1e196229ef23223003"
+git-tree-sha1 = "73d6e9266f6a8ff27014bdd6ade63d258052f6e8"
+repo-rev = "master"
+repo-url = "https://github.com/rafaqz/DimensionalData.jl.git"
 uuid = "0703355e-b756-11e9-17c0-8b28908087d0"
 version = "0.15.2"
 

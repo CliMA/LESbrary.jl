@@ -127,8 +127,7 @@ function parse_command_line_arguments()
 
         "--animation"
             help = "Make an animation of the horizontal and vertical velocity when the simulation completes."
-            default = false
-            arg_type = Bool
+            action = :store_true
 
         "--pickup"
             help = "Whether or not to pick the simulation up from latest checkpoint"
@@ -600,7 +599,7 @@ if make_animation
 end
 
 if make_animation
-    ds = NCDstack(joinpath(data_directory, "statistics.nc"))
+    ds = NCDstack(joinpath(data_directory, "instantaneous_statistics.nc"))
 
     kwargs = (linewidth=3, linealpha=0.7, ylabel="", yticks=[], ylims=(-128, 0), title="",
               grid=false, legend=:bottomright, legendfontsize=12, framestyle=:box,
@@ -690,6 +689,6 @@ if make_animation
              layout=(2, 10), size=(1600, 1100))
     end
 
-    mp4(anim, joinpath(data_directory, "statistics.mp4"), fps=15)
-    gif(anim, joinpath(data_directory, "statistics.gif"), fps=15)
+    mp4(anim, joinpath(data_directory, "instantaneous_statistics.mp4"), fps=15)
+    gif(anim, joinpath(data_directory, "instantaneous_statistics.gif"), fps=15)
 end
