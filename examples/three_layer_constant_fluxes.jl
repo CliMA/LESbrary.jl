@@ -17,7 +17,6 @@ using Plots
 
 using LESbrary
 using Oceananigans
-using Oceananigans.Grids
 using Oceananigans.Buoyancy
 using Oceananigans.BoundaryConditions
 using Oceananigans.Fields
@@ -128,13 +127,7 @@ function parse_command_line_arguments()
 
         "--animation"
             help = "Make an animation of the horizontal and vertical velocity when the simulation completes."
-            default = true
-            arg_type = Bool
-
-        "--plot-statistics"
-            help = "Plot some turbulence statistics after the simulation is complete."
-            default = true
-            arg_type = Bool
+            action = :store_true
 
         "--pickup"
             help = "Whether or not to pick the simulation up from latest checkpoint"
@@ -171,6 +164,27 @@ averages_time_window = 15minutes
 
 slice_depth = 8.0
 
+## Determine filepath prefix
+
+Qᵇ = args["buoyancy-flux"]
+Qᵘ = args["momentum-flux"]
+
+thermocline_type = args["thermocline"]
+
+prefix = @sprintf("three_layer_constant_fluxes_%s_hr%d_Qu%.1e_Qb%.1e_f%.1e_Nh%d_Nz%d_",
+                  thermocline_type, stop_hours, abs(Qᵘ), Qᵇ, f, Nx, Nz)
+data_directory = joinpath(@__DIR__, "..", "data", prefix * name) # save data in /data/prefix
+
+# Copy this file into the directory with data
+mkpath(data_directory)
+cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
+
+# Save command line arguments used to an executable bash script
+open(joinpath(data_directory, "run_three_layer_constant_fluxes.sh"), "w") do io
+    write(io, "#!/bin/sh\n")
+    write(io, "julia " * basename(@__FILE__) * " " * join(ARGS, " ") * "\n")
+end
+
 # Domain
 #
 # We use a three-dimensional domain that's twice as wide as it is deep.
@@ -185,12 +199,6 @@ grid = RegularCartesianGrid(size=(Nx, Ny, Nz), x=(0, Lx), y=(0, Ly), z=(-Lz, 0))
 # Buoyancy and boundary conditions
 
 @info "Enforcing boundary conditions..."
-
-Qᵇ = args["buoyancy-flux"]
-Qᵘ = args["momentum-flux"]
-
-prefix = @sprintf("three_layer_constant_fluxes_hr%d_Qu%.1e_Qb%.1e_f%.1e_Nh%d_Nz%d_", stop_hours, abs(Qᵘ), Qᵇ, f, grid.Nx, grid.Nz)*name
-data_directory = joinpath(@__DIR__, "..", "data", prefix) # save data in /data/prefix
 
 surface_layer_depth = args["surface-layer-depth"]
 thermocline_width = args["thermocline-width"]
@@ -300,8 +308,6 @@ function thermocline_structure_function(thermocline_type, z_transition, θ_trans
     end
 end
 
-thermocline_type = args["thermocline"]
-
 θ_thermocline = thermocline_structure_function(thermocline_type, z_transition, θ_transition, z_deep, θ_deep,
                                                dθdz_surface_layer, dθdz_thermocline, dθdz_deep)
 
@@ -357,10 +363,6 @@ simulation.output_writers[:checkpointer] =
 
 @info "Squeezing out statistics..."
 
-# Copy this file into the directory with data
-mkpath(data_directory)
-cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
-
 # Prepare turbulence statistics
 k_xy_slice = searchsortedfirst(grid.zF[:], -slice_depth)
 
@@ -393,61 +395,139 @@ fields_to_output = merge(model.velocities, model.tracers, (e=e, ϵ=dissipation))
 
 statistics_to_output = merge(primitive_statistics, subfilter_flux_statistics, tke_budget_statistics)
 
+@info "Garnishing output writers..."
+
+# Code credit: https://discourse.julialang.org/t/collecting-all-output-from-shell-commands/15592
+function execute(cmd::Cmd)
+    out, err = Pipe(), Pipe()
+
+    process = run(pipeline(ignorestatus(cmd), stdout=out, stderr=err))
+    close(out.in)
+    close(err.in)
+
+    return (stdout = out |> read |> String, stderr = err |> read |> String, code = process.exitcode)
+end
+
+global_attributes = (
+    LESbrary_jl_commit_SHA1 = execute(`git rev-parse HEAD`).stdout |> strip,
+    name = name,
+    thermocline_type = thermocline_type,
+    buoyancy_flux = Qᵇ,
+    momentum_flux = Qᵘ,
+    temperature_flux = Qᶿ,
+    coriolis_parameter = f,
+    thermal_expansion_coefficient = α,
+    gravitational_acceleration = g,
+    boundary_condition_θ_top = Qᶿ,
+    boundary_condition_θ_bottom = dθdz_deep,
+    boundary_condition_u_top = Qᵘ,
+    boundary_condition_u_bottom = 0.0,
+    surface_layer_depth = surface_layer_depth,
+    thermocline_width = thermocline_width,
+    N²_surface_layer = N²_surface_layer,
+    N²_thermocline = N²_thermocline,
+    N²_deep = N²_deep,
+    dθdz_surface_layer = dθdz_surface_layer,
+    dθdz_thermocline = dθdz_thermocline,
+    dθdz_deep = dθdz_deep,
+    θ_surface = θ_surface,
+    θ_transition = θ_transition,
+    θ_deep = θ_deep,
+    z_transition = z_transition,
+    z_deep = z_deep,
+    k_transition = k_transition,
+    k_deep = k_deep
+)
+
 function init_save_some_metadata!(file, model)
-    file["parameters/coriolis_parameter"] = f
-    file["parameters/density"] = 1027.0
-    file["boundary_conditions/θ_top"] = Qᶿ
-    file["boundary_conditions/θ_bottom"] = dθdz_deep
-    file["boundary_conditions/u_top"] = Qᵘ
-    file["boundary_conditions/u_bottom"] = 0.0
+    for (name, value) in pairs(global_attributes)
+        file["parameters/$(string(name))"] = value
+    end
     return nothing
 end
 
-@info "Garnishing output writers..."
+## Add JLD2 output writers
 
-simulation.output_writers[:xz] =
+simulation.output_writers[:xy_jld2] =
     JLD2OutputWriter(model, fields_to_output,
-                         schedule = TimeInterval(snapshot_time_interval),
-                           prefix = prefix * "_xz",
-                     field_slicer = FieldSlicer(j=1),
                               dir = data_directory,
-                            force = force,
-                             init = init_save_some_metadata!)
-
-simulation.output_writers[:yz] =
-    JLD2OutputWriter(model, fields_to_output,
+                           prefix = "xy_slice",
                          schedule = TimeInterval(snapshot_time_interval),
-                           prefix = prefix * "_yz",
-                     field_slicer = FieldSlicer(i=1),
-                              dir = data_directory,
-                            force = force,
-                             init = init_save_some_metadata!)
-
-simulation.output_writers[:xy] =
-    JLD2OutputWriter(model, fields_to_output,
-                         schedule = TimeInterval(snapshot_time_interval),
-                           prefix = prefix * "_xy",
                      field_slicer = FieldSlicer(k=k_xy_slice),
-                              dir = data_directory,
                             force = force,
                              init = init_save_some_metadata!)
 
-simulation.output_writers[:statistics] =
+simulation.output_writers[:xz_jld2] =
+    JLD2OutputWriter(model, fields_to_output,
+                              dir = data_directory,
+                           prefix = "xz_slice",
+                         schedule = TimeInterval(snapshot_time_interval),
+                     field_slicer = FieldSlicer(j=1),
+                            force = force,
+                             init = init_save_some_metadata!)
+
+simulation.output_writers[:yz_jld2] =
+    JLD2OutputWriter(model, fields_to_output,
+                              dir = data_directory,
+                           prefix = "yz_slice",
+                         schedule = TimeInterval(snapshot_time_interval),
+                     field_slicer = FieldSlicer(i=1),
+                            force = force,
+                             init = init_save_some_metadata!)
+
+simulation.output_writers[:statistics_jld2] =
     JLD2OutputWriter(model, statistics_to_output,
-                     schedule = TimeInterval(snapshot_time_interval),
-                       prefix = prefix * "_statistics",
                           dir = data_directory,
+                       prefix = "instantaneous_statistics",
+                     schedule = TimeInterval(snapshot_time_interval),
                         force = force,
                          init = init_save_some_metadata!)
 
-simulation.output_writers[:averaged_statistics] =
+simulation.output_writers[:averaged_statistics_jld2] =
     JLD2OutputWriter(model, statistics_to_output,
+                          dir = data_directory,
+                       prefix = "averaged_statistics",
                      schedule = AveragedTimeInterval(averages_time_interval,
                                                      window = averages_time_window),
-                       prefix = prefix * "_averaged_statistics",
-                          dir = data_directory,
                         force = force,
                          init = init_save_some_metadata!)
+
+## Add NetCDF output writers
+
+statistics_to_output = Dict(string(k) => v for (k, v) in statistics_to_output)
+
+simulation.output_writers[:xy_nc] =
+    NetCDFOutputWriter(model, fields_to_output,
+                 filepath = joinpath(data_directory, "xy_slice.nc"),
+                 schedule = TimeInterval(snapshot_time_interval),
+             field_slicer = FieldSlicer(k=k_xy_slice),
+        global_attributes = global_attributes)
+
+simulation.output_writers[:xz_nc] =
+    NetCDFOutputWriter(model, fields_to_output,
+                 filepath = joinpath(data_directory, "xz_slice.nc"),
+                 schedule = TimeInterval(snapshot_time_interval),
+             field_slicer = FieldSlicer(j=1),
+        global_attributes = global_attributes)
+
+simulation.output_writers[:yz_nc] =
+    NetCDFOutputWriter(model, fields_to_output,
+                 filepath = joinpath(data_directory, "yz_slice.nc"),
+                 schedule = TimeInterval(snapshot_time_interval),
+             field_slicer = FieldSlicer(i=1),
+        global_attributes = global_attributes)
+
+simulation.output_writers[:statistics_nc] =
+    NetCDFOutputWriter(model, statistics_to_output,
+                 filepath = joinpath(data_directory, "instantaneous_statistics.nc"),
+                 schedule = TimeInterval(snapshot_time_interval),
+        global_attributes = global_attributes)
+
+simulation.output_writers[:averaged_statistics_nc] =
+    NetCDFOutputWriter(model, statistics_to_output,
+                 filepath = joinpath(data_directory, "time_averaged_statistics.nc"),
+                 schedule = AveragedTimeInterval(averages_time_interval, window = averages_time_window),
+        global_attributes = global_attributes)
 
 # # Run
 
@@ -458,124 +538,157 @@ run!(simulation)
 # # Load and plot turbulence statistics
 
 make_animation = args["animation"]
-plot_statistics = args["plot-statistics"]
+
+ENV["GKSwstype"] = "100"
+
+using Plots
+using GeoData
+using NCDatasets
+using GeoData: GeoXDim, GeoYDim, GeoZDim
+
+@dim xC GeoXDim "x"
+@dim xF GeoXDim "x"
+@dim yC GeoYDim "y"
+@dim yF GeoYDim "y"
+@dim zC GeoZDim "z"
+@dim zF GeoZDim "z"
+
+function squeeze(A)
+    singleton_dims = tuple((d for d in 1:ndims(A) if size(A, d) == 1)...)
+    return dropdims(A, dims=singleton_dims)
+end
 
 if make_animation
-    pyplot()
+    ds_xy = NCDstack(joinpath(data_directory, "xy_slice.nc"))
+    ds_xz = NCDstack(joinpath(data_directory, "xz_slice.nc"))
 
-    xw, yw, zw = nodes(model.velocities.w)
-    xc, yc, zc = nodes(model.tracers.c₀)
+    _, _, _, times = dims(ds_xy[:u])
+    Nt = length(times)
 
-    file = jldopen(joinpath(data_directory, prefix * "_xz.jld2"))
-    statistics_file = jldopen(joinpath(data_directory, prefix * "_statistics.jld2"))
+    kwargs = (xlabel="", ylabel="", xticks=[], yticks=[], colorbar=false, framestyle=:box)
 
-    iterations = parse.(Int, keys(file["timeseries/t"]))
+    anim = @animate for n in 1:Nt
+        @info "Plotting xy/xz movie frame $n/$Nt..."
 
-    U, V, E, T, C₀, C₁, C₂ = [zeros(length(iterations), grid.Nz) for i = 1:7]
+        xy_xz_plots = (
+            plot(ds_xy[:u][Ti=n] |> squeeze; title="u-velocity", color=:balance, clims=(-0.1, 0.1), kwargs...),
+            plot(ds_xy[:v][Ti=n] |> squeeze; title="v-velocity", color=:balance, clims=(-0.1, 0.1), kwargs...),
+            plot(ds_xy[:w][Ti=n] |> squeeze; title="w-velocity", color=:balance, clims=(-0.1, 0.1), kwargs...),
+            plot(ds_xy[:T][Ti=n] |> squeeze; title="temperature", color=:thermal, kwargs...),
+            plot(ds_xy[:c₀][Ti=n] |> squeeze; title="tracer 0", color=:ice, kwargs...),
+            plot(ds_xy[:c₁][Ti=n] |> squeeze; title="tracer 1", color=:ice, kwargs...),
+            plot(ds_xy[:c₂][Ti=n] |> squeeze; title="tracer 2", color=:ice, kwargs...),
+            plot(ds_xy[:e][Ti=n] .|> log10 |> squeeze; title="log TKE", color=:deep, clims=(-5, -2), kwargs...),
+            plot(ds_xy[:ϵ][Ti=n] .|> log10 |> squeeze; title="log ε", color=:dense, clims=(-10, -5), kwargs...),
+            plot(ds_xz[:u][Ti=n] |> squeeze; title="", color=:balance, clims=(-0.1, 0.1), kwargs...),
+            plot(ds_xz[:v][Ti=n] |> squeeze; title="", color=:balance, clims=(-0.1, 0.1), kwargs...),
+            plot(ds_xz[:w][Ti=n] |> squeeze; title="", color=:balance, clims=(-0.1, 0.1), kwargs...),
+            plot(ds_xz[:T][Ti=n] |> squeeze; title="", color=:thermal, kwargs...),
+            plot(ds_xz[:c₀][Ti=n] |> squeeze; title="", color=:ice, kwargs...),
+            plot(ds_xz[:c₁][Ti=n] |> squeeze; title="", color=:ice, kwargs...),
+            plot(ds_xz[:c₂][Ti=n] |> squeeze; title="", color=:ice, kwargs...),
+            plot(ds_xz[:e][Ti=n] .|> log10 |> squeeze; title="", color=:deep, clims=(-8, -2), kwargs...),
+            plot(ds_xz[:ϵ][Ti=n] .|> log10 |> squeeze; title="", color=:dense, clims=(-15, -5), kwargs...),
+        )
 
-    for (i, iter) in enumerate(iterations)
-        U[i, :] .= statistics_file["timeseries/u/$iter"][1, 1, :]
-        V[i, :] .= statistics_file["timeseries/v/$iter"][1, 1, :]
-        E[i, :] .= statistics_file["timeseries/e/$iter"][1, 1, :]
-        T[i, :] .= statistics_file["timeseries/T/$iter"][1, 1, :]
-        C₀[i, :] .= statistics_file["timeseries/c₀/$iter"][1, 1, :]
-        C₁[i, :] .= statistics_file["timeseries/c₁/$iter"][1, 1, :]
-        C₂[i, :] .= statistics_file["timeseries/c₂/$iter"][1, 1, :]
+        plot(xy_xz_plots..., layout=(2, 9), size=(2000, 400))
     end
 
-    c₀min = minimum(C₀) - 1e-9
-    c₀max = maximum(C₀) + 1e-9
-    c₁min = minimum(C₁) - 1e-9
-    c₁max = maximum(C₁) + 1e-9
-    c₂min = minimum(C₂) - 1e-9
-    c₂max = maximum(C₂) + 1e-9
+    mp4(anim, joinpath(data_directory, "xy_xz_movie.mp4"), fps=15)
+    gif(anim, joinpath(data_directory, "xy_xz_movie.gif"), fps=15)
+end
 
-    umax = max(
-               maximum(abs, U),
-               maximum(abs, V),
-               maximum(abs, sqrt.(E))
-              ) + 1e-9
+if make_animation
+    ds = NCDstack(joinpath(data_directory, "instantaneous_statistics.nc"))
 
-    # Set wlim based on maximum across all time steps
-    wlim = maximum([maximum(abs, file["timeseries/w/$(iterations[i])"]) for i=1:length(iterations)])
+    kwargs = (linewidth=3, linealpha=0.7, ylabel="", yticks=[], ylims=(-128, 0), title="",
+              grid=false, legend=:bottomright, legendfontsize=12, framestyle=:box,
+              foreground_color_legend=nothing, background_color_legend=nothing)
 
-    # Finally, we're ready to animate.
+    _, times = dims(ds[:u])
+    Nt = length(times)
 
-    @info "Making an animation from the saved data..."
+    anim = @animate for n in 1:Nt
+        @info "Plotting statistics $n/$Nt..."
 
-    anim = @animate for (i, iter) in enumerate(iterations)
+        uv_plot = plot(ds[:u][Ti=n]; label="u", xlims=(-0.1, 0.1), xticks=[-0.1, 0, 0.1], kwargs...)
+                  plot!(ds[:v][Ti=n]; label="v", xlabel="m/s", kwargs..., yticks=-128:32:0)
 
-        @info "Drawing frame $i from iteration $iter \n"
+        T_plot = plot(ds[:T][Ti=n]; label="T", xlabel="°C", kwargs...)
 
-        t = file["timeseries/t/$iter"]
+        c_plot = plot(ds[:c₀][Ti=n]; label="c₀", xlims=(-0.32, 2), xticks=[0, 1, 2], kwargs...)
+                 plot!(ds[:c₁][Ti=n]; label="c₁", kwargs...)
+                 plot!(ds[:c₂][Ti=n]; label="c₂", xlabel="c", kwargs...)
 
-        w = file["timeseries/w/$iter"][:, 1, :]
-        u = file["timeseries/u/$iter"][:, 1, :]
-        v = file["timeseries/v/$iter"][:, 1, :]
-        c₀ = file["timeseries/c₀/$iter"][:, 1, :]
-        c₁ = file["timeseries/c₁/$iter"][:, 1, :]
+        ke_plot = plot(ds[:uu][Ti=n]; label="uu", xlims=(-1e-3, 0.01), xticks=[0, 0.01], kwargs...)
+                  plot!(ds[:vv][Ti=n]; label="vv", kwargs...)
+                  plot!(ds[:ww][Ti=n]; label="ww", xlabel="m²/s²", kwargs...)
 
-        wlim = 2 * umax
-        wlevels = range(-wlim, stop=wlim, length=41)
-        c₀levels = range(c₀min, stop=c₀max, length=40)
-        c₁levels = range(c₁min, stop=c₁max, length=40)
+        U_Σ_plot = plot(ds[:uv][Ti=n]; label="uv", xlims=(-0.005, 0.002), xticks=[-0.005, 0], kwargs...)
+                   plot!(ds[:wu][Ti=n]; label="uw", kwargs...)
+                   plot!(ds[:wv][Ti=n]; label="vw", xlabel="m²/s²", kwargs...)
 
-        T_plot = plot(T[i, :], zc, label=nothing, xlim=(initial_temperature(0, 0, -grid.Lz), θ_surface),
-                      xlabel = "T (ᵒC)", ylabel = "z (m)")
+        UT_plot = plot(ds[:uT][Ti=n]; label="uT", xlims=(-2, 2), xticks=[-2, 0, 2], kwargs...)
+                  plot!(ds[:vT][Ti=n]; label="vT", kwargs...)
+                  plot!(ds[:wT][Ti=n]; label="wT", xlabel="m·K/s", kwargs...)
 
-        U_plot = plot([U[i, :] V[i, :] sqrt.(E[i, :])], zc,
-                      label=["u" "v" "√E"], linewidth=[1 1 2], xlim=(-umax, umax),
-                      legend=:bottomleft,
-                      xlabel = "Velocities (m s⁻¹)", ylabel = "z (m)")
+        Ub_plot = plot(ds[:ub][Ti=n]; label="ub", xlims=(-0.003, 0.003), xticks=[-0.003, 0, 0.003], kwargs...)
+                  plot!(ds[:vb][Ti=n]; label="vb", kwargs...)
+                  plot!(ds[:wb][Ti=n]; label="wb", xlabel="m²/s³", kwargs...)
 
-        C_plot = plot([C₀[i, :] C₁[i, :] C₂[i, :]], zc, label = ["C₀" "C₁" "C₂"], legend=:bottom,
-                      xlabel = "Tracers", ylabel = "z (m)")
+        cc_plot = plot(ds[:c₀c₀][Ti=n]; label="c₀c₀", xlims=(-0.5, 10), xticks=[0, 10], kwargs...)
+                  plot!(ds[:c₁c₁][Ti=n]; label="c₁c₁", kwargs...)
+                  plot!(ds[:c₂c₂][Ti=n]; label="c₂c₂", xlabel="c²", kwargs...)
 
-        wxz_plot = contourf(xw, zw, clamp.(w, -wlim, wlim)';
-                                  color = :balance,
-                            aspectratio = :equal,
-                                  clims = (-wlim, wlim),
-                                 levels = wlevels,
-                                  xlims = (0, grid.Lx),
-                                  ylims = (-grid.Lz, 0),
-                                 xlabel = "x (m)",
-                                 ylabel = "z (m)")
+        Uc₀_plot = plot(ds[:uc₀][Ti=n]; label="uc₀", xlims=(-0.08, 0.08), xticks=[-0.08, 0, 0.08], kwargs...)
+                   plot!(ds[:vc₀][Ti=n]; label="vc₀", kwargs...)
+                   plot!(ds[:wc₀][Ti=n]; label="wc₀", xlabel="m⋅c/s", kwargs...)
 
-        c₀xz_plot = contourf(xc, zc, clamp.(c₀, c₀min, c₀max)';
-                                   color = :thermal,
-                             aspectratio = :equal,
-                                  levels = c₀levels,
-                                   clims = (c₀min, c₀max),
-                                   xlims = (0, grid.Lx),
-                                   ylims = (-grid.Lz, 0),
-                                  xlabel = "x (m)",
-                                  ylabel = "z (m)")
+        Uc₁_plot = plot(ds[:uc₁][Ti=n]; label="uc₁", xlims=(-0.04, 0.04), xticks=[-0.04, 0, 0.04], kwargs...)
+                   plot!(ds[:vc₁][Ti=n]; label="vc₁", kwargs...)
+                   plot!(ds[:wc₁][Ti=n]; label="wc₁", xlabel="m⋅c/s", kwargs...)
 
-        c₁xz_plot = contourf(xc, zc, clamp.(c₁, c₁min, c₁max)';
-                                   color = :thermal,
-                             aspectratio = :equal,
-                                  levels = c₁levels,
-                                   clims = (c₁min, c₁max),
-                                   xlims = (0, grid.Lx),
-                                   ylims = (-grid.Lz, 0),
-                                  xlabel = "x (m)",
-                                  ylabel = "z (m)")
+        Uc₂_plot = plot(ds[:uc₂][Ti=n]; label="uc₂", xlims=(-0.03, 0.03), xticks=[-0.03, 0, 0.03], kwargs...)
+                   plot!(ds[:vc₂][Ti=n]; label="vc₂", kwargs...)
+                   plot!(ds[:wc₂][Ti=n]; label="wc₂", xlabel="m⋅c/s", kwargs...)
 
-        w_title = @sprintf("w(x, y=0, z, t=%s) (m/s)", prettytime(t))
-        T_title = ""
-        c₀_title = @sprintf("c₀(x, y=0, z, t=%s)", prettytime(t))
-        U_title = ""
-        c₁_title = @sprintf("c₁(x, y=0, z, t=%s)", prettytime(t))
-        C_title = ""
+        bc_plot = plot(ds[:bc₀][Ti=n]; label="bc₀", xlims=(-0.02, 0.15), xticks=[0, 0.1], kwargs...)
+                  plot!(ds[:bc₁][Ti=n]; label="bc₁", kwargs...)
+                  plot!(ds[:bc₂][Ti=n]; label="bc₂", xlabel="m⋅c/s", kwargs..., yticks=-256:64:0)
 
-        plot(wxz_plot, T_plot, c₀xz_plot, U_plot, c₁xz_plot, C_plot,
-             layout = Plots.grid(3, 2, widths=(0.7, 0.3)),
-             size = (1000, 1000),
-             link = :y,
-             title = [w_title T_title c₀_title U_title c₁_title C_title])
+        νₑ∂zU_plots = plot(ds[:νₑ_∂z_u][Ti=n]; label="νₑ ∂z(u)", xlims=(-1e-5, 4e-5), xticks=[0, 4e-5], kwargs...)
+                      plot!(ds[:νₑ_∂z_v][Ti=n]; label="νₑ ∂z(v)", kwargs...)
+                      plot!(ds[:νₑ_∂z_w][Ti=n]; label="νₑ ∂z(w)", xlabel="m²/s²", kwargs...)
 
-        iter == iterations[end] && close(file)
+        κₑ∂zT_plot = plot(ds[:κₑ_∂z_T][Ti=n]; label="κₑ ∂z(T)", xlabel="m⋅°C/s",
+                          xlims=(-2e-6, 2e-6), xticks=[-2e-6, 0, 2e-6], kwargs...)
+
+        κₑ∂zC_plots = plot(ds[:κₑ_∂z_c₀][Ti=n]; label="κₑ ∂z(c₀)", xlims=(-6e-5, 6e-5), xticks=[-6e-5, 0, 6e-5], kwargs...)
+                      plot!(ds[:κₑ_∂z_c₁][Ti=n]; label="κₑ ∂z(c₁)", kwargs...)
+                      plot!(ds[:κₑ_∂z_c₂][Ti=n]; label="κₑ ∂z(c₂)", xlabel="m⋅c/s", kwargs...)
+
+        e_plot = plot(ds[:e][Ti=n]; xlabel="TKE", xaxis=:log, xlims=(1e-9, 1e-2), xticks=[1e-9, 1e-2], kwargs...)
+
+        ϵ_plot = plot(ds[:tke_dissipation][Ti=n]; label="", xlabel="TKE\ndissipation", xaxis=:log,
+                      xlims=(1e-15, 1e-6), xticks=[1e-15, 1e-6], kwargs...)
+
+        Uk_plot = plot(ds[:tke_advective_flux][Ti=n]; label="", xlabel="TKE\nadvective flux",
+                      xlims=(-6e-7, 1e-7), xticks=[-6e-7, 0], kwargs...)
+
+        bk_plot = plot(ds[:tke_buoyancy_flux][Ti=n]; label="", xlabel="TKE\nbuoyancy flux",
+                      xlims=(-1e-8, 1e-8), xticks=[-1e-8, 0, 1e-8], kwargs...)
+
+        pk_plot = plot(ds[:tke_pressure_flux][Ti=n]; label="", xlabel="TKE\npressure flux",
+                      xlims=(-3e-7, 3e-7), xticks=[-3e-7, 0, 3e-7], kwargs...)
+
+        sp_plot = plot(ds[:tke_shear_production][Ti=n]; label="", xlabel="TKE\nshear production",
+                      xlims=(-1e-7, 1e-6), xticks=[0, 1e-6], kwargs...)
+
+        plot(uv_plot, c_plot, ke_plot, U_Σ_plot, UT_plot, Ub_plot, cc_plot, Uc₀_plot, Uc₁_plot, Uc₂_plot,
+             bc_plot, νₑ∂zU_plots, κₑ∂zT_plot, κₑ∂zC_plots, e_plot, ϵ_plot, Uk_plot, bk_plot, pk_plot, sp_plot,
+             layout=(2, 10), size=(1600, 1100))
     end
 
-    gif(anim, prefix * ".gif", fps = 8)
+    mp4(anim, joinpath(data_directory, "instantaneous_statistics.mp4"), fps=15)
+    gif(anim, joinpath(data_directory, "instantaneous_statistics.gif"), fps=15)
 end
