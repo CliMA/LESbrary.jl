@@ -180,9 +180,9 @@ uuid = "a8cc5b0e-0ffa-5ad4-8c14-923d3ee1735f"
 version = "4.0.4"
 
 [[DataAPI]]
-git-tree-sha1 = "ad84f52c0b8f05aa20839484dbaf01690b41ff84"
+git-tree-sha1 = "25ccd31003243d2ce83e474cf11663dddf48035f"
 uuid = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
-version = "1.4.0"
+version = "1.4.1"
 
 [[DataStructures]]
 deps = ["Compat", "InteractiveUtils", "OrderedCollections"]
@@ -217,11 +217,11 @@ version = "1.0.2"
 
 [[DimensionalData]]
 deps = ["Adapt", "ConstructionBase", "Dates", "LinearAlgebra", "RecipesBase", "SparseArrays", "Statistics", "Tables"]
-git-tree-sha1 = "73d6e9266f6a8ff27014bdd6ade63d258052f6e8"
+git-tree-sha1 = "28c1218f790d673b4f707a9f54d3dcbf4c16a4f1"
 repo-rev = "master"
 repo-url = "https://github.com/rafaqz/DimensionalData.jl.git"
 uuid = "0703355e-b756-11e9-17c0-8b28908087d0"
-version = "0.15.2"
+version = "0.16.1"
 
 [[DiskArrays]]
 git-tree-sha1 = "731967c22b99f606540c45a3773e92d336fd6963"
@@ -230,9 +230,9 @@ version = "0.2.7"
 
 [[Distances]]
 deps = ["LinearAlgebra", "Statistics"]
-git-tree-sha1 = "e8b13ba5f166e11df2de6fc283e5db7864245df0"
+git-tree-sha1 = "50e7640007e5cb752addec3876f43d909cae22bd"
 uuid = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
-version = "0.10.0"
+version = "0.10.1"
 
 [[Distributed]]
 deps = ["Random", "Serialization", "Sockets"]
@@ -377,7 +377,7 @@ version = "0.53.0+0"
 
 [[GeoData]]
 deps = ["Adapt", "ArchGDAL", "Dates", "DimensionalData", "GeoFormatTypes", "HDF5", "Missings", "Mmap", "NCDatasets", "ProgressMeter", "RecipesBase", "Reexport", "Requires"]
-git-tree-sha1 = "e4ee05b4bbed52dc88299a4dc2eb2571f19da419"
+git-tree-sha1 = "2d24bc326df9e9c71115226c409aa89ffcd608af"
 repo-rev = "xyz-geoplot"
 repo-url = "https://github.com/rafaqz/GeoData.jl.git"
 uuid = "9b6fcbb8-86d6-11e9-1ce7-23a6bb139a78"
@@ -396,9 +396,9 @@ version = "0.5.4"
 
 [[GeometryBasics]]
 deps = ["EarCut_jll", "IterTools", "LinearAlgebra", "StaticArrays", "StructArrays", "Tables"]
-git-tree-sha1 = "8d8de6ca09b10719101edc83c47cdaea121ddfd1"
+git-tree-sha1 = "f574945bcabe9805b78292216279c1be910168bb"
 uuid = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
-version = "0.3.7"
+version = "0.3.8"
 
 [[Gettext_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Libiconv_jll", "Pkg", "XML2_jll"]
@@ -424,9 +424,9 @@ version = "1.0.0"
 
 [[HDF5]]
 deps = ["Blosc", "Compat", "HDF5_jll", "Libdl", "Mmap", "Random", "Requires"]
-git-tree-sha1 = "8be8b31df938483ba2ab27f38a8bc91a9e43ae92"
+git-tree-sha1 = "947d696a6b6dbc14018a1668c4724fdc6236a3d3"
 uuid = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
-version = "0.14.3"
+version = "0.15.2"
 
 [[HDF5_jll]]
 deps = ["Artifacts", "JLLWrappers", "LibCURL_jll", "Libdl", "OpenSSL_jll", "Pkg", "Zlib_jll"]
@@ -669,9 +669,9 @@ version = "0.3.1"
 
 [[Missings]]
 deps = ["DataAPI"]
-git-tree-sha1 = "ed61674a0864832495ffe0a7e889c0da76b0f4c8"
+git-tree-sha1 = "f8c673ccc215eb50fcadb285f522420e29e69e1c"
 uuid = "e1d29d7a-bbdc-5cf2-9ac0-f12de2c33e28"
-version = "0.4.4"
+version = "0.4.5"
 
 [[Mmap]]
 uuid = "a63ad114-7e13-5084-954f-fe012c677804"
@@ -863,10 +863,9 @@ uuid = "01d81517-befc-4cb6-b9ec-a95719d0359c"
 version = "0.2.1"
 
 [[Reexport]]
-deps = ["Pkg"]
-git-tree-sha1 = "7b1d07f411bc8ddb7977ec7f377b97b158514fe0"
+git-tree-sha1 = "57d8440b0c7d98fc4f889e478e80f268d534c9d5"
 uuid = "189a3867-3050-52da-a836-e630ba90ab69"
-version = "0.2.0"
+version = "1.0.0"
 
 [[Requires]]
 deps = ["UUIDs"]

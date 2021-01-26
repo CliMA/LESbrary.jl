@@ -486,7 +486,7 @@ simulation.output_writers[:statistics_jld2] =
 simulation.output_writers[:averaged_statistics_jld2] =
     JLD2OutputWriter(model, statistics_to_output,
                           dir = data_directory,
-                       prefix = "averaged_statistics",
+                       prefix = "time_averaged_statistics",
                      schedule = AveragedTimeInterval(averages_time_interval,
                                                      window = averages_time_window),
                         force = force,
