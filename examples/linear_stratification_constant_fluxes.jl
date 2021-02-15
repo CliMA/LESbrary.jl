@@ -221,7 +221,7 @@ simulation.output_writers[:slices] = JLD2OutputWriter(model, merge(model.velocit
 
 # Create scratch space for online calculations
 b = BuoyancyField(model)
-c_scratch = CellField(model.architecture, model.grid)
+c_scratch = CenterField(model.architecture, model.grid)
 u_scratch = XFaceField(model.architecture, model.grid)
 v_scratch = YFaceField(model.architecture, model.grid)
 w_scratch = ZFaceField(model.architecture, model.grid)

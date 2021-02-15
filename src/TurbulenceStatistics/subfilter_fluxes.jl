@@ -1,4 +1,4 @@
-using Oceananigans.Fields: ZFaceField, CellField
+using Oceananigans.Fields: ZFaceField, CenterField
 using Oceananigans.TurbulenceClosures: AnisotropicMinimumDissipation
 
 subfilter_diffusivity(::AnisotropicMinimumDissipation, diffusivities, name) =
@@ -8,14 +8,14 @@ subfilter_diffusivity(::AnisotropicMinimumDissipation, diffusivities, name) =
     subfilter_momentum_fluxes(model,
                               uz_scratch = Field(Face, Center, Face, model.architecture, model.grid),
                               vz_scratch = Field(Center, Face, Face, model.architecture, model.grid),
-                              c_scratch = CellField(model.architecture, model.grid))
+                              c_scratch = CenterField(model.architecture, model.grid))
 
 Returns a dictionary of horizontally-averaged subfilter momentum fluxes.
 """
 function subfilter_momentum_fluxes(model;
                                    uz_scratch = Field(Face, Center, Face, model.architecture, model.grid),
                                    vz_scratch = Field(Center, Face, Face, model.architecture, model.grid),
-                                   c_scratch = CellField(model.architecture, model.grid))
+                                   c_scratch = CenterField(model.architecture, model.grid))
 
     u, v, w = model.velocities
 

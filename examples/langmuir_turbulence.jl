@@ -226,7 +226,7 @@ data_directory = joinpath(@__DIR__, "..", "data", prefix) # save data in /data/p
 b = BuoyancyField(model)
 p = PressureField(model)
 w_scratch = ZFaceField(model.architecture, model.grid)
-c_scratch = CellField(model.architecture, model.grid)
+c_scratch = CenterField(model.architecture, model.grid)
 
 primitive_statistics = first_through_second_order(model, b=b, p=p, w_scratch=w_scratch, c_scratch=c_scratch)
 
