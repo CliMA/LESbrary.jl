@@ -146,9 +146,10 @@ uuid = "e66e0078-7015-5450-92f7-15fbd957f2ae"
 version = "0.3.4+0"
 
 [[ConstructionBase]]
-git-tree-sha1 = "a2a6a5fea4d6f730ec4c18a76d27ec10e8ec1c50"
+deps = ["LinearAlgebra"]
+git-tree-sha1 = "48920211c95a6da1914a06c44ec94be70e84ffff"
 uuid = "187b0558-2788-49d3-abe0-74a17ed4e7c9"
-version = "1.0.0"
+version = "1.1.0"
 
 [[Contour]]
 deps = ["StaticArrays"]
@@ -199,11 +200,9 @@ version = "1.0.2"
 
 [[DimensionalData]]
 deps = ["Adapt", "ConstructionBase", "Dates", "LinearAlgebra", "RecipesBase", "SparseArrays", "Statistics", "Tables"]
-git-tree-sha1 = "28c1218f790d673b4f707a9f54d3dcbf4c16a4f1"
-repo-rev = "master"
-repo-url = "https://github.com/rafaqz/DimensionalData.jl.git"
+git-tree-sha1 = "0121c5795da915797075e1245f89ab163de83dae"
 uuid = "0703355e-b756-11e9-17c0-8b28908087d0"
-version = "0.16.1"
+version = "0.16.2"
 
 [[DiskArrays]]
 git-tree-sha1 = "731967c22b99f606540c45a3773e92d336fd6963"
@@ -359,11 +358,9 @@ version = "0.53.0+0"
 
 [[GeoData]]
 deps = ["Adapt", "ArchGDAL", "Dates", "DimensionalData", "GeoFormatTypes", "HDF5", "Missings", "Mmap", "NCDatasets", "ProgressMeter", "RecipesBase", "Reexport", "Requires"]
-git-tree-sha1 = "2135c2da82c7aacd8ae160598ecd015a0fa3c9b2"
-repo-rev = "xyz-geoplot"
-repo-url = "https://github.com/rafaqz/GeoData.jl.git"
+git-tree-sha1 = "cf25cc8a24099627a3d3e62d4b3c9d9864fee709"
 uuid = "9b6fcbb8-86d6-11e9-1ce7-23a6bb139a78"
-version = "0.3.3"
+version = "0.3.5"
 
 [[GeoFormatTypes]]
 git-tree-sha1 = "bb75ce99c9d6fb2edd8ef8ee474991cdacf12221"
@@ -406,9 +403,9 @@ version = "1.0.0"
 
 [[HDF5]]
 deps = ["Blosc", "Compat", "HDF5_jll", "Libdl", "Mmap", "Random", "Requires"]
-git-tree-sha1 = "947d696a6b6dbc14018a1668c4724fdc6236a3d3"
+git-tree-sha1 = "8a21f34a34491833bcda29a3ec2188b4ec6e558f"
 uuid = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
-version = "0.15.2"
+version = "0.15.4"
 
 [[HDF5_jll]]
 deps = ["Artifacts", "JLLWrappers", "LibCURL_jll", "Libdl", "OpenSSL_jll", "Pkg", "Zlib_jll"]
@@ -816,9 +813,9 @@ uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 
 [[ProgressMeter]]
 deps = ["Distributed", "Printf"]
-git-tree-sha1 = "45640774ee2efa24e52686dbdf895e88102e68fc"
+git-tree-sha1 = "6e9c89cba09f6ef134b00e10625590746ba1e036"
 uuid = "92933f4c-e287-5a05-a399-4b506db050ca"
-version = "1.4.1"
+version = "1.5.0"
 
 [[Qt_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Fontconfig_jll", "Glib_jll", "JLLWrappers", "Libdl", "Libglvnd_jll", "OpenSSL_jll", "Pkg", "Xorg_libXext_jll", "Xorg_libxcb_jll", "Xorg_xcb_util_image_jll", "Xorg_xcb_util_keysyms_jll", "Xorg_xcb_util_renderutil_jll", "Xorg_xcb_util_wm_jll", "Zlib_jll", "xkbcommon_jll"]
