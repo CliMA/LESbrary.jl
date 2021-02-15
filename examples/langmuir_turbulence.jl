@@ -309,7 +309,7 @@ run!(simulation)
 
 xw, yw, zw = nodes(model.velocities.w)
 xu, yu, zu = nodes(model.velocities.u)
-xc, yc, zc = nodes((Cell, Cell, Cell), grid)
+xc, yc, zc = nodes((Center, Center, Center), grid)
 
 xyfile = jldopen(joinpath(data_directory, prefix * "_xy.jld2"))
 xzfile = jldopen(joinpath(data_directory, prefix * "_xz.jld2"))

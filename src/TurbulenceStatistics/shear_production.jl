@@ -1,4 +1,4 @@
-struct ShearProduction{A, G, U, V, W, Ua, Va} <: AbstractField{Cell, Cell, Cell, A, G}
+struct ShearProduction{A, G, U, V, W, Ua, Va} <: AbstractField{Center, Center, Center, A, G}
     data :: A
     grid :: G
        u :: U
@@ -22,7 +22,7 @@ function ShearProduction(model; data = nothing,
                                    V = AveragedField(model.velocities.v, dims=(1, 2)))
 
     if isnothing(data)
-        data = new_data(model.architecture, model.grid, (Cell, Cell, Cell))
+        data = new_data(model.architecture, model.grid, (Center, Center, Center))
     end
 
     u, v, w = model.velocities
@@ -37,7 +37,7 @@ function compute!(sp::ShearProduction)
 
     arch = architecture(sp.data)
 
-    workgroup, worksize = work_layout(sp.grid, :xyz, location=(Cell, Cell, Cell))
+    workgroup, worksize = work_layout(sp.grid, :xyz, location=(Center, Center, Center))
 
     compute_kernel! = compute_shear_production!(device(arch), workgroup, worksize)
 
