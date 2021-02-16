@@ -1,7 +1,7 @@
 """
     turbulent_kinetic_energy_budget(model; b = BuoyancyField(model),
                                            w_scratch = ZFaceField(model.architecture, model.grid),
-                                           c_scratch = CellField(model.architecture, model.grid),
+                                           c_scratch = CenterField(model.architecture, model.grid),
                                            U = AveragedField(model.velocities.u, dims=(1, 2)),
                                            V = AveragedField(model.velocities.v, dims=(1, 2)),
                                            p = PressureField(model))
@@ -29,14 +29,14 @@ In addition, the return statistics `Dict` includes
 8. `:turbulent_kinetic_energy`, ``E = 1/2 (u′² + v′² + w′²)``
 
 All variables are located at cell centers and share memory space with `c_scratch.data`, except `:advective_flux` and
-`:pressure_flux`, which are located at `(Cell, Cell, Face)` and use `w_scratch`.
+`:pressure_flux`, which are located at `(Center, Center, Face)` and use `w_scratch`.
 
 Note that these diagnostics do not compile on the GPU currently.
 """
 function turbulent_kinetic_energy_budget(model;
                                          with_flux_divergences = false,
                                          w_scratch = ZFaceField(model.architecture, model.grid),
-                                         c_scratch = CellField(model.architecture, model.grid),
+                                         c_scratch = CenterField(model.architecture, model.grid),
                                          b = BuoyancyField(model),
                                          p = PressureField(model),
                                          U = AveragedField(model.velocities.u, dims=(1, 2)),
@@ -50,7 +50,7 @@ function turbulent_kinetic_energy_budget(model;
 
     advective_flux = w * e
     pressure_flux = w * p
-    buoyancy_flux = @at (Cell, Cell, Cell) w * b
+    buoyancy_flux = @at (Center, Center, Center) w * b
 
     turbulence_statistics = Dict()
 

@@ -4,7 +4,7 @@ using Oceananigans.Fields
 
 using Oceananigans.Operators: ∂xᶜᵃᵃ, ∂xᶠᵃᵃ, ∂yᵃᶜᵃ, ∂yᵃᶠᵃ, ∂zᵃᵃᶜ, ∂zᵃᵃᶠ, ℑxyᶜᶜᵃ, ℑxzᶜᵃᶜ, ℑyzᵃᶜᶜ
 
-struct ViscousDissipation{A, G, K, U, V, W} <: AbstractField{Cell, Cell, Cell, A, G}
+struct ViscousDissipation{A, G, K, U, V, W} <: AbstractField{Center, Center, Center, A, G}
     data :: A
     grid :: G
       νₑ :: K
@@ -25,7 +25,7 @@ turbulent kinetic energy associated with `model` and stores it in `ϵ.data`.
 function ViscousDissipation(model; data = nothing)
 
     if isnothing(data)
-        data = new_data(model.architecture, model.grid, (Cell, Cell, Cell))
+        data = new_data(model.architecture, model.grid, (Center, Center, Center))
     end
 
     u, v, w = model.velocities
@@ -38,7 +38,7 @@ function compute!(ϵ::ViscousDissipation)
 
     arch = architecture(ϵ.data)
 
-    workgroup, worksize = work_layout(ϵ.grid, :xyz, location=(Cell, Cell, Cell))
+    workgroup, worksize = work_layout(ϵ.grid, :xyz, location=(Center, Center, Center))
 
     compute_kernel! = compute_viscous_dissipation!(device(arch), workgroup, worksize)
 

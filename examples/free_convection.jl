@@ -126,7 +126,7 @@ using JLD2, Plots
 linewidth = 3
 ylim = (-64, 0)
 plot_size = (1000, 500)
-zC = znodes(Cell, grid)
+zC = znodes(Center, grid)
 zF = znodes(Face, grid)
 
 ## Load data

@@ -14,7 +14,7 @@ using
 
 using Oceananigans.Buoyancy: g_Earth
 
-using Oceananigans: @hascuda, Face, Cell
+using Oceananigans: @hascuda, Face, Center
 
 using Oceananigans.Fields: xnodes, ynodes, znodes
 

@@ -369,10 +369,10 @@ k_xy_slice = searchsortedfirst(grid.zF[:], -slice_depth)
 b = BuoyancyField(model)
 p = PressureField(model)
 
-ccc_scratch = Field(Cell, Cell, Cell, model.architecture, model.grid)
-ccf_scratch = Field(Cell, Cell, Face, model.architecture, model.grid)
-fcf_scratch = Field(Face, Cell, Face, model.architecture, model.grid)
-cff_scratch = Field(Cell, Face, Face, model.architecture, model.grid)
+ccc_scratch = Field(Center, Center, Center, model.architecture, model.grid)
+ccf_scratch = Field(Center, Center, Face, model.architecture, model.grid)
+fcf_scratch = Field(Face, Center, Face, model.architecture, model.grid)
+cff_scratch = Field(Center, Face, Face, model.architecture, model.grid)
 
 primitive_statistics = first_through_second_order(model, b=b, p=p, w_scratch=ccf_scratch, c_scratch=ccc_scratch)
 

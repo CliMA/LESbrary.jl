@@ -342,12 +342,12 @@ large_scale_outputs = Dict(
     "τy" => model -> ℑτy.(model.clock.time),
     "QT" => model -> ℑQθ.(model.clock.time),
     "QS" => model -> ℑQs.(model.clock.time),
-     "u" => model ->  ℑU.(model.clock.time, znodes(Cell, model.grid)[:]),
-     "v" => model ->  ℑV.(model.clock.time, znodes(Cell, model.grid)[:]),
-     "T" => model ->  ℑΘ.(model.clock.time, znodes(Cell, model.grid)[:]),
-     "S" => model ->  ℑS.(model.clock.time, znodes(Cell, model.grid)[:]),
-  "Ugeo" => model -> ℑUgeo.(model.clock.time, znodes(Cell, model.grid)[:]),
-  "Vgeo" => model -> ℑVgeo.(model.clock.time, znodes(Cell, model.grid)[:])
+     "u" => model ->  ℑU.(model.clock.time, znodes(Center, model.grid)[:]),
+     "v" => model ->  ℑV.(model.clock.time, znodes(Center, model.grid)[:]),
+     "T" => model ->  ℑΘ.(model.clock.time, znodes(Center, model.grid)[:]),
+     "S" => model ->  ℑS.(model.clock.time, znodes(Center, model.grid)[:]),
+  "Ugeo" => model -> ℑUgeo.(model.clock.time, znodes(Center, model.grid)[:]),
+  "Vgeo" => model -> ℑVgeo.(model.clock.time, znodes(Center, model.grid)[:])
 )
 
 large_scale_dims = Dict(

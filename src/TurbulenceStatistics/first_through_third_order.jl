@@ -1,4 +1,4 @@
-using Oceananigans.Fields: XFaceField, YFaceField, ZFaceField, CellField, PressureField
+using Oceananigans.Fields: XFaceField, YFaceField, ZFaceField, CenterField, PressureField
 using Oceananigans.Buoyancy: BuoyancyField
 
 has_buoyancy_tracer(model) = :b ∈ keys(model.tracers)
@@ -45,7 +45,7 @@ end
     velocity_covariances(model; u_scratch = XFaceField(model.architecture, model.grid),
                                 v_scratch = YFaceField(model.architecture, model.grid),
                                 w_scratch = ZFaceField(model.architecture, model.grid),
-                                c_scratch = CellField(model.architecture, model.grid))
+                                c_scratch = CenterField(model.architecture, model.grid))
 
 Returns a dictionary containing horizontal averages of the velocity covariances uᵢuⱼ.
 
@@ -55,7 +55,7 @@ scratch space for computations at `u`, `v`, `w`, and tracer ("`c`") locations, r
 function velocity_covariances(model; u_scratch = XFaceField(model.architecture, model.grid),
                                      v_scratch = YFaceField(model.architecture, model.grid),
                                      w_scratch = ZFaceField(model.architecture, model.grid),
-                                     c_scratch = CellField(model.architecture, model.grid))
+                                     c_scratch = CenterField(model.architecture, model.grid))
 
     u, v, w = model.velocities
 
@@ -76,7 +76,7 @@ end
                               u_scratch = XFaceField(model.architecture, model.grid),
                               v_scratch = YFaceField(model.architecture, model.grid),
                               w_scratch = ZFaceField(model.architecture, model.grid),
-                              c_scratch = CellField(model.architecture, model.grid))
+                              c_scratch = CenterField(model.architecture, model.grid))
 
 Returns a dictionary containing horizontal averages of
 tracer variance, tracer-velocity covariances, and tracer-buoyancy covariance.
@@ -91,7 +91,7 @@ function tracer_covariances(model; b = BuoyancyField(model),
                                    u_scratch = XFaceField(model.architecture, model.grid),
                                    v_scratch = YFaceField(model.architecture, model.grid),
                                    w_scratch = ZFaceField(model.architecture, model.grid),
-                                   c_scratch = CellField(model.architecture, model.grid))
+                                   c_scratch = CenterField(model.architecture, model.grid))
 
     u, v, w = model.velocities
 
@@ -125,7 +125,7 @@ end
     third_order_velocity_statistics(model, u_scratch = XFaceField(model.architecture, model.grid),
                                            v_scratch = YFaceField(model.architecture, model.grid),
                                            w_scratch = ZFaceField(model.architecture, model.grid),
-                                           c_scratch = CellField(model.architecture, model.grid),
+                                           c_scratch = CenterField(model.architecture, model.grid),
                                            p = PressureField(model))
 
 Returns a dictionary of functions that calculate horizontally-averaged third-order statistics
@@ -137,7 +137,7 @@ scratch space for computations at `u`, `v`, `w`, and tracer ("`c`") locations, r
 function third_order_velocity_statistics(model; u_scratch = XFaceField(model.architecture, model.grid),
                                                 v_scratch = YFaceField(model.architecture, model.grid),
                                                 w_scratch = ZFaceField(model.architecture, model.grid),
-                                                c_scratch = CellField(model.architecture, model.grid),
+                                                c_scratch = CenterField(model.architecture, model.grid),
                                                 p = PressureField(model))
 
     u, v, w = model.velocities
@@ -185,7 +185,7 @@ end
     third_order_tracer_statistics(model; u_scratch = XFaceField(model.architecture, model.grid),
                                          v_scratch = YFaceField(model.architecture, model.grid),
                                          w_scratch = ZFaceField(model.architecture, model.grid),
-                                         c_scratch = CellField(model.architecture, model.grid))
+                                         c_scratch = CenterField(model.architecture, model.grid))
 
 Returns a dictionary of functions that calculate horizontally-averaged third-order statistics
 that involve tracers.
@@ -196,7 +196,7 @@ scratch space for computations at `u`, `v`, `w`, and tracer ("`c`") locations, r
 function third_order_tracer_statistics(model; u_scratch = XFaceField(model.architecture, model.grid),
                                               v_scratch = YFaceField(model.architecture, model.grid),
                                               w_scratch = ZFaceField(model.architecture, model.grid),
-                                              c_scratch = CellField(model.architecture, model.grid),
+                                              c_scratch = CenterField(model.architecture, model.grid),
                                               p = PressureField(model))
 
     u, v, w = model.velocities
@@ -227,7 +227,7 @@ function first_order_statistics(model; b = BuoyancyField(model),
                                        u_scratch = XFaceField(model.architecture, model.grid),
                                        v_scratch = YFaceField(model.architecture, model.grid),
                                        w_scratch = ZFaceField(model.architecture, model.grid),
-                                       c_scratch = CellField(model.architecture, model.grid),
+                                       c_scratch = CenterField(model.architecture, model.grid),
                                        p = PressureField(model))
 
     output = merge(
@@ -248,7 +248,7 @@ function second_order_statistics(model; b = BuoyancyField(model),
                                         u_scratch = XFaceField(model.architecture, model.grid),
                                         v_scratch = YFaceField(model.architecture, model.grid),
                                         w_scratch = ZFaceField(model.architecture, model.grid),
-                                        c_scratch = CellField(model.architecture, model.grid))
+                                        c_scratch = CenterField(model.architecture, model.grid))
 
     output = merge(
                    velocity_covariances(model, u_scratch = u_scratch,
@@ -278,7 +278,7 @@ end
 function third_order_statistics(model; u_scratch = XFaceField(model.architecture, model.grid),
                                        v_scratch = YFaceField(model.architecture, model.grid),
                                        w_scratch = ZFaceField(model.architecture, model.grid),
-                                       c_scratch = CellField(model.architecture, model.grid),
+                                       c_scratch = CenterField(model.architecture, model.grid),
                                        p = PressureField(model))
 
     output = merge(
@@ -302,7 +302,7 @@ function first_through_second_order(model; b = BuoyancyField(model), p = Pressur
                                            u_scratch = XFaceField(model.architecture, model.grid),
                                            v_scratch = YFaceField(model.architecture, model.grid),
                                            w_scratch = ZFaceField(model.architecture, model.grid),
-                                           c_scratch = CellField(model.architecture, model.grid))
+                                           c_scratch = CenterField(model.architecture, model.grid))
                                        
 
     output = merge(
@@ -328,7 +328,7 @@ function first_through_third_order(model; b = BuoyancyField(model), p = Pressure
                                           u_scratch = XFaceField(model.architecture, model.grid),
                                           v_scratch = YFaceField(model.architecture, model.grid),
                                           w_scratch = ZFaceField(model.architecture, model.grid),
-                                          c_scratch = CellField(model.architecture, model.grid))
+                                          c_scratch = CenterField(model.architecture, model.grid))
                                           
 
     output = merge(
