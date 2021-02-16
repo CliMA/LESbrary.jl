@@ -10,10 +10,19 @@ using Oceananigans.Grids
 using Oceananigans.Operators
 using Oceananigans.Buoyancy
 using Oceananigans.BoundaryConditions
-using Oceananigans.Forcing
+# using Oceananigans.Forcing
 using Oceananigans.Diagnostics
 using Oceananigans.OutputWriters
 using Oceananigans.Utils
+
+using SeawaterPolynomials.TEOS10
+
+# Install needed Python packages
+using Conda
+Conda.add("xarray")
+Conda.add_channel("conda-forge")
+Conda.add("xgcm", channel="conda-forge")
+Conda.add("netcdf4")
 
 # Needed to import local modules
 # See: https://github.com/JuliaPy/PyCall.jl/issues/48
@@ -40,7 +49,7 @@ Lz = 2Lx
 topology = (Periodic, Periodic, Bounded)
 grid = RegularCartesianGrid(topology=topology, size=(Nx, Ny, Nz), x=(0.0, Lx), y=(0.0, Ly), z=(-Lz, 0.0))
 
-eos = TEOS10(FT)
+eos = TEOS10EquationOfState(FT)
 buoyancy = SeawaterBuoyancy(equation_of_state=eos)
 
 coriolis = FPlane(latitude=lat)
@@ -53,8 +62,8 @@ sose = pyimport("sose_data")
 
 # Don't have to wait minutes to load 3D data if we already did so.
 if (!@isdefined ds2) && (!@isdefined ds3)
-    ds2 = sose.open_sose_2d_datasets("/storage3/alir/bsose_i122/")
-    ds3 = sose.open_sose_3d_datasets("/storage3/alir/bsose_i122/")
+    ds2 = sose.open_sose_2d_datasets("/storage3/bsose_i122/")
+    ds3 = sose.open_sose_3d_datasets("/storage3/bsose_i122/")
 end
 
 date_times = sose.get_times(ds2)
