@@ -165,7 +165,7 @@ stop_hours = args["hours"]
 f = args["coriolis"]
 name = args["name"]
 
-snapshot_time_interval = 5minutes
+snapshot_time_interval = 10minutes
 averages_time_interval = 3hours
 averages_time_window = 15minutes
 
@@ -582,7 +582,7 @@ if make_animation
 
     frame = Node(1)
 
-    plot_title = @lift "LESbrary.jl three-layer constant fluxes: time = $(prettytime(times[$frame]))"
+    plot_title = @lift "LESbrary.jl three-layer constant fluxes $name: time = $(prettytime(times[$frame]))"
 
     u_xy = @lift ds_xy[:u][Ti=$frame].data |> squeeze
     v_xy = @lift ds_xy[:v][Ti=$frame].data |> squeeze
@@ -679,7 +679,7 @@ if make_animation
     supertitle = fig[0, :] = Label(fig, plot_title, textsize=30)
 
     filepath = joinpath(data_directory, "xy_xz_movie.mp4")
-    record(fig, filepath, 1:Nt, framerate=2) do n
+    record(fig, filepath, 1:Nt, framerate=15) do n
         @info "Animating xy/xz movie frame $n/$Nt..."
         frame[] = n
     end
@@ -700,7 +700,7 @@ if make_animation
 
     frame = Node(1)
 
-    plot_title = @lift "LESbrary.jl three-layer constant fluxes: time = $(prettytime(times[$frame]))"
+    plot_title = @lift "LESbrary.jl three-layer constant fluxes $name: time = $(prettytime(times[$frame]))"
 
     u = @lift ds[:u][Ti=$frame]
     v = @lift ds[:v][Ti=$frame]
@@ -849,8 +849,10 @@ if make_animation
     ylims!(ax_tke_sp, extrema(zf))
     hideydecorations!(ax_tke_sp, grid=false)
 
+    supertitle = fig[0, :] = Label(fig, plot_title, textsize=30)
+    
     filepath = joinpath(data_directory, "instantaneous_statistics.mp4")
-    record(fig, filepath, 1:Nt, framerate=2) do n
+    record(fig, filepath, 1:Nt, framerate=15) do n
         @info "Animating instantaneous statistics movie frame $n/$Nt..."
         frame[] = n
     end
