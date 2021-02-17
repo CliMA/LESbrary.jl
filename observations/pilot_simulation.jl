@@ -32,7 +32,7 @@ sys.path.insert(0, ".")
 """
 
 #####
-##### Set up grid and some model components
+##### Set up grid
 #####
 
 lat, lon = -50, 275
@@ -49,21 +49,18 @@ Lz = 2Lx
 topology = (Periodic, Periodic, Bounded)
 grid = RegularCartesianGrid(topology=topology, size=(Nx, Ny, Nz), x=(0.0, Lx), y=(0.0, Ly), z=(-Lz, 0.0))
 
-eos = TEOS10EquationOfState(FT)
-buoyancy = SeawaterBuoyancy(equation_of_state=eos)
-
-coriolis = FPlane(latitude=lat)
-
 #####
 ##### Load large-scale (base state) solution from SOSE
 #####
+
+SOSE_DIR = "/storage3/bsose_i122/"
 
 sose = pyimport("sose_data")
 
 # Don't have to wait minutes to load 3D data if we already did so.
 if (!@isdefined ds2) && (!@isdefined ds3)
-    ds2 = sose.open_sose_2d_datasets("/storage3/bsose_i122/")
-    ds3 = sose.open_sose_3d_datasets("/storage3/bsose_i122/")
+    ds2 = sose.open_sose_2d_datasets(SOSE_DIR)
+    ds3 = sose.open_sose_3d_datasets(SOSE_DIR)
 end
 
 date_times = sose.get_times(ds2)
@@ -125,52 +122,52 @@ Vgeo = reverse(V, dims=2)
 
 # Fu′ = - w′∂z(U) - U∂x(u′) - V∂y(u′)
 # FIXME? Do we need to use the flux form operator ∇·(Uũ′) instead of ũ′·∇U ?
-@inline Fu′(i, j, k, grid, t, ũ′, c′, p) =
-    @inbounds - ũ′.w[i, j, k] * ∇(p.ℑU, t, grid.zC[k])[2] - p.ℑU(t, grid.zC[k]) * ∂xᶜᵃᵃ(i, j, k, grid, ũ′.u) - p.ℑV(t, grid.zC[k]) * ∂yᵃᶜᵃ(i, j, k, grid, ũ′.u)
+@inline Fu′(i, j, k, grid, t, u′, v′, w′, p) =
+    @inbounds - w′[i, j, k] * ∇(p.ℑU, t, grid.zC[k])[2] - p.ℑU(t, grid.zC[k]) * ∂xᶜᵃᵃ(i, j, k, grid, u′) - p.ℑV(t, grid.zC[k]) * ∂yᵃᶜᵃ(i, j, k, grid, u′)
 
 # Fv′ = - w′∂z(V) - U∂x(v′) - V∂y(v′)
-@inline Fv′(i, j, k, grid, t, ũ′, c′, p) =
-    @inbounds - ũ′.w[i, j, k] * ∇(p.ℑV, t, grid.zC[k])[2] - p.ℑU(t, grid.zC[k]) * ∂xᶜᵃᵃ(i, j, k, grid, ũ′.v) - p.ℑV(t, grid.zC[k]) * ∂yᵃᶜᵃ(i, j, k, grid, ũ′.v)
+@inline Fv′(i, j, k, grid, t, u′, v′, w′, p) =
+    @inbounds - w′[i, j, k] * ∇(p.ℑV, t, grid.zC[k])[2] - p.ℑU(t, grid.zC[k]) * ∂xᶜᵃᵃ(i, j, k, grid, v′) - p.ℑV(t, grid.zC[k]) * ∂yᵃᶜᵃ(i, j, k, grid, v′)
 
 # Fw′ = - U∂x(w′) - V∂y(w′)
-@inline Fw′(i, j, k, grid, t, ũ′, c′, p) =
-    @inbounds - p.ℑU(t, grid.zC[k]) * ∂xᶜᵃᵃ(i, j, k, grid, ũ′.u) - p.ℑV(t, grid.zC[k]) * ∂yᵃᶜᵃ(i, j, k, grid, ũ′.v)
+@inline Fw′(i, j, k, grid, t, u′, v′, w′, p) =
+    @inbounds - p.ℑU(t, grid.zC[k]) * ∂xᶜᵃᵃ(i, j, k, grid, u′) - p.ℑV(t, grid.zC[k]) * ∂yᵃᶜᵃ(i, j, k, grid, v′)
 
 # Fθ′ = - ∂t(Θ) - U∂x(θ′) - V∂y(θ′) - w′∂z(Θ)
 # FIXME? Do we need to include the ∂t(Θ) terms?
-@inline Fθ′(i, j, k, grid, t, ũ′, c′, p) =
-    @inbounds - p.ℑU(t, grid.zC[k]) * ∂xᶠᵃᵃ(i, j, k, grid, c′.T) - p.ℑV(t, grid.zC[k]) * ∂yᵃᶜᵃ(i, j, k, grid, ũ′.v) - ũ′.w[i, j, k] * ∇(p.ℑΘ, t, grid.zC[k])[2]
+@inline Fθ′(i, j, k, grid, t, u′, v′, w′, T′, p) =
+    @inbounds - p.ℑU(t, grid.zC[k]) * ∂xᶠᵃᵃ(i, j, k, grid, T′) - p.ℑV(t, grid.zC[k]) * ∂yᵃᶜᵃ(i, j, k, grid, T′) - w′[i, j, k] * ∇(p.ℑΘ, t, grid.zC[k])[2]
 
 # Fs′ = - ∂t(S) - U∂x(s′) - V∂y(s′) - w′∂z(S)
-@inline Fs′(i, j, k, grid, t, ũ′, c′, p) =
-    @inbounds - p.ℑU(t, grid.zC[k]) * ∂xᶠᵃᵃ(i, j, k, grid, c′.S) - p.ℑV(t, grid.zC[k]) * ∂yᵃᶜᵃ(i, j, k, grid, ũ′.v) - ũ′.w[i, j, k] * ∇(p.ℑS, t, grid.zC[k])[2]
+@inline Fs′(i, j, k, grid, t, u′, v′, w′, S′, p) =
+    @inbounds - p.ℑU(t, grid.zC[k]) * ∂xᶠᵃᵃ(i, j, k, grid, S′) - p.ℑV(t, grid.zC[k]) * ∂yᵃᶜᵃ(i, j, k, grid, S′) - w′[i, j, k] * ∇(p.ℑS, t, grid.zC[k])[2]
 
 # Timescale for relaxation to large-scale solution.
 week = 7day
 μ = (T=1/week, S=1/week)
 
 # FIXME: Should be μ(C - c̅) so I need to add horizontal averages to parameters.
-@inline Fθ_μ(i, j, k, grid, t, ũ′, c′, p) = @inbounds p.μ.T * (p.ℑΘ(t, grid.zC[k]) - c′.T[i, j, k])
-@inline FS_μ(i, j, k, grid, t, ũ′, c′, p) = @inbounds p.μ.S * (p.ℑS(t, grid.zC[k]) - c′.S[i, j, k])
+@inline Fθ_μ(i, j, k, grid, t, T′, p) = @inbounds p.μ.T * (p.ℑΘ(t, grid.zC[k]) - T′[i, j, k])
+@inline FS_μ(i, j, k, grid, t, S′, p) = @inbounds p.μ.S * (p.ℑS(t, grid.zC[k]) - S′[i, j, k])
 
-@inline u_forcing_wrapper(i, j, k, grid, clock, state, params) = Fu′(i, j, k, grid, clock.time, state.velocities, state.tracers, params)
-@inline v_forcing_wrapper(i, j, k, grid, clock, state, params) = Fv′(i, j, k, grid, clock.time, state.velocities, state.tracers, params)
-@inline w_forcing_wrapper(i, j, k, grid, clock, state, params) = Fw′(i, j, k, grid, clock.time, state.velocities, state.tracers, params)
+@inline u_forcing_wrapper(i, j, k, grid, clock, fields, params) = Fu′(i, j, k, grid, clock.time, fields.u, fields.v, fields.w, params)
+@inline v_forcing_wrapper(i, j, k, grid, clock, fields, params) = Fv′(i, j, k, grid, clock.time, fields.u, fields.v, fields.w, params)
+@inline w_forcing_wrapper(i, j, k, grid, clock, fields, params) = Fw′(i, j, k, grid, clock.time, fields.u, fields.v, fields.w, params)
 
-@inline T_forcing_wrapper(i, j, k, grid, clock, state, params) =
-    Fθ′(i, j, k, grid, clock.time, state.velocities, state.tracers, params) + Fθ_μ(i, j, k, grid, clock.time, state.velocities, state.tracers, params)
+@inline T_forcing_wrapper(i, j, k, grid, clock, fields, params) =
+    Fθ′(i, j, k, grid, clock.time, fields.u, fields.v, fields.w, fields.T, params) + Fθ_μ(i, j, k, grid, clock.time, fields.T, params)
 
-@inline S_forcing_wrapper(i, j, k, grid, clock, state, params) =
-    Fs′(i, j, k, grid, clock.time, state.velocities, state.tracers, params) + FS_μ(i, j, k, grid, clock.time, state.velocities, state.tracers, params)
+@inline S_forcing_wrapper(i, j, k, grid, clock, fields, params) =
+    Fs′(i, j, k, grid, clock.time, fields.u, fields.v, fields.w, fields.S, params) + FS_μ(i, j, k, grid, clock.time, fields.S, params)
 
 parameters = (ℑτx=ℑτx, ℑτy=ℑτy, ℑQθ=ℑQθ, ℑQs=ℑQs, ℑU=ℑUgeo, ℑV=ℑVgeo, ℑΘ=ℑΘ, ℑS=ℑS, μ=μ)
 
-forcings = ModelForcing(
-    u = ParameterizedForcing(u_forcing_wrapper, parameters),
-    v = ParameterizedForcing(v_forcing_wrapper, parameters),
-    w = ParameterizedForcing(w_forcing_wrapper, parameters),
-    T = ParameterizedForcing(T_forcing_wrapper, parameters),
-    S = ParameterizedForcing(S_forcing_wrapper, parameters)
+forcings = (
+    u = Forcing(u_forcing_wrapper, discrete_form=true, parameters=parameters),
+    v = Forcing(v_forcing_wrapper, discrete_form=true, parameters=parameters),
+    w = Forcing(w_forcing_wrapper, discrete_form=true, parameters=parameters),
+    T = Forcing(T_forcing_wrapper, discrete_form=true, parameters=parameters),
+    S = Forcing(S_forcing_wrapper, discrete_form=true, parameters=parameters)
 )
 
 #####
@@ -183,15 +180,17 @@ forcings = ModelForcing(
 const ρ₀ = 1027.0  # Density of seawater [kg/m³]
 const cₚ = 4000.0  # Specific heat capacity of seawater at constant pressure [J/(kg·K)]
 
-@inline wind_stress_x(i, j, grid, clock, state, p) = p.ℑτx(clock.time) / ρ₀
-@inline wind_stress_y(i, j, grid, clock, state, p) = p.ℑτy(clock.time) / ρ₀
-@inline     heat_flux(i, j, grid, clock, state, p) = - p.ℑQθ(clock.time) / ρ₀ / cₚ
-@inline     salt_flux(i, j, grid, clock, state, p) =   p.ℑQs(clock.time) / ρ₀  # Minus sign because a freshwater flux would decrease salinity.
+@inline wind_stress_x(x, y, t, p) = p.ℑτx(t) / ρ₀
+@inline wind_stress_y(x, y, t, p) = p.ℑτy(t) / ρ₀
+@inline     heat_flux(x, y, t, p) = - p.ℑQθ(t) / ρ₀ / cₚ
+@inline     salt_flux(x, y, t, p) =   p.ℑQs(t) / ρ₀  # Minus sign because a freshwater flux would decrease salinity.
 
-u′_bcs = UVelocityBoundaryConditions(grid, top=ParameterizedBoundaryCondition(Flux, wind_stress_x, parameters))
-v′_bcs = VVelocityBoundaryConditions(grid, top=ParameterizedBoundaryCondition(Flux, wind_stress_y, parameters))
-θ′_bcs =    TracerBoundaryConditions(grid, top=ParameterizedBoundaryCondition(Flux, heat_flux, parameters))
-s′_bcs =    TracerBoundaryConditions(grid, top=ParameterizedBoundaryCondition(Flux, salt_flux, parameters))
+u′_bcs = UVelocityBoundaryConditions(grid, top=FluxBoundaryCondition(wind_stress_x; parameters))
+v′_bcs = VVelocityBoundaryConditions(grid, top=FluxBoundaryCondition(wind_stress_y; parameters))
+θ′_bcs =    TracerBoundaryConditions(grid, top=FluxBoundaryCondition(heat_flux; parameters))
+s′_bcs =    TracerBoundaryConditions(grid, top=FluxBoundaryCondition(salt_flux; parameters))
+
+boundary_conditions = (u=u′_bcs, v=v′_bcs, T=θ′_bcs, S=s′_bcs)
 
 #####
 ##### Model setup
@@ -202,11 +201,16 @@ model = IncompressibleModel(
              float_type = FT,
             	   grid = grid,
                 tracers = (:T, :S),
-               coriolis = coriolis,
-    boundary_conditions = (u=u′_bcs, v=v′_bcs, T=θ′_bcs, S=s′_bcs),
+               buoyancy = SeawaterBuoyancy(equation_of_state=TEOS10EquationOfState(FT)),
+               coriolis = FPlane(latitude=lat),
                 closure = AnisotropicMinimumDissipation(),
+    boundary_conditions = boundary_conditions,
                 forcing = forcings
 )
+
+time_step!(model, 1.0)
+
+#=
 
 #####
 ##### Initial conditions
@@ -225,6 +229,8 @@ Oceananigans.set!(model, u=U₀, v=V₀, w=W₀, T=Θ₀, S=S₀)
 #####
 ##### Setting up diagnostics
 #####
+
+u, v, w, T, S = fields(model)
 
 Up = HorizontalAverage(model.velocities.u,     return_type=Array)
 Vp = HorizontalAverage(model.velocities.v,     return_type=Array)
@@ -430,7 +436,7 @@ dcfl = DiffusiveCFL(wizard)
 
 function print_progress(simulation)
     model = simulation.model
-    
+
     # Calculate simulation progress in %.
     progress = 100 * (model.clock.time / simulation.stop_time)
 
