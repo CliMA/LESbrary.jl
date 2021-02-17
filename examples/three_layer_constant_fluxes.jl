@@ -690,94 +690,170 @@ end
 if make_animation
     ds = NCDstack(joinpath(data_directory, "instantaneous_statistics.nc"))
 
-    kwargs = (linewidth=3, linealpha=0.7, ylabel="", yticks=[], ylims=(-128, 0), title="",
-              grid=false, legend=:bottomright, legendfontsize=12, framestyle=:box,
-              foreground_color_legend=nothing, background_color_legend=nothing)
-
-    _, times = dims(ds[:u])
+    times = ds[:time]
     Nt = length(times)
 
-    anim = @animate for n in 1:Nt
-        @info "Plotting statistics $n/$Nt..."
+    zc = ds[:zC].data
+    zf = ds[:zF].data
 
-        uv_plot = plot(ds[:u][Ti=n]; label="u", xlims=(-0.1, 0.1), xticks=[-0.1, 0, 0.1], kwargs...)
-                  plot!(ds[:v][Ti=n]; label="v", xlabel="m/s", kwargs..., yticks=-128:32:0)
+    fig = Figure(resolution=(3000, 2000))
 
-        T_plot = plot(ds[:T][Ti=n]; label="T", xlabel="°C", kwargs...)
+    frame = Node(1)
 
-        c_plot = plot(ds[:c₀][Ti=n]; label="c₀", xlims=(-0.32, 2), xticks=[0, 1, 2], kwargs...)
-                 plot!(ds[:c₁][Ti=n]; label="c₁", kwargs...)
-                 plot!(ds[:c₂][Ti=n]; label="c₂", xlabel="c", kwargs...)
+    plot_title = @lift "LESbrary.jl three-layer constant fluxes: time = $(prettytime(times[$frame]))"
 
-        ke_plot = plot(ds[:uu][Ti=n]; label="uu", xlims=(-1e-3, 0.01), xticks=[0, 0.01], kwargs...)
-                  plot!(ds[:vv][Ti=n]; label="vv", kwargs...)
-                  plot!(ds[:ww][Ti=n]; label="ww", xlabel="m²/s²", kwargs...)
+    u = @lift ds[:u][Ti=$frame]
+    v = @lift ds[:v][Ti=$frame]
+    T = @lift ds[:T][Ti=$frame]
+    c₀ = @lift ds[:c₀][Ti=$frame]
+    c₁ = @lift ds[:c₁][Ti=$frame]
+    c₂ = @lift ds[:c₂][Ti=$frame]
+    uu = @lift ds[:uu][Ti=$frame]
+    vv = @lift ds[:vv][Ti=$frame]
+    ww = @lift ds[:ww][Ti=$frame]
+    uv = @lift ds[:uv][Ti=$frame]
+    wu = @lift ds[:wu][Ti=$frame]
+    wv = @lift ds[:wv][Ti=$frame]
+    uT = @lift ds[:uT][Ti=$frame]
+    vT = @lift ds[:vT][Ti=$frame]
+    wT = @lift ds[:wT][Ti=$frame]
+    Ri = @lift ds[:Ri][Ti=$frame]
+    νₑ_∂z_u = @lift ds[:νₑ_∂z_u][Ti=$frame]
+    νₑ_∂z_v = @lift ds[:νₑ_∂z_v][Ti=$frame]
+    νₑ_∂z_w = @lift ds[:νₑ_∂z_w][Ti=$frame]
+    κₑ_∂z_T = @lift ds[:κₑ_∂z_T][Ti=$frame]
+    κₑ_∂z_c₀ = @lift ds[:κₑ_∂z_c₀][Ti=$frame]
+    κₑ_∂z_c₁ = @lift ds[:κₑ_∂z_c₁][Ti=$frame]
+    κₑ_∂z_c₂ = @lift ds[:κₑ_∂z_c₂][Ti=$frame]
+    e = @lift ds[:e][Ti=$frame]
+    tke_dissipation = @lift ds[:tke_dissipation][Ti=$frame]
+    tke_advective_flux = @lift ds[:tke_advective_flux][Ti=$frame]
+    tke_buoyancy_flux = @lift ds[:tke_buoyancy_flux][Ti=$frame]
+    tke_pressure_flux = @lift ds[:tke_pressure_flux][Ti=$frame]
+    tke_shear_production = @lift ds[:tke_shear_production][Ti=$frame]
 
-        U_Σ_plot = plot(ds[:uv][Ti=n]; label="uv", xlims=(-0.005, 0.002), xticks=[-0.005, 0], kwargs...)
-                   plot!(ds[:wu][Ti=n]; label="uw", kwargs...)
-                   plot!(ds[:wv][Ti=n]; label="vw", xlabel="m²/s²", kwargs...)
+    colors = ["dodgerblue2", "crimson", "forestgreen"]
 
-        UT_plot = plot(ds[:uT][Ti=n]; label="uT", xlims=(-2, 2), xticks=[-2, 0, 2], kwargs...)
-                  plot!(ds[:vT][Ti=n]; label="vT", kwargs...)
-                  plot!(ds[:wT][Ti=n]; label="wT", xlabel="m·K/s", kwargs...)
+    ax_uv = fig[1, 1] = Axis(fig, xlabel="m/s", ylabel="z (m)")
+    line_u = lines!(ax_uv, u, zc, label="U", linewidth=3, color=colors[1])
+    line_v = lines!(ax_uv, v, zc, label="V", linewidth=3, color=colors[2])
+    axislegend(ax_uv, position=:rb, framevisible=false)
+    xlims!(ax_uv, extrema([extrema(ds[:u])..., extrema(ds[:v])...]))
+    ylims!(ax_uv, extrema(zf))
 
-        Ub_plot = plot(ds[:ub][Ti=n]; label="ub", xlims=(-0.003, 0.003), xticks=[-0.003, 0, 0.003], kwargs...)
-                  plot!(ds[:vb][Ti=n]; label="vb", kwargs...)
-                  plot!(ds[:wb][Ti=n]; label="wb", xlabel="m²/s³", kwargs...)
+    ax_T = fig[1, 2] = Axis(fig, xlabel="°C")
+    line_T = lines!(ax_T, T, zc, linewidth=3, color=colors[1])
+    xlims!(ax_T, extrema(ds[:T]))
+    ylims!(ax_T, extrema(zf))
+    hideydecorations!(ax_T, grid=false)
 
-        cc_plot = plot(ds[:c₀c₀][Ti=n]; label="c₀c₀", xlims=(-0.5, 10), xticks=[0, 10], kwargs...)
-                  plot!(ds[:c₁c₁][Ti=n]; label="c₁c₁", kwargs...)
-                  plot!(ds[:c₂c₂][Ti=n]; label="c₂c₂", xlabel="c²", kwargs...)
+    ax_c = fig[1, 3] = Axis(fig, xlabel="c")
+    line_c₀ = lines!(ax_c, c₀, zc, linewidth=3, label="c₀", color=colors[1])
+    line_c₁ = lines!(ax_c, c₁, zc, linewidth=3, label="c₁", color=colors[2])
+    line_c₂ = lines!(ax_c, c₂, zc, linewidth=3, label="c₂", color=colors[3])
+    axislegend(ax_c, position=:rb, framevisible=false)
+    xlims!(ax_c, extrema([extrema(ds[:c₀])..., extrema(ds[:c₁])..., extrema(ds[:c₂])...]))
+    ylims!(ax_c, extrema(zf))
+    hideydecorations!(ax_c, grid=false)
 
-        Uc₀_plot = plot(ds[:uc₀][Ti=n]; label="uc₀", xlims=(-0.08, 0.08), xticks=[-0.08, 0, 0.08], kwargs...)
-                   plot!(ds[:vc₀][Ti=n]; label="vc₀", kwargs...)
-                   plot!(ds[:wc₀][Ti=n]; label="wc₀", xlabel="m⋅c/s", kwargs...)
+    ax_ke = fig[1, 4] = Axis(fig, xlabel="m²/s²")
+    line_uu = lines!(ax_ke, uu, zc, linewidth=3, label="uu", color=colors[1])
+    line_vv = lines!(ax_ke, vv, zc, linewidth=3, label="vv", color=colors[2])
+    line_ww = lines!(ax_ke, ww, zf, linewidth=3, label="ww", color=colors[3])
+    axislegend(ax_ke, position=:rb, framevisible=false)
+    xlims!(ax_ke, extrema([extrema(ds[:c₀])..., extrema(ds[:c₁])..., extrema(ds[:c₂])...]))
+    ylims!(ax_ke, extrema(zf))
+    hideydecorations!(ax_ke, grid=false)
 
-        Uc₁_plot = plot(ds[:uc₁][Ti=n]; label="uc₁", xlims=(-0.04, 0.04), xticks=[-0.04, 0, 0.04], kwargs...)
-                   plot!(ds[:vc₁][Ti=n]; label="vc₁", kwargs...)
-                   plot!(ds[:wc₁][Ti=n]; label="wc₁", xlabel="m⋅c/s", kwargs...)
+    ax_UΣ = fig[1, 5] = Axis(fig, xlabel="m²/s²")
+    line_uv = lines!(ax_UΣ, uv, zc, linewidth=3, label="uv", color=colors[1])
+    line_wu = lines!(ax_UΣ, wu, zf, linewidth=3, label="wu", color=colors[2])
+    line_wv = lines!(ax_UΣ, wv, zf, linewidth=3, label="wv", color=colors[3])
+    axislegend(ax_UΣ, position=:rb, framevisible=false)
+    xlims!(ax_UΣ, extrema([extrema(ds[:uv])..., extrema(ds[:wu])..., extrema(ds[:wv])...]))
+    ylims!(ax_UΣ, extrema(zf))
+    hideydecorations!(ax_UΣ, grid=false)
 
-        Uc₂_plot = plot(ds[:uc₂][Ti=n]; label="uc₂", xlims=(-0.03, 0.03), xticks=[-0.03, 0, 0.03], kwargs...)
-                   plot!(ds[:vc₂][Ti=n]; label="vc₂", kwargs...)
-                   plot!(ds[:wc₂][Ti=n]; label="wc₂", xlabel="m⋅c/s", kwargs...)
+    ax_UT = fig[1, 6] = Axis(fig, xlabel="m·K/s")
+    line_uT = lines!(ax_UT, uT, zc, linewidth=3, label="uT", color=colors[1])
+    line_vT = lines!(ax_UT, vT, zc, linewidth=3, label="vT", color=colors[2])
+    line_wT = lines!(ax_UT, wT, zf, linewidth=3, label="wT", color=colors[3])
+    axislegend(ax_UT, position=:rb, framevisible=false)
+    xlims!(ax_UT, extrema([extrema(ds[:uT])..., extrema(ds[:vT])..., extrema(ds[:wT])...]))
+    ylims!(ax_UT, extrema(zf))
+    hideydecorations!(ax_UT, grid=false)
 
-        bc_plot = plot(ds[:bc₀][Ti=n]; label="bc₀", xlims=(-0.02, 0.15), xticks=[0, 0.1], kwargs...)
-                  plot!(ds[:bc₁][Ti=n]; label="bc₁", kwargs...)
-                  plot!(ds[:bc₂][Ti=n]; label="bc₂", xlabel="m⋅c/s", kwargs..., yticks=-256:64:0)
+    ax_νₑ = fig[1, 7] = Axis(fig, xlabel="m²/s²")
+    line_νₑ_∂z_u = lines!(ax_νₑ, νₑ_∂z_u, zf, linewidth=3, label="νₑ ∂z(u)", color=colors[1])
+    line_νₑ_∂z_v = lines!(ax_νₑ, νₑ_∂z_v, zf, linewidth=3, label="νₑ ∂z(v)", color=colors[2])
+    line_νₑ_∂z_w = lines!(ax_νₑ, νₑ_∂z_w, zc, linewidth=3, label="νₑ ∂z(w)", color=colors[3])
+    axislegend(ax_νₑ, position=:rb, framevisible=false)
+    xlims!(ax_νₑ, extrema([extrema(ds[:νₑ_∂z_u])..., extrema(ds[:νₑ_∂z_v])..., extrema(ds[:νₑ_∂z_w])...]))
+    ylims!(ax_νₑ, extrema(zf))
+    hideydecorations!(ax_νₑ, grid=false)
 
-        νₑ∂zU_plots = plot(ds[:νₑ_∂z_u][Ti=n]; label="νₑ ∂z(u)", xlims=(-1e-5, 4e-5), xticks=[0, 4e-5], kwargs...)
-                      plot!(ds[:νₑ_∂z_v][Ti=n]; label="νₑ ∂z(v)", kwargs...)
-                      plot!(ds[:νₑ_∂z_w][Ti=n]; label="νₑ ∂z(w)", xlabel="m²/s²", kwargs...)
+    ax_κₑ∂zT = fig[1, 8] = Axis(fig, xlabel="m⋅K/s")
+    line_κₑ∂zT = lines!(ax_κₑ∂zT, κₑ_∂z_T, zf, label="κₑ ∂z(T)", linewidth=3, color=colors[1])
+    axislegend(ax_κₑ∂zT, position=:rb, framevisible=false)
+    xlims!(ax_κₑ∂zT, extrema(ds[:κₑ_∂z_T]))
+    ylims!(ax_κₑ∂zT, extrema(zf))
+    hideydecorations!(ax_κₑ∂zT, grid=false)
 
-        κₑ∂zT_plot = plot(ds[:κₑ_∂z_T][Ti=n]; label="κₑ ∂z(T)", xlabel="m⋅°C/s",
-                          xlims=(-2e-6, 2e-6), xticks=[-2e-6, 0, 2e-6], kwargs...)
+    ax_κₑ∂zC = fig[2, 1] = Axis(fig, xlabel="m²/s²")
+    line_κₑ_∂z_c₀ = lines!(ax_κₑ∂zC, κₑ_∂z_c₀, zf, linewidth=3, label="κₑ ∂z(c₀)", color=colors[1])
+    line_κₑ_∂z_c₁ = lines!(ax_κₑ∂zC, κₑ_∂z_c₂, zf, linewidth=3, label="κₑ ∂z(c₁)", color=colors[2])
+    line_κₑ_∂z_c₂ = lines!(ax_κₑ∂zC, κₑ_∂z_c₂, zf, linewidth=3, label="κₑ ∂z(c₂)", color=colors[3])
+    axislegend(ax_κₑ∂zC, position=:rb, framevisible=false)
+    xlims!(ax_κₑ∂zC, extrema([extrema(ds[:κₑ_∂z_c₀])..., extrema(ds[:κₑ_∂z_c₂])..., extrema(ds[:κₑ_∂z_c₂])...]))
+    ylims!(ax_κₑ∂zC, extrema(zf))
 
-        κₑ∂zC_plots = plot(ds[:κₑ_∂z_c₀][Ti=n]; label="κₑ ∂z(c₀)", xlims=(-6e-5, 6e-5), xticks=[-6e-5, 0, 6e-5], kwargs...)
-                      plot!(ds[:κₑ_∂z_c₁][Ti=n]; label="κₑ ∂z(c₁)", kwargs...)
-                      plot!(ds[:κₑ_∂z_c₂][Ti=n]; label="κₑ ∂z(c₂)", xlabel="m⋅c/s", kwargs...)
+    ax_Ri = fig[2, 2] = Axis(fig, xlabel="Ri")
+    line_Ri = lines!(ax_Ri, Ri, linewidth=3, color=colors[1])
+    xlims!(ax_Ri, (-0.5, 4))
+    ylims!(ax_Ri, extrema(zf))
+    hideydecorations!(ax_Ri, grid=false)
 
-        e_plot = plot(ds[:e][Ti=n]; xlabel="TKE", xaxis=:log, xlims=(1e-9, 1e-2), xticks=[1e-9, 1e-2], kwargs...)
+    ax_e = fig[2, 3] = Axis(fig, xlabel="TKE")
+    line_e = lines!(ax_e, e, linewidth=3, color=colors[1])
+    xlims!(ax_e, extrema(ds[:e]))
+    ylims!(ax_e, extrema(zf))
+    hideydecorations!(ax_e, grid=false)
 
-        ϵ_plot = plot(ds[:tke_dissipation][Ti=n]; label="", xlabel="TKE\ndissipation", xaxis=:log,
-                      xlims=(1e-15, 1e-6), xticks=[1e-15, 1e-6], kwargs...)
+    ax_ϵ = fig[2, 4] = Axis(fig, xlabel="TKE dissipation")
+    line_ϵ = lines!(ax_ϵ, tke_dissipation, linewidth=3, color=colors[1])
+    xlims!(ax_ϵ, extrema(ds[:tke_dissipation]))
+    ylims!(ax_ϵ, extrema(zf))
+    hideydecorations!(ax_ϵ, grid=false)
 
-        Uk_plot = plot(ds[:tke_advective_flux][Ti=n]; label="", xlabel="TKE\nadvective flux",
-                      xlims=(-6e-7, 1e-7), xticks=[-6e-7, 0], kwargs...)
+    ax_tke_a = fig[2, 5] = Axis(fig, xlabel="TKE advective flux")
+    line_tke_a = lines!(ax_tke_a, tke_advective_flux, linewidth=3, color=colors[1])
+    xlims!(ax_tke_a, extrema(ds[:tke_advective_flux]))
+    ylims!(ax_tke_a, extrema(zf))
+    hideydecorations!(ax_tke_a, grid=false)
 
-        bk_plot = plot(ds[:tke_buoyancy_flux][Ti=n]; label="", xlabel="TKE\nbuoyancy flux",
-                      xlims=(-1e-8, 1e-8), xticks=[-1e-8, 0, 1e-8], kwargs...)
+    ax_tke_b = fig[2, 6] = Axis(fig, xlabel="TKE buoyancy flux")
+    line_tke_b = lines!(ax_tke_b, tke_buoyancy_flux, linewidth=3, color=colors[1])
+    xlims!(ax_tke_b, extrema(ds[:tke_buoyancy_flux]))
+    ylims!(ax_tke_b, extrema(zf))
+    hideydecorations!(ax_tke_b, grid=false)
 
-        pk_plot = plot(ds[:tke_pressure_flux][Ti=n]; label="", xlabel="TKE\npressure flux",
-                      xlims=(-3e-7, 3e-7), xticks=[-3e-7, 0, 3e-7], kwargs...)
+    ax_tke_p = fig[2, 7] = Axis(fig, xlabel="TKE pressure flux")
+    line_tke_p = lines!(ax_tke_p, tke_pressure_flux, linewidth=3, color=colors[1])
+    xlims!(ax_tke_p, extrema(ds[:tke_pressure_flux]))
+    ylims!(ax_tke_p, extrema(zf))
+    hideydecorations!(ax_tke_p, grid=false)
 
-        sp_plot = plot(ds[:tke_shear_production][Ti=n]; label="", xlabel="TKE\nshear production",
-                      xlims=(-1e-7, 1e-6), xticks=[0, 1e-6], kwargs...)
+    ax_tke_sp = fig[2, 8] = Axis(fig, xlabel="TKE shear production")
+    line_tke_sp = lines!(ax_tke_sp, tke_shear_production, linewidth=3, color=colors[1])
+    xlims!(ax_tke_sp, extrema(ds[:tke_shear_production]))
+    ylims!(ax_tke_sp, extrema(zf))
+    hideydecorations!(ax_tke_sp, grid=false)
 
-        plot(uv_plot, c_plot, ke_plot, U_Σ_plot, UT_plot, Ub_plot, cc_plot, Uc₀_plot, Uc₁_plot, Uc₂_plot,
-             bc_plot, νₑ∂zU_plots, κₑ∂zT_plot, κₑ∂zC_plots, e_plot, ϵ_plot, Uk_plot, bk_plot, pk_plot, sp_plot,
-             layout=(2, 10), size=(1600, 1100))
+    filepath = joinpath(data_directory, "instantaneous_statistics.mp4")
+    record(fig, filepath, 1:Nt, framerate=2) do n
+        @info "Animating instantaneous statistics movie frame $n/$Nt..."
+        frame[] = n
     end
 
-    mp4(anim, joinpath(data_directory, "instantaneous_statistics.mp4"), fps=15)
-    gif(anim, joinpath(data_directory, "instantaneous_statistics.gif"), fps=15)
+    @info "Movie saved: $filepath"
 end
