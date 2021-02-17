@@ -16,6 +16,7 @@ using JLD2
 using Plots
 
 using LESbrary
+using Oceanostics
 using Oceananigans
 using Oceananigans.Buoyancy
 using Oceananigans.BoundaryConditions
@@ -25,6 +26,7 @@ using Oceananigans.OutputWriters
 using Oceananigans.Utils
 
 using Oceananigans.Fields: PressureField
+using Oceanostics.FlowDiagnostics: richardson_number_ccf!
 
 using LESbrary.Utils: SimulationProgressMessenger, fit_cubic, poly
 using LESbrary.NearSurfaceTurbulenceModels: SurfaceEnhancedModelConstant
@@ -337,7 +339,7 @@ set!(model, T = initial_temperature)
 
 # # Prepare the simulation
 
-@info "Gesticulating mimes..."
+@info "Conjuring the simulation..."
 
 # Adaptive time-stepping
 wizard = TimeStepWizard(cfl=0.8, Δt=1.0, max_change=1.1, min_Δt=0.01, max_Δt=30.0)
@@ -391,9 +393,16 @@ dissipation = ViscousDissipation(model, data=ccc_scratch.data)
 tke_budget_statistics = turbulent_kinetic_energy_budget(model, b=b, p=p, U=U, V=V, e=e,
                                                         shear_production=shear_production, dissipation=dissipation)
 
+Ri_local = KernelComputedField(Center, Center, Face, richardson_number_ccf!, model,
+                               field_dependencies=(U, V, b, 0, 0, 0))
+
+Ri = AveragedField(Ri_local, dims=(1, 2))
+
+extra_statistics = Dict(:Ri => Ri)
+
 fields_to_output = merge(model.velocities, model.tracers, (e=e, ϵ=dissipation))
 
-statistics_to_output = merge(primitive_statistics, subfilter_flux_statistics, tke_budget_statistics)
+statistics_to_output = merge(primitive_statistics, subfilter_flux_statistics, tke_budget_statistics, extra_statistics)
 
 @info "Garnishing output writers..."
 
@@ -531,7 +540,7 @@ simulation.output_writers[:averaged_statistics_nc] =
 
 # # Run
 
-@info "Reticulating splines..."
+@info "Teaching simulation to run!..."
 
 run!(simulation)
 
