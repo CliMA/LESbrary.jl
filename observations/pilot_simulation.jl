@@ -1,42 +1,43 @@
-import Dates
 using Printf
+using Dates
 using PyCall
-
-using Interpolations: interpolate, gradient, Gridded, Linear
-const ∇ = gradient
+using Conda
 
 using Oceananigans
 using Oceananigans.Grids
 using Oceananigans.Operators
+using Oceananigans.Fields
+using Oceananigans.Advection
 using Oceananigans.Buoyancy
 using Oceananigans.BoundaryConditions
-# using Oceananigans.Forcing
 using Oceananigans.Diagnostics
 using Oceananigans.OutputWriters
 using Oceananigans.Utils
-
 using SeawaterPolynomials.TEOS10
 
-# Install needed Python packages
-using Conda
-Conda.add("xarray")
-Conda.add_channel("conda-forge")
-Conda.add("xgcm", channel="conda-forge")
-Conda.add("netcdf4")
+using Oceananigans.Utils: second, minute, minutes, hour, hours, day, days
+using Interpolations: interpolate, gradient, Gridded, Linear
+const ∇ = gradient
 
-# Needed to import local modules
+# Install needed Python packages
+# Conda.add("xarray")
+# Conda.add_channel("conda-forge")
+# Conda.add("xgcm", channel="conda-forge")
+# Conda.add("netcdf4")
+
+# Needed to import local Python modules like sose_data
 # See: https://github.com/JuliaPy/PyCall.jl/issues/48
 py"""
 import sys
 sys.path.insert(0, ".")
 """
 
-#####
-##### Set up grid
-#####
+## Set up grid
+
+@info "Mapping grid..."
 
 lat, lon = -50, 275
-day_offset, days = 250, 10
+day_offset, n_days = 250, 10
 
 arch = CPU()
 FT = Float64
@@ -49,13 +50,25 @@ Lz = 2Lx
 topology = (Periodic, Periodic, Bounded)
 grid = RegularCartesianGrid(topology=topology, size=(Nx, Ny, Nz), x=(0.0, Lx), y=(0.0, Ly), z=(-Lz, 0.0))
 
-#####
-##### Load large-scale (base state) solution from SOSE
-#####
+## Pick a Coriolis approximation
 
-SOSE_DIR = "/storage3/bsose_i122/"
+@info "Spinning up a tangent plane..."
+
+coriolis = FPlane(latitude=lat)
+
+## Pick an equation of state
+
+@info "Surfacing a buoyancy model..."
+
+buoyancy = SeawaterBuoyancy(equation_of_state=TEOS10EquationOfState(FT))
+
+## Load large-scale (base state) solution from SOSE
+
+@info "Summoning SOSE data..."
 
 sose = pyimport("sose_data")
+
+SOSE_DIR = "/storage3/bsose_i122/"
 
 # Don't have to wait minutes to load 3D data if we already did so.
 if (!@isdefined ds2) && (!@isdefined ds3)
@@ -65,32 +78,37 @@ end
 
 date_times = sose.get_times(ds2)
 
-τx = sose.get_scalar_time_series(ds2, "oceTAUX",  lat, lon, day_offset, days) |> Array{FT}
-τy = sose.get_scalar_time_series(ds2, "oceTAUY",  lat, lon, day_offset, days) |> Array{FT}
-Qθ = sose.get_scalar_time_series(ds2, "oceQnet",  lat, lon, day_offset, days) |> Array{FT}
-Qs = sose.get_scalar_time_series(ds2, "oceFWflx", lat, lon, day_offset, days) |> Array{FT}
+τx = sose.get_scalar_time_series(ds2, "oceTAUX",  lat, lon, day_offset, n_days) |> Array{FT}
+τy = sose.get_scalar_time_series(ds2, "oceTAUY",  lat, lon, day_offset, n_days) |> Array{FT}
+Qθ = sose.get_scalar_time_series(ds2, "oceQnet",  lat, lon, day_offset, n_days) |> Array{FT}
+Qs = sose.get_scalar_time_series(ds2, "oceFWflx", lat, lon, day_offset, n_days) |> Array{FT}
 
-U = sose.get_profile_time_series(ds3, "UVEL",  lat, lon, day_offset, days) |> Array{FT}
-V = sose.get_profile_time_series(ds3, "VVEL",  lat, lon, day_offset, days) |> Array{FT}
-Θ = sose.get_profile_time_series(ds3, "THETA", lat, lon, day_offset, days) |> Array{FT}
-S = sose.get_profile_time_series(ds3, "SALT",  lat, lon, day_offset, days) |> Array{FT}
+U = sose.get_profile_time_series(ds3, "UVEL",  lat, lon, day_offset, n_days) |> Array{FT}
+V = sose.get_profile_time_series(ds3, "VVEL",  lat, lon, day_offset, n_days) |> Array{FT}
+Θ = sose.get_profile_time_series(ds3, "THETA", lat, lon, day_offset, n_days) |> Array{FT}
+S = sose.get_profile_time_series(ds3, "SALT",  lat, lon, day_offset, n_days) |> Array{FT}
 
 # Nominal values for α, β to compute geostrophic velocities
 # FIXME: Use TEOS-10 (Θ, Sᴬ, Z) dependent values
 α = 1.67e-4
 β = 7.80e-4
 
-Ugeo, Vgeo = sose.compute_geostrophic_velocities(ds3, lat, lon, day_offset, days, grid.zF, α, β,
-                                                 buoyancy.gravitational_acceleration, coriolis.f)
+@info "Diagnosing geostrophic background state..."
 
-ds2.close()
-ds3.close()
+# Don't have to wait minutes to compute Ugeo and Vgeo if we already did so.
+if (!@isdefined Ugeo) && (!@isdefined Vgeo)
+    Ugeo, Vgeo = sose.compute_geostrophic_velocities(ds3, lat, lon, day_offset, n_days, grid.zF, α, β,
+                                                     buoyancy.gravitational_acceleration, coriolis.f)
 
-#####
-##### Create linear interpolations for base state solution
-#####
+    ds2.close()
+    ds3.close()
+end
 
-ts = day * (0:days-1) |> collect
+## Create linear interpolations for base state solution
+
+@info "Interpolating SOSE data..."
+
+ts = day * (0:n_days-1) |> collect
 zC = ds3.Z.values
 
 ℑτx = interpolate((ts,), τx, Gridded(Linear()))
@@ -114,11 +132,11 @@ Vgeo = reverse(V, dims=2)
 ℑUgeo = interpolate((ts, zC), Ugeo, Gridded(Linear()))
 ℑVgeo = interpolate((ts, zC), Vgeo, Gridded(Linear()))
 
-#####
-##### Set up forcing forcings to
-#####   1. include mean flow interactions in the momentum equation, and
-#####   2. weakly relax tracer fields to the base state.
-#####
+## Set up forcing forcings to
+##   1. include mean flow interactions in the momentum equation, and
+##   2. weakly relax tracer fields to the base state.
+
+@info "Forcing mean-flow interactions and relaxing tracers..."
 
 # Fu′ = - w′∂z(U) - U∂x(u′) - V∂y(u′)
 # FIXME? Do we need to use the flux form operator ∇·(Uũ′) instead of ũ′·∇U ?
@@ -170,11 +188,11 @@ forcings = (
     S = Forcing(S_forcing_wrapper, discrete_form=true, parameters=parameters)
 )
 
-#####
-##### Set up boundary conditions to
-#####   1. impose wind stresses at the ocean surface, and
-#####   2. impose heat and salt fluxes at the ocean surface.
-#####
+## Set up boundary conditions to
+##   1. impose wind stresses at the ocean surface, and
+##   2. impose heat and salt fluxes at the ocean surface.
+
+@info "Enforcing boundary conditions..."
 
 # Physical constants.
 const ρ₀ = 1027.0  # Density of seawater [kg/m³]
@@ -192,29 +210,27 @@ s′_bcs =    TracerBoundaryConditions(grid, top=FluxBoundaryCondition(salt_flux
 
 boundary_conditions = (u=u′_bcs, v=v′_bcs, T=θ′_bcs, S=s′_bcs)
 
-#####
-##### Model setup
-#####
+## Model setup
+
+@info "Framing the model..."
 
 model = IncompressibleModel(
            architecture = arch,
              float_type = FT,
-            	   grid = grid,
+                   grid = grid,
+            timestepper = :RungeKutta3,
+              advection = WENO5(),
                 tracers = (:T, :S),
-               buoyancy = SeawaterBuoyancy(equation_of_state=TEOS10EquationOfState(FT)),
-               coriolis = FPlane(latitude=lat),
+               buoyancy = buoyancy,
+               coriolis = coriolis,
                 closure = AnisotropicMinimumDissipation(),
     boundary_conditions = boundary_conditions,
                 forcing = forcings
 )
 
-time_step!(model, 1.0)
+## Initial conditions
 
-#=
-
-#####
-##### Initial conditions
-#####
+@info "Initializing conditions..."
 
 ε(μ) = μ * randn() # noise
 
@@ -226,131 +242,84 @@ S₀(x, y, z) = ℑS(0, z)
 
 Oceananigans.set!(model, u=U₀, v=V₀, w=W₀, T=Θ₀, S=S₀)
 
-#####
-##### Setting up diagnostics
-#####
+## Simulation setup
+
+@info "Conjuring the simulation..."
+
+wizard = TimeStepWizard(cfl=0.5, Δt=1second, max_change=1.1, min_Δt=0.001second, max_Δt=1minute)
+
+# CFL utilities for reporting stability criterions.
+cfl = AdvectiveCFL(wizard)
+dcfl = DiffusiveCFL(wizard)
+
+function print_progress(simulation)
+    model = simulation.model
+
+    # Calculate simulation progress in %.
+    progress = 100 * (model.clock.time / simulation.stop_time)
+
+    # Find maximum velocities.
+    umax = maximum(abs, model.velocities.u.data.parent)
+    vmax = maximum(abs, model.velocities.v.data.parent)
+    wmax = maximum(abs, model.velocities.w.data.parent)
+
+    # Find maximum ν and κ.
+    νmax = maximum(model.diffusivities.νₑ.data.parent)
+    κmax = maximum(model.diffusivities.κₑ.T.data.parent)
+
+    # Print progress statement.
+    i, t = model.clock.iteration, model.clock.time
+    @printf("[%06.2f%%] i: %d, t: %s, umax: (%.2e, %.2e, %.2e) m/s, CFL: %.2e, νκmax: (%.2e, %.2e), νκCFL: %.2e, next Δt: %.2e s\n",
+            progress, i, prettytime(t), umax, vmax, wmax, cfl(model), νmax, κmax, dcfl(model), simulation.Δt.Δt)
+end
+
+simulation = Simulation(model, Δt=wizard, stop_time=7days, iteration_interval=20, progress=print_progress)
+
+## Output writing
+
+@info "Garnishing output writers..."
 
 u, v, w, T, S = fields(model)
 
-Up = HorizontalAverage(model.velocities.u,     return_type=Array)
-Vp = HorizontalAverage(model.velocities.v,     return_type=Array)
-Wp = HorizontalAverage(model.velocities.w,     return_type=Array)
-Tp = HorizontalAverage(model.tracers.T,        return_type=Array)
-Sp = HorizontalAverage(model.tracers.S,        return_type=Array)
+profiles = (
+    U = AveragedField(u, dims=(1, 2)),
+    V = AveragedField(v, dims=(1, 2)),
+    T = AveragedField(T, dims=(1, 2)),
+    S = AveragedField(S, dims=(1, 2))
+)
 
-νp  = HorizontalAverage(model.diffusivities.νₑ,   return_type=Array)
-κTp = HorizontalAverage(model.diffusivities.κₑ.T, return_type=Array)
-κSp = HorizontalAverage(model.diffusivities.κₑ.S, return_type=Array)
-
-u, v, w = model.velocities
-T, S = model.tracers
-
-uu = HorizontalAverage(u*u, model, return_type=Array)
-vv = HorizontalAverage(v*v, model, return_type=Array)
-ww = HorizontalAverage(w*w, model, return_type=Array)
-uv = HorizontalAverage(u*v, model, return_type=Array)
-uw = HorizontalAverage(u*w, model, return_type=Array)
-vw = HorizontalAverage(v*w, model, return_type=Array)
-wT = HorizontalAverage(w*T, model, return_type=Array)
-wS = HorizontalAverage(w*S, model, return_type=Array)
-
-#####
-##### Setting up output writers
-#####
-
-filename_prefix = "lesbrary_lat$(lat)_lon$(lon)_days$(days)"
+filename_prefix = "lesbrary_latitude$(lat)_longitude$(lon)_days$(days)"
 
 global_attributes = Dict(
-    "creator" => "CliMA Ocean LESbrary project",
-    "creation time" => string(Dates.now()),
-    "lat" => lat, "lon" => lon
+    "latitude" => lat,
+    "longitude" => lon
 )
 
-output_attributes = Dict(
-    "Ugeo" => Dict("longname" => "Zonal component of geostrophic velocity", "units" => "m/s"),
-    "Vgeo" => Dict("longname" => "Meridional component of geostrophic velocity", "units" => "m/s"),
-    "τx" => Dict("longname" => "Wind stress in the x-direction", "units" => "N/m²"),
-    "τy" => Dict("longname" => "Wind stress in the y-direction", "units" => "N/m²"),
-    "QT" => Dict("longname" => "Net surface heat flux into the ocean (+=down), >0 increases theta", "units" => "W/m²"),
-    "QS" => Dict("longname" => "net surface freshwater flux into the ocean (+=down), >0 decreases salinity", "units" => "kg/m²/s"),
-    "ν"  => Dict("longname" => "Eddy viscosity", "units" => "m²/s"),
-    "κT" => Dict("longname" => "Eddy diffusivity of conservative temperature", "units" => "m²/s"),
-    "κS" => Dict("longname" => "Eddy diffusivity of absolute salinity", "units" => "m²/s"),
-    "uu" => Dict("longname" => "Velocity covariance between u and u", "units" => "m²/s²"),
-    "vv" => Dict("longname" => "Velocity covariance between v and v", "units" => "m²/s²"),
-    "ww" => Dict("longname" => "Velocity covariance between w and w", "units" => "m²/s²"),
-    "uv" => Dict("longname" => "Velocity covariance between u and v", "units" => "m²/s²"),
-    "uw" => Dict("longname" => "Velocity covariance between u and w", "units" => "m²/s²"),
-    "vw" => Dict("longname" => "Velocity covariance between v and w", "units" => "m²/s²"),
-    "wT" => Dict("longname" => "Vertical turbulent heat flux", "units" => "K*m/s"),
-    "wS" => Dict("longname" => "Vertical turbulent salinity flux", "units" => "g/kg*m/s")
-)
+simulation.output_writers[:fields] =
+    NetCDFOutputWriter(model, fields(model), global_attributes = global_attributes,
+                       schedule = TimeInterval(6hours),
+                       filepath = filename_prefix * "_fields.nc",
+                           mode = "c")
 
-#####
-##### Fields and slices output writers
-#####
+simulation.output_writers[:surface] =
+    NetCDFOutputWriter(model, fields(model), global_attributes = global_attributes,
+                            schedule = TimeInterval(5minutes),
+                            filepath = filename_prefix * "_surface.nc",
+                                mode = "c",
+                        field_slicer = FieldSlicer(k=grid.Nz))
 
-fields = Dict(
-    "u"  => model.velocities.u,
-    "v"  => model.velocities.v,
-    "w"  => model.velocities.w,
-    "T"  => model.tracers.T,
-    "S"  => model.tracers.S,
-    "ν"  => model.diffusivities.νₑ,
-    "κT" => model.diffusivities.κₑ.T,
-    "κS" => model.diffusivities.κₑ.S
-)
+simulation.output_writers[:slice] =
+    NetCDFOutputWriter(model, fields(model), global_attributes = global_attributes,
+                            schedule = TimeInterval(5minutes),
+                            filepath = filename_prefix * "_slice.nc",
+                                mode = "c",
+                        field_slicer = FieldSlicer(i=1))
 
-field_output_writer =
-    NetCDFOutputWriter(model, fields, filename=filename_prefix * "_fields.nc", interval=6hour,
-                      global_attributes=global_attributes, output_attributes=output_attributes)
-
-surface_output_writer =
-    NetCDFOutputWriter(model, fields, filename=filename_prefix * "_surface.nc", interval=2minute,
-                      global_attributes=global_attributes, output_attributes=output_attributes,
-                      zC=Nz, zF=Nz)
-
-slice_output_writer =
-    NetCDFOutputWriter(model, fields, filename=filename_prefix * "_slice.nc", interval=2minute,
-                      global_attributes=global_attributes, output_attributes=output_attributes,
-                      xC=1, xF=1)
-
-#####
-##### Horizontal averages output writer
-#####
-
-Hz = model.grid.Hz
-
-profiles = Dict(
-    "u"  => model ->  Up(model)[1+Hz:end-Hz],
-    "v"  => model ->  Vp(model)[1+Hz:end-Hz],
-    "w"  => model ->  Wp(model)[1+Hz:end-Hz],
-    "T"  => model ->  Tp(model)[1+Hz:end-Hz],
-    "S"  => model ->  Sp(model)[1+Hz:end-Hz],
-    "ν"  => model ->  νp(model)[1+Hz:end-Hz],
-    "κT" => model -> κTp(model)[1+Hz:end-Hz],
-    "κS" => model -> κSp(model)[1+Hz:end-Hz],
-    "uu" => model ->  uu(model)[1+Hz:end-Hz],
-    "vv" => model ->  vv(model)[1+Hz:end-Hz],
-    "ww" => model ->  ww(model)[1+Hz:end-Hz],
-    "uv" => model ->  uv(model)[1+Hz:end-Hz],
-    "uw" => model ->  uw(model)[1+Hz:end-Hz],
-    "vw" => model ->  vw(model)[1+Hz:end-Hz],
-    "wT" => model ->  wT(model)[1+Hz:end-Hz],
-    "wS" => model ->  wS(model)[1+Hz:end-Hz]
-)
-
-profile_dims = Dict(k => ("zC",) for k in keys(profiles))
-profile_dims["w"] = ("zF",)
-
-profile_output_writer =
-    NetCDFOutputWriter(model, profiles, filename=filename_prefix * "_profiles.nc", interval=2minute,
-                      global_attributes=global_attributes, output_attributes=output_attributes,
-                      dimensions=profile_dims)
-
-#####
-##### Large scale solution output writer
-#####
+simulation.output_writers[:profiles] =
+    NetCDFOutputWriter(model, profiles, global_attributes = global_attributes,
+                       schedule = TimeInterval(5minutes),
+                       filepath = filename_prefix * "_profiles.nc",
+                           mode = "c")
 
 large_scale_outputs = Dict(
     "τx" => model -> ℑτx.(model.clock.time),
@@ -366,20 +335,26 @@ large_scale_outputs = Dict(
 )
 
 large_scale_dims = Dict(
-    "τx" => (), "τy" => (), "QT" => (), "QS" => (),
-    "u" => ("zC",), "v" => ("zC",), "T" => ("zC",), "S" => ("zC",),
-    "Ugeo" => ("zC",), "Vgeo" => ("zC",)
+      "τx" => (),
+      "τy" => (),
+      "QT" => (),
+      "QS" => (),
+       "u" => ("zC",),
+       "v" => ("zC",),
+       "T" => ("zC",),
+       "S" => ("zC",),
+    "Ugeo" => ("zC",),
+    "Vgeo" => ("zC",)
 )
 
+simulation.output_writers[:large_scale] =
+    NetCDFOutputWriter(model, large_scale_outputs, global_attributes = global_attributes,
+                         schedule = TimeInterval(5minutes),
+                         filepath = filename_prefix * "_large_scale.nc",
+                       dimensions = large_scale_dims,
+                             mode = "c")
 
-large_scale_output_writer =
-    NetCDFOutputWriter(model, large_scale_outputs, filename=filename_prefix * "_large_scale.nc", interval=2minute,
-                      global_attributes=global_attributes, output_attributes=output_attributes,
-                      dimensions=large_scale_dims)
-
-#####
-##### Banner!
-#####
+## Banner!
 
 wave = raw"""
            _.====.._
@@ -424,44 +399,4 @@ fish = raw"""
         lat, lon, model.coriolis.f, days,
         fish)
 
-#####
-##### Set up and run simulation
-#####
-
-wizard = TimeStepWizard(cfl=0.1, Δt=1.0, max_change=1.2, max_Δt=10.0)
-
-# CFL utilities for reporting stability criterions.
-cfl = AdvectiveCFL(wizard)
-dcfl = DiffusiveCFL(wizard)
-
-function print_progress(simulation)
-    model = simulation.model
-
-    # Calculate simulation progress in %.
-    progress = 100 * (model.clock.time / simulation.stop_time)
-
-    # Find maximum velocities.
-    umax = maximum(abs, model.velocities.u.data.parent)
-    vmax = maximum(abs, model.velocities.v.data.parent)
-    wmax = maximum(abs, model.velocities.w.data.parent)
-
-    # Find maximum ν and κ.
-    νmax = maximum(model.diffusivities.νₑ.data.parent)
-    κmax = maximum(model.diffusivities.κₑ.T.data.parent)
-
-    # Print progress statement.
-    i, t = model.clock.iteration, model.clock.time
-    @printf("[%06.2f%%] i: %d, t: %s, umax: (%.2e, %.2e, %.2e) m/s, CFL: %.2e, νκmax: (%.2e, %.2e), νκCFL: %.2e, next Δt: %.2e s\n",
-            progress, i, prettytime(t), umax, vmax, wmax, cfl(model), νmax, κmax, dcfl(model), simulation.Δt.Δt)
-end
-
-simulation = Simulation(model, Δt=wizard, stop_time=7day, progress_frequency=20, progress=print_progress)
-
-simulation.output_writers[:fields] = field_output_writer
-simulation.output_writers[:surface] = surface_output_writer
-simulation.output_writers[:slice] = slice_output_writer
-simulation.output_writers[:profiles] = profile_output_writer
-simulation.output_writers[:large_scale] = large_scale_output_writer
-
 run!(simulation)
-
