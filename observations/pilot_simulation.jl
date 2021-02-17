@@ -259,21 +259,32 @@ function print_progress(simulation)
     progress = 100 * (model.clock.time / simulation.stop_time)
 
     # Find maximum velocities.
-    umax = maximum(abs, model.velocities.u.data.parent)
-    vmax = maximum(abs, model.velocities.v.data.parent)
-    wmax = maximum(abs, model.velocities.w.data.parent)
+    umax = interiorparent(model.velocities.u) |> Array |> maximum
+    vmax = interiorparent(model.velocities.v) |> Array |> maximum
+    wmax = interiorparent(model.velocities.w) |> Array |> maximum
+
+    # Find tracer extrema
+    Tmin, Tmax = interiorparent(model.tracers.T) |> Array |> extrema
+    Smin, Smax = interiorparent(model.tracers.S) |> Array |> extrema
 
     # Find maximum ν and κ.
-    νmax = maximum(model.diffusivities.νₑ.data.parent)
-    κmax = maximum(model.diffusivities.κₑ.T.data.parent)
+    νmax = interiorparent(model.diffusivities.νₑ) |> Array |> maximum
+    κTmax = interiorparent(model.diffusivities.κₑ.T) |> Array |> maximum
+    κSmax = interiorparent(model.diffusivities.κₑ.S) |> Array |> maximum
 
     # Print progress statement.
     i, t = model.clock.iteration, model.clock.time
-    @printf("[%06.2f%%] i: %d, t: %s, umax: (%.2e, %.2e, %.2e) m/s, CFL: %.2e, νκmax: (%.2e, %.2e), νκCFL: %.2e, next Δt: %.2e s\n",
-            progress, i, prettytime(t), umax, vmax, wmax, cfl(model), νmax, κmax, dcfl(model), simulation.Δt.Δt)
+
+    @info @sprintf("[%06.2f%%] iteration: %d, time: %s, CFL: %.2e, νCFL: %.2e, next Δt: %s",
+                   progress, i, prettytime(t), cfl(model), dcfl(model), simulation.Δt.Δt)
+
+    @info @sprintf("          └── u⃗_max: (%.2e, %.2e, %.2e) m/s, T: (min=%.2e, max=%.2e) °C, S: (min=%.2e, max=%.2e) psu, νκ_max: (ν=%.2e, κT=%.2e, κS=%.2e)",
+                   umax, vmax, wmax, Tmin, Tmax, Smin, Smax, νmax, κTmax, κSmax)
+
+    return nothing
 end
 
-simulation = Simulation(model, Δt=wizard, stop_time=7days, iteration_interval=20, progress=print_progress)
+simulation = Simulation(model, Δt=wizard, stop_time=7days, iteration_interval=10, progress=print_progress)
 
 ## Output writing
 
