@@ -633,11 +633,11 @@ if make_animation
     hidedecorations!(ax_c₂_xy)
 
     ax_e_xy = fig[1, 8] = Axis(fig, title="log TKE")
-    hm_e_xy = heatmap!(ax_e_xy, xc, yc, e_xy, colormap=:deep, colorrange=extrema(ds_xy[:e]))
+    hm_e_xy = heatmap!(ax_e_xy, xc, yc, log10.(e_xy), colormap=:deep, colorrange=(-5, -2))
     hidedecorations!(ax_e_xy)
 
     ax_ϵ_xy = fig[1, 9] = Axis(fig, title="log TKE dissipation")
-    hm_ϵ_xy = heatmap!(ax_ϵ_xy, xc, yc, ϵ_xy, colormap=:dense, colorrange=extrema(ds_xy[:ϵ]))
+    hm_ϵ_xy = heatmap!(ax_ϵ_xy, xc, yc, ϵ_xy, colormap=:dense, colorrange=(-10, -5))
     hidedecorations!(ax_ϵ_xy)
 
     ax_u_xz = fig[2, 1] = Axis(fig)
@@ -669,11 +669,11 @@ if make_animation
     hidedecorations!(ax_c₂_xz)
 
     ax_e_xz = fig[2, 8] = Axis(fig)
-    hm_e_xz = heatmap!(ax_e_xz, xc, zc, e_xz, colormap=:deep, colorrange=extrema(ds_xz[:e]))
+    hm_e_xz = heatmap!(ax_e_xz, xc, zc, log10.(e_xz), colormap=:deep, colorrange=(-8, -2))
     hidedecorations!(ax_e_xz)
 
     ax_ϵ_xz = fig[2, 9] = Axis(fig)
-    hm_ϵ_xz = heatmap!(ax_ϵ_xz, xc, zc, ϵ_xz, colormap=:dense, colorrange=extrema(ds_xz[:ϵ]))
+    hm_ϵ_xz = heatmap!(ax_ϵ_xz, xc, zc, log10.(ϵ_xz), colormap=:dense, colorrange=(-15, -5))
     hidedecorations!(ax_ϵ_xz)
 
     supertitle = fig[0, :] = Label(fig, plot_title, textsize=30)
