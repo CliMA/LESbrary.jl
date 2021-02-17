@@ -288,7 +288,7 @@ profiles = (
     S = AveragedField(S, dims=(1, 2))
 )
 
-filename_prefix = "lesbrary_latitude$(lat)_longitude$(lon)_days$(days)"
+filename_prefix = "lesbrary_latitude$(lat)_longitude$(lon)_days$(n_days)"
 
 global_attributes = Dict(
     "latitude" => lat,
