@@ -280,7 +280,7 @@ Cᴬᴹᴰ = SurfaceEnhancedModelConstant(grid.Δz, C₀ = 1/12, enhancement = 7
 @info "Framing the model..."
 
 model = IncompressibleModel(
-           architecture = CPU(),
+           architecture = GPU(),
             timestepper = :RungeKutta3,
               advection = WENO5(),
                    grid = grid,
