@@ -11,13 +11,17 @@ using Pkg
 using Statistics
 using Printf
 using Logging
+
 using ArgParse
 using JLD2
-using Plots
+using NCDatasets
+using GeoData
+using CairoMakie
 
 using LESbrary
 using Oceanostics
 using Oceananigans
+using Oceananigans.Grids
 using Oceananigans.Buoyancy
 using Oceananigans.BoundaryConditions
 using Oceananigans.Fields
@@ -25,6 +29,7 @@ using Oceananigans.Advection
 using Oceananigans.OutputWriters
 using Oceananigans.Utils
 
+using Oceananigans.Grids: Face, Center
 using Oceananigans.Fields: PressureField
 using Oceanostics.FlowDiagnostics: richardson_number_ccf!
 
@@ -160,7 +165,7 @@ stop_hours = args["hours"]
 f = args["coriolis"]
 name = args["name"]
 
-snapshot_time_interval = 10minutes
+snapshot_time_interval = 5minutes
 averages_time_interval = 3hours
 averages_time_window = 15minutes
 
@@ -275,7 +280,7 @@ Cᴬᴹᴰ = SurfaceEnhancedModelConstant(grid.Δz, C₀ = 1/12, enhancement = 7
 @info "Framing the model..."
 
 model = IncompressibleModel(
-           architecture = GPU(),
+           architecture = CPU(),
             timestepper = :RungeKutta3,
               advection = WENO5(),
                    grid = grid,
@@ -548,20 +553,6 @@ run!(simulation)
 
 make_animation = args["animation"]
 
-ENV["GKSwstype"] = "100"
-
-using Plots
-using GeoData
-using NCDatasets
-using GeoData: GeoXDim, GeoYDim, GeoZDim
-
-@dim xC GeoXDim "x"
-@dim xF GeoXDim "x"
-@dim yC GeoYDim "y"
-@dim yF GeoYDim "y"
-@dim zC GeoZDim "z"
-@dim zF GeoZDim "z"
-
 function squeeze(A)
     singleton_dims = tuple((d for d in 1:ndims(A) if size(A, d) == 1)...)
     return dropdims(A, dims=singleton_dims)
@@ -571,40 +562,129 @@ if make_animation
     ds_xy = NCDstack(joinpath(data_directory, "xy_slice.nc"))
     ds_xz = NCDstack(joinpath(data_directory, "xz_slice.nc"))
 
-    _, _, _, times = dims(ds_xy[:u])
+    times = ds_xy[:time]
     Nt = length(times)
 
-    kwargs = (xlabel="", ylabel="", xticks=[], yticks=[], colorbar=false, framestyle=:box)
+    xc = ds_xy[:xC].data
+    xf = ds_xy[:xF].data
+    yc = ds_xy[:yC].data
+    yf = ds_xy[:yF].data
+    zc = ds_xz[:zC].data
+    zf = ds_xz[:zF].data
 
-    anim = @animate for n in 1:Nt
-        @info "Plotting xy/xz movie frame $n/$Nt..."
+    fig = Figure(resolution=(3000, 750))
 
-        xy_xz_plots = (
-            plot(ds_xy[:u][Ti=n] |> squeeze; title="u-velocity", color=:balance, clims=(-0.1, 0.1), kwargs...),
-            plot(ds_xy[:v][Ti=n] |> squeeze; title="v-velocity", color=:balance, clims=(-0.1, 0.1), kwargs...),
-            plot(ds_xy[:w][Ti=n] |> squeeze; title="w-velocity", color=:balance, clims=(-0.1, 0.1), kwargs...),
-            plot(ds_xy[:T][Ti=n] |> squeeze; title="temperature", color=:thermal, kwargs...),
-            plot(ds_xy[:c₀][Ti=n] |> squeeze; title="tracer 0", color=:ice, kwargs...),
-            plot(ds_xy[:c₁][Ti=n] |> squeeze; title="tracer 1", color=:ice, kwargs...),
-            plot(ds_xy[:c₂][Ti=n] |> squeeze; title="tracer 2", color=:ice, kwargs...),
-            plot(ds_xy[:e][Ti=n] .|> log10 |> squeeze; title="log TKE", color=:deep, clims=(-5, -2), kwargs...),
-            plot(ds_xy[:ϵ][Ti=n] .|> log10 |> squeeze; title="log ε", color=:dense, clims=(-10, -5), kwargs...),
-            plot(ds_xz[:u][Ti=n] |> squeeze; title="", color=:balance, clims=(-0.1, 0.1), kwargs...),
-            plot(ds_xz[:v][Ti=n] |> squeeze; title="", color=:balance, clims=(-0.1, 0.1), kwargs...),
-            plot(ds_xz[:w][Ti=n] |> squeeze; title="", color=:balance, clims=(-0.1, 0.1), kwargs...),
-            plot(ds_xz[:T][Ti=n] |> squeeze; title="", color=:thermal, kwargs...),
-            plot(ds_xz[:c₀][Ti=n] |> squeeze; title="", color=:ice, kwargs...),
-            plot(ds_xz[:c₁][Ti=n] |> squeeze; title="", color=:ice, kwargs...),
-            plot(ds_xz[:c₂][Ti=n] |> squeeze; title="", color=:ice, kwargs...),
-            plot(ds_xz[:e][Ti=n] .|> log10 |> squeeze; title="", color=:deep, clims=(-8, -2), kwargs...),
-            plot(ds_xz[:ϵ][Ti=n] .|> log10 |> squeeze; title="", color=:dense, clims=(-15, -5), kwargs...),
-        )
+    u_max = max(maximum(abs, ds_xy[:u]), maximum(abs, ds_xz[:u]))
+    v_max = max(maximum(abs, ds_xy[:v]), maximum(abs, ds_xz[:v]))
+    w_max = max(maximum(abs, ds_xy[:w]), maximum(abs, ds_xz[:w]))
+    U_max = max(u_max, v_max, w_max)
+    U_lims = 0.5 .* (-U_max, +U_max)
 
-        plot(xy_xz_plots..., layout=(2, 9), size=(2000, 400))
+    frame = Node(1)
+
+    plot_title = @lift "LESbrary.jl three-layer constant fluxes: time = $(prettytime(times[$frame]))"
+
+    u_xy = @lift ds_xy[:u][Ti=$frame].data |> squeeze
+    v_xy = @lift ds_xy[:v][Ti=$frame].data |> squeeze
+    w_xy = @lift ds_xy[:w][Ti=$frame].data |> squeeze
+    T_xy = @lift ds_xy[:T][Ti=$frame].data |> squeeze
+    c₀_xy = @lift ds_xy[:c₀][Ti=$frame].data |> squeeze
+    c₁_xy = @lift ds_xy[:c₁][Ti=$frame].data |> squeeze
+    c₂_xy = @lift ds_xy[:c₂][Ti=$frame].data |> squeeze
+    e_xy = @lift ds_xy[:e][Ti=$frame].data |> squeeze
+    ϵ_xy = @lift ds_xy[:ϵ][Ti=$frame].data |> squeeze
+
+    u_xz = @lift ds_xz[:u][Ti=$frame].data |> squeeze
+    v_xz = @lift ds_xz[:v][Ti=$frame].data |> squeeze
+    w_xz = @lift ds_xz[:w][Ti=$frame].data |> squeeze
+    T_xz = @lift ds_xz[:T][Ti=$frame].data |> squeeze
+    c₀_xz = @lift ds_xz[:c₀][Ti=$frame].data |> squeeze
+    c₁_xz = @lift ds_xz[:c₁][Ti=$frame].data |> squeeze
+    c₂_xz = @lift ds_xz[:c₂][Ti=$frame].data |> squeeze
+    e_xz = @lift ds_xz[:e][Ti=$frame].data |> squeeze
+    ϵ_xz = @lift ds_xz[:ϵ][Ti=$frame].data |> squeeze
+
+    ax_u_xy = fig[1, 1] = Axis(fig, title="u-velocity")
+    hm_u_xy = heatmap!(ax_u_xy, xf, yc, u_xy, colormap=:balance, colorrange=U_lims)
+    hidedecorations!(ax_u_xy)
+
+    ax_v_xy = fig[1, 2] = Axis(fig, title="v-velocity")
+    hm_v_xy = heatmap!(ax_v_xy, xc, yf, v_xy, colormap=:balance, colorrange=U_lims)
+    hidedecorations!(ax_v_xy)
+
+    ax_w_xy = fig[1, 3] = Axis(fig, title="w-velocity")
+    hm_w_xy = heatmap!(ax_w_xy, xc, yc, w_xy, colormap=:balance, colorrange=U_lims)
+    hidedecorations!(ax_w_xy)
+
+    ax_T_xy = fig[1, 4] = Axis(fig, title="temperature")
+    hm_T_xy = heatmap!(ax_T_xy, xc, yc, T_xy, colormap=:thermal, colorrange=extrema(ds_xy[:T]))
+    hidedecorations!(ax_T_xy)
+
+    ax_c₀_xy = fig[1, 5] = Axis(fig, title="tracer 0")
+    hm_c₀_xy = heatmap!(ax_c₀_xy, xc, yc, c₀_xy, colormap=:ice, colorrange=extrema(ds_xy[:c₀]))
+    hidedecorations!(ax_c₀_xy)
+
+    ax_c₁_xy = fig[1, 6] = Axis(fig, title="tracer 1")
+    hm_c₁_xy = heatmap!(ax_c₁_xy, xc, yc, c₁_xy, colormap=:ice, colorrange=extrema(ds_xy[:c₁]))
+    hidedecorations!(ax_c₁_xy)
+
+    ax_c₂_xy = fig[1, 7] = Axis(fig, title="tracer 2")
+    hm_c₂_xy = heatmap!(ax_c₂_xy, xc, yc, c₂_xy, colormap=:ice, colorrange=extrema(ds_xy[:c₂]))
+    hidedecorations!(ax_c₂_xy)
+
+    ax_e_xy = fig[1, 8] = Axis(fig, title="log TKE")
+    hm_e_xy = heatmap!(ax_e_xy, xc, yc, e_xy, colormap=:deep, colorrange=extrema(ds_xy[:e]))
+    hidedecorations!(ax_e_xy)
+
+    ax_ϵ_xy = fig[1, 9] = Axis(fig, title="log TKE dissipation")
+    hm_ϵ_xy = heatmap!(ax_ϵ_xy, xc, yc, ϵ_xy, colormap=:dense, colorrange=extrema(ds_xy[:ϵ]))
+    hidedecorations!(ax_ϵ_xy)
+
+    ax_u_xz = fig[2, 1] = Axis(fig)
+    hm_u_xz = heatmap!(ax_u_xz, xf, zc, u_xz, colormap=:balance, colorrange=U_lims)
+    hidedecorations!(ax_u_xz)
+
+    ax_v_xz = fig[2, 2] = Axis(fig)
+    hm_v_xz = heatmap!(ax_v_xz, xc, zc, v_xz, colormap=:balance, colorrange=U_lims)
+    hidedecorations!(ax_v_xz)
+
+    ax_w_xz = fig[2, 3] = Axis(fig)
+    hm_w_xz = heatmap!(ax_w_xz, xc, zf, w_xz, colormap=:balance, colorrange=U_lims)
+    hidedecorations!(ax_w_xz)
+
+    ax_T_xz = fig[2, 4] = Axis(fig)
+    hm_T_xz = heatmap!(ax_T_xz, xc, zc, T_xz, colormap=:thermal, colorrange=extrema(ds_xz[:T]))
+    hidedecorations!(ax_T_xz)
+
+    ax_c₀_xz = fig[2, 5] = Axis(fig)
+    hm_c₀_xz = heatmap!(ax_c₀_xz, xc, zc, c₀_xz, colormap=:ice, colorrange=extrema(ds_xz[:c₀]))
+    hidedecorations!(ax_c₀_xz)
+
+    ax_c₁_xz = fig[2, 6] = Axis(fig)
+    hm_c₁_xz = heatmap!(ax_c₁_xz, xc, zc, c₁_xz, colormap=:ice, colorrange=extrema(ds_xz[:c₁]))
+    hidedecorations!(ax_c₁_xz)
+
+    ax_c₂_xz = fig[2, 7] = Axis(fig)
+    hm_c₂_xz = heatmap!(ax_c₂_xz, xc, zc, c₂_xz, colormap=:ice, colorrange=extrema(ds_xz[:c₂]))
+    hidedecorations!(ax_c₂_xz)
+
+    ax_e_xz = fig[2, 8] = Axis(fig)
+    hm_e_xz = heatmap!(ax_e_xz, xc, zc, e_xz, colormap=:deep, colorrange=extrema(ds_xz[:e]))
+    hidedecorations!(ax_e_xz)
+
+    ax_ϵ_xz = fig[2, 9] = Axis(fig)
+    hm_ϵ_xz = heatmap!(ax_ϵ_xz, xc, zc, ϵ_xz, colormap=:dense, colorrange=extrema(ds_xz[:ϵ]))
+    hidedecorations!(ax_ϵ_xz)
+
+    supertitle = fig[0, :] = Label(fig, plot_title, textsize=30)
+
+    filepath = joinpath(data_directory, "xy_xz_movie.mp4")
+    record(fig, filepath, 1:Nt, framerate=2) do n
+        @info "Animating xy/xz movie frame $n/$Nt..."
+        frame[] = n
     end
 
-    mp4(anim, joinpath(data_directory, "xy_xz_movie.mp4"), fps=15)
-    gif(anim, joinpath(data_directory, "xy_xz_movie.gif"), fps=15)
+    @info "Movie saved: $filepath"
 end
 
 if make_animation
