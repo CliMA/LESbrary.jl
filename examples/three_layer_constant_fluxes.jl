@@ -398,11 +398,11 @@ Ri_local = KernelComputedField(Center, Center, Face, richardson_number_ccf!, mod
 
 Ri = AveragedField(Ri_local, dims=(1, 2))
 
-extra_statistics = Dict(:Ri => Ri)
+dynamics_statistics = Dict(:Ri => Ri)
 
 fields_to_output = merge(model.velocities, model.tracers, (e=e, ϵ=dissipation))
 
-statistics_to_output = merge(primitive_statistics, subfilter_flux_statistics, tke_budget_statistics, extra_statistics)
+statistics_to_output = merge(primitive_statistics, subfilter_flux_statistics, tke_budget_statistics, dynamics_statistics)
 
 @info "Garnishing output writers..."
 

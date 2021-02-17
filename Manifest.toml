@@ -715,7 +715,7 @@ version = "0.48.0"
 
 [[Oceanostics]]
 deps = ["KernelAbstractions", "Oceananigans"]
-git-tree-sha1 = "42c053515f00ea53b5267238018d6695bfe9caad"
+git-tree-sha1 = "17263a9377fba986e3544db3d3fc21bdc2efab47"
 repo-rev = "main"
 repo-url = "https://github.com/tomchor/Oceanostics.jl.git"
 uuid = "d0ccf422-c8fb-49b5-a76d-74acdde946ac"
