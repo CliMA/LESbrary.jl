@@ -394,7 +394,7 @@ tke_budget_statistics = turbulent_kinetic_energy_budget(model, b=b, p=p, U=U, V=
                                                         shear_production=shear_production, dissipation=dissipation)
 
 Ri_local = KernelComputedField(Center, Center, Face, richardson_number_ccf!, model,
-                               field_dependencies=(U, V, b, 0, 0, 0))
+                               field_dependencies=(U, V, b), parameters=(dUdz_bg=0, dVdz_bg=0, N2_bg=0))
 
 Ri = AveragedField(Ri_local, dims=(1, 2))
 
