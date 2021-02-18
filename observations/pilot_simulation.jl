@@ -259,24 +259,24 @@ function print_progress(simulation)
     progress = 100 * (model.clock.time / simulation.stop_time)
 
     # Find maximum velocities.
-    umax = interiorparent(model.velocities.u) |> Array |> maximum
-    vmax = interiorparent(model.velocities.v) |> Array |> maximum
-    wmax = interiorparent(model.velocities.w) |> Array |> maximum
+    umax = interiorparent(model.velocities.u) |> maximum
+    vmax = interiorparent(model.velocities.v) |> maximum
+    wmax = interiorparent(model.velocities.w) |> maximum
 
     # Find tracer extrema
-    Tmin, Tmax = interiorparent(model.tracers.T) |> Array |> extrema
-    Smin, Smax = interiorparent(model.tracers.S) |> Array |> extrema
+    Tmin, Tmax = interiorparent(model.tracers.T) |> extrema
+    Smin, Smax = interiorparent(model.tracers.S) |> extrema
 
     # Find maximum ν and κ.
-    νmax = interiorparent(model.diffusivities.νₑ) |> Array |> maximum
-    κTmax = interiorparent(model.diffusivities.κₑ.T) |> Array |> maximum
-    κSmax = interiorparent(model.diffusivities.κₑ.S) |> Array |> maximum
+    νmax = interiorparent(model.diffusivities.νₑ) |> maximum
+    κTmax = interiorparent(model.diffusivities.κₑ.T) |> maximum
+    κSmax = interiorparent(model.diffusivities.κₑ.S) |> maximum
 
     # Print progress statement.
     i, t = model.clock.iteration, model.clock.time
 
     @info @sprintf("[%06.2f%%] iteration: %d, time: %s, CFL: %.2e, νCFL: %.2e, next Δt: %s",
-                   progress, i, prettytime(t), cfl(model), dcfl(model), simulation.Δt.Δt)
+                   progress, i, prettytime(t), cfl(model), dcfl(model), prettytime(simulation.Δt.Δt))
 
     @info @sprintf("          └── u⃗_max: (%.2e, %.2e, %.2e) m/s, T: (min=%.2f, max=%.2f) °C, S: (min=%.2f, max=%.2f) psu, νκ_max: (ν=%.2e, κT=%.2e, κS=%.2e)",
                    umax, vmax, wmax, Tmin, Tmax, Smin, Smax, νmax, κTmax, κSmax)
