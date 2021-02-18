@@ -36,7 +36,7 @@ sys.path.insert(0, ".")
 
 @info "Mapping grid..."
 
-lat, lon = -50, 275
+lat, lon = -50, 90
 day_offset, n_days = 250, 10
 
 arch = CPU()
@@ -292,11 +292,14 @@ simulation = Simulation(model, Δt=wizard, stop_time=7days, iteration_interval=1
 
 u, v, w, T, S = fields(model)
 
+b = BuoyancyField(model)
+
 profiles = (
     U = AveragedField(u, dims=(1, 2)),
     V = AveragedField(v, dims=(1, 2)),
     T = AveragedField(T, dims=(1, 2)),
-    S = AveragedField(S, dims=(1, 2))
+    S = AveragedField(S, dims=(1, 2)),
+    B = AveragedField(b, dims=(1, 2))
 )
 
 filename_prefix = "lesbrary_latitude$(lat)_longitude$(lon)_days$(n_days)"
@@ -514,7 +517,6 @@ end
 
 ## Plot background, SOSE, and LES profiles
 
-begin
 ds_p = NCDstack(filename_prefix * "_profiles.nc")
 ds_b = NCDstack(filename_prefix * "_large_scale.nc")
 
@@ -534,6 +536,7 @@ U_LES = @lift ds_p[:U][Ti=$frame].data
 V_LES = @lift ds_p[:V][Ti=$frame].data
 T_LES = @lift ds_p[:T][Ti=$frame].data
 S_LES = @lift ds_p[:S][Ti=$frame].data
+B_LES = @lift ds_p[:B][Ti=$frame].data
 
 U_SOSE = @lift ds_b[:u][Ti=$frame].data
 V_SOSE = @lift ds_b[:v][Ti=$frame].data
@@ -581,6 +584,12 @@ axislegend(ax_S, position=:rb, framevisible=false)
 xlims!(ax_S, extrema([extrema(ds_p[:S])..., extrema(ds_b[:S])...]))
 ylims!(ax_S, extrema(zf))
 
+ax_B = fig[1, 5] = Axis(fig, xlabel="m/s²", ylabel="z (m)")
+line_B_LES  = lines!(ax_B, B_LES, zc, label="B (LES)", linewidth=3, color=colors[3])
+axislegend(ax_B, position=:rb, framevisible=false)
+xlims!(ax_B, extrema(ds_p[:B]))
+ylims!(ax_B, extrema(zf))
+
 # ax_τ = fig[2, :] = Axis(fig, ylabel="N/m²")
 # line_τx = lines!(ax_τ, time_so_far, τx_SOSE, label="τx", linewidth=3, color=colors[1])
 # line_τy = lines!(ax_τ, time_so_far, τy_SOSE, label="τy", linewidth=3, color=colors[2])
@@ -610,7 +619,6 @@ record(fig, filepath, 1:5:Nt, framerate=15) do n
 end
 
 @info "Movie saved: $filepath"
-end
 
 ## Plot surface forcings
 
