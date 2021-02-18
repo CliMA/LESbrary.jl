@@ -278,7 +278,7 @@ function print_progress(simulation)
     @info @sprintf("[%06.2f%%] iteration: %d, time: %s, CFL: %.2e, νCFL: %.2e, next Δt: %s",
                    progress, i, prettytime(t), cfl(model), dcfl(model), simulation.Δt.Δt)
 
-    @info @sprintf("          └── u⃗_max: (%.2e, %.2e, %.2e) m/s, T: (min=%.2e, max=%.2e) °C, S: (min=%.2e, max=%.2e) psu, νκ_max: (ν=%.2e, κT=%.2e, κS=%.2e)",
+    @info @sprintf("          └── u⃗_max: (%.2e, %.2e, %.2e) m/s, T: (min=%.2f, max=%.2f) °C, S: (min=%.2f, max=%.2f) psu, νκ_max: (ν=%.2e, κT=%.2e, κS=%.2e)",
                    umax, vmax, wmax, Tmin, Tmax, Smin, Smax, νmax, κTmax, κSmax)
 
     return nothing
@@ -552,16 +552,16 @@ V_geo = @lift ds_b[:Vgeo][Ti=$frame].data
 colors = ["dodgerblue2", "crimson", "forestgreen"]
 
 ax_U = fig[1, 1] = Axis(fig, xlabel="m/s", ylabel="z (m)")
-line_U_SOSE = lines!(ax_U, U_SOSE, zc, label="U (SOSE)", linewidth=3, color=colors[1], linestyle=:dot)
-line_U_geo  = lines!(ax_U, U_geo, zc, label="U (geo)", linewidth=3, color=colors[1], linestyle=:dash)
+line_U_SOSE = lines!(ax_U, U_SOSE, zc, label="U (SOSE)", linewidth=3, color=colors[1], linestyle=:dash)
+line_U_geo  = lines!(ax_U, U_geo, zc, label="U (geo)", linewidth=3, color=colors[1], linestyle=:dot)
 line_U_LES  = lines!(ax_U, U_LES, zc, label="U (LES)", linewidth=3, color=colors[1])
 axislegend(ax_U, position=:rb, framevisible=false)
 xlims!(ax_U, extrema([extrema(ds_p[:U])..., extrema(ds_b[:u])..., extrema(ds_b[:Ugeo])...]))
 ylims!(ax_U, extrema(zf))
 
 ax_V = fig[1, 2] = Axis(fig, xlabel="m/s", ylabel="z (m)")
-line_V_SOSE = lines!(ax_V, V_SOSE, zc, label="V (SOSE)", linewidth=3, color=colors[2], linestyle=:dot)
-line_V_geo  = lines!(ax_V, V_geo, zc, label="V (geo)", linewidth=3, color=colors[2], linestyle=:dash)
+line_V_SOSE = lines!(ax_V, V_SOSE, zc, label="V (SOSE)", linewidth=3, color=colors[2], linestyle=:dash)
+line_V_geo  = lines!(ax_V, V_geo, zc, label="V (geo)", linewidth=3, color=colors[2], linestyle=:dot)
 line_V_LES  = lines!(ax_V, V_LES, zc, label="V (LES)", linewidth=3, color=colors[2])
 axislegend(ax_V, position=:rb, framevisible=false)
 xlims!(ax_V, extrema([extrema(ds_p[:U])..., extrema(ds_b[:v])..., extrema(ds_b[:Vgeo])...]))
