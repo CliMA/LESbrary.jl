@@ -145,7 +145,7 @@ sose.plot_site_analysis(ds2, lat, lon, day_offset, n_days)
 
 @info "Interpolating SOSE data..."
 
-ts = day * (0:n_days-1) |> collect
+ts = day * (0:n_days) |> collect
 zC_SOSE = ds3.Z.values
 zF_SOSE = ds3.Zl.values
 
@@ -490,7 +490,7 @@ fish = raw"""
         grid.Lx, grid.Ly, grid.Lz,
         grid.Δx, grid.Δy, grid.Δz,
         lat, lon, model.coriolis.f,
-        start_date, end_date,
+        start_date, stop_date,
         fish)
 
 @info "Teaching the simulation to run!..."
