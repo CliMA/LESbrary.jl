@@ -141,8 +141,6 @@ end
 
 sose.plot_site_analysis(ds2, lat, lon, day_offset, n_days)
 
-# =#
-
 ## Create linear interpolations for base state solution
 
 @info "Interpolating SOSE data..."
@@ -356,7 +354,7 @@ end
 
 @info "Garnishing output writers..."
 
-filename_prefix = "lesbrary_latitude$(lat)_longitude$(lon)_days$(n_days)"
+filename_prefix = "lesbrary_latitude$(lat)_longitude$(lon)_$(start_date)_to_$(stop_date)"
 
 global_attributes = Dict(
     "latitude" => lat,
@@ -590,7 +588,7 @@ hidedecorations!(ax_S_yz)
 supertitle = fig[0, :] = Label(fig, plot_title, textsize=30)
 
 filepath = filename_prefix * "_surface_slice_movie.mp4"
-record(fig, filepath, 1:2:Nt, framerate=30) do n
+record(fig, filepath, 1:10:Nt, framerate=30) do n
     @info "Animating surface and slice movie frame $n/$Nt..."
     frame[] = n
 end
@@ -702,7 +700,7 @@ ylims!(ax_N, extrema(zf))
 supertitle = fig[0, :] = Label(fig, plot_title, textsize=30)
 
 filepath = filename_prefix * "_first_order_statistics.mp4"
-record(fig, filepath, 1:Nt, framerate=30) do n
+record(fig, filepath, 1:2:Nt, framerate=30) do n
     @info "Animating first-order statistics movie frame $n/$Nt..."
     frame[] = n
 end

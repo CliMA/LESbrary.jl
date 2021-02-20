@@ -42,7 +42,7 @@ def get_times(ds):
 
 def get_scalar_time_series(ds, var, lat, lon, day_offset, days):
     logging.info(f"Getting time series of {var} at (lat={lat}°N, lon={lon}°E)...")
-    time_slice = slice(day_offset, day_offset + days)
+    time_slice = slice(day_offset, day_offset + days + 1)
     with ProgressBar():
         if var in ["UVEL", "oceTAUX"]:
             time_series = ds[var].isel(time=time_slice).sel(XG=lon, YC=lat, method="nearest").values
@@ -54,7 +54,7 @@ def get_scalar_time_series(ds, var, lat, lon, day_offset, days):
 
 def get_profile_time_series(ds, var, lat, lon, day_offset, days):
     logging.info(f"Getting time series of {var} at (lat={lat}°N, lon={lon}°E) for {days} days...")
-    time_slice = slice(day_offset, day_offset + days)
+    time_slice = slice(day_offset, day_offset + days + 1)
     with ProgressBar():
         if var in ["UVEL", "oceTAUX"]:
             time_series = ds[var].isel(time=time_slice).sel(XG=lon, YC=lat, method="nearest").values
@@ -71,7 +71,7 @@ def compute_geostrophic_velocities(ds, lat, lon, day_offset, days, zF, α, β, g
     ds = ds.reindex(Z=ds.Z[::-1], Zl=ds.Zl[::-1])
 
     # Only pull out the data we need as time has chunk size 1.
-    time_slice = slice(day_offset, day_offset + days)
+    time_slice = slice(day_offset, day_offset + days + 1)
 
     U =  ds.UVEL.isel(time=time_slice)
     V =  ds.VVEL.isel(time=time_slice)
@@ -125,7 +125,7 @@ def plot_site_analysis(ds, lat, lon, day_offset, days):
     logging.info(f"Plotting site analysis at (lat={lat}°N, lon={lon}°E) for {days} days...")
 
     time = ds.time.values
-    time_slice = slice(day_offset, day_offset + days)
+    time_slice = slice(day_offset, day_offset + days + 1)
     simulation_time = ds.time.isel(time=time_slice).values
 
     τx  = ds.oceTAUX.sel(XG=lon, YC=lat, method="nearest").values
@@ -169,5 +169,5 @@ def plot_site_analysis(ds, lat, lon, day_offset, days):
     ax_mld.set_xlim([time[0], time[-1]])
     ax_mld.invert_yaxis()
 
-    plt.savefig(f"lesbrary_latitude{lat}_longitude{lon}_days{days}_sose_surface_forcing.png", dpi=300)
+    plt.savefig(f"lesbrary_latitude{lat}_longitude{lon}_{simulation_time[0]}_to{simulation_time[-1]}_site_analysis.png", dpi=300)
     plt.close(fig)
