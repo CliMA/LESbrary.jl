@@ -5,10 +5,10 @@ logging.getLogger().setLevel(logging.INFO)
 import xgcm
 import numpy as np
 import xarray as xr
+import matplotlib.pyplot as plt
 
 from datetime import datetime
 from dask.diagnostics import ProgressBar
-
 
 def open_sose_2d_datasets(dir):
     logging.info("Opening SOSE 2D datasets...")
@@ -30,8 +30,9 @@ def open_sose_3d_datasets(dir):
     w = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_Wvel.nc"),  chunks={'XC': 10, 'YC': 10, 'time': 10}, decode_cf=False)
     T = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_Theta.nc"), chunks={'XC': 10, 'YC': 10, 'time': 10}, decode_cf=False)
     S = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_Salt.nc"),  chunks={'XC': 10, 'YC': 10, 'time': 10}, decode_cf=False)
+    N = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_Strat.nc"), chunks={'XC': 10, 'YC': 10, 'time': 10}, decode_cf=False)
 
-    return xr.merge([u, v, w, T, S])
+    return xr.merge([u, v, w, T, S, N])
 
 def get_times(ds):
     ts = ds.time.values
