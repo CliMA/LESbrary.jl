@@ -1,3 +1,4 @@
+using Logging
 using Printf
 using Dates
 using PyCall
@@ -10,6 +11,7 @@ using Oceananigans.Fields
 using Oceananigans.Advection
 using Oceananigans.Buoyancy
 using Oceananigans.BoundaryConditions
+using Oceananigans.AbstractOperations
 using Oceananigans.Diagnostics
 using Oceananigans.OutputWriters
 using Oceananigans.Utils
@@ -18,6 +20,8 @@ using SeawaterPolynomials.TEOS10
 using Oceananigans.Utils: second, minute, minutes, hour, hours, day, days
 using Interpolations: interpolate, gradient, Gridded, Linear
 const ∇ = gradient
+
+Logging.global_logger(OceananigansLogger())
 
 # Install needed Python packages
 Conda.add("xarray")
@@ -32,15 +36,36 @@ import sys
 sys.path.insert(0, ".")
 """
 
-## Set up grid
-
-@info "Mapping grid..."
-
-lat, lon = -50, 275
-day_offset, n_days = 250, 10
+## Pick architecture and float type
 
 arch = CPU()
 FT = Float64
+
+## Picking site
+
+@info "Finding an interesting spot in the Southern Ocean..."
+
+lat, lon = -50, 275
+
+## Pick simulation time
+
+@info "Setting the clock..."
+
+sose_start_date = Date(2013, 1, 1)
+sose_end_date = Date(2018, 1, 1)
+
+start_date = Date(2013, 9, 7)
+stop_date = Date(2013, 9, 17)
+
+@assert start_date >= sose_start_date
+@assert stop_date <= sose_end_date
+
+day_offset = (start_date - sose_start_date).value + 1
+n_days = (stop_date - start_date).value
+
+## Set up grid
+
+@info "Mapping grid..."
 
 Nx = Ny = 32
 Nz = 2Nx
@@ -64,6 +89,7 @@ buoyancy = SeawaterBuoyancy(equation_of_state=TEOS10EquationOfState(FT))
 
 ## Load large-scale (base state) solution from SOSE
 
+# #=
 @info "Summoning SOSE data..."
 
 sose = pyimport("sose_data")
@@ -81,10 +107,11 @@ start_time = date_times[day_offset]
 stop_time = date_times[day_offset + n_days]
 @info "Simulation start time = $start_time, stop time = $stop_time"
 
-τx = sose.get_scalar_time_series(ds2, "oceTAUX",  lat, lon, day_offset, n_days) |> Array{FT}
-τy = sose.get_scalar_time_series(ds2, "oceTAUY",  lat, lon, day_offset, n_days) |> Array{FT}
-Qθ = sose.get_scalar_time_series(ds2, "oceQnet",  lat, lon, day_offset, n_days) |> Array{FT}
-Qs = sose.get_scalar_time_series(ds2, "oceFWflx", lat, lon, day_offset, n_days) |> Array{FT}
+τx  = sose.get_scalar_time_series(ds2, "oceTAUX",  lat, lon, day_offset, n_days) |> Array{FT}
+τy  = sose.get_scalar_time_series(ds2, "oceTAUY",  lat, lon, day_offset, n_days) |> Array{FT}
+Qθ  = sose.get_scalar_time_series(ds2, "oceQnet",  lat, lon, day_offset, n_days) |> Array{FT}
+Qs  = sose.get_scalar_time_series(ds2, "oceFWflx", lat, lon, day_offset, n_days) |> Array{FT}
+mld = sose.get_scalar_time_series(ds2, "BLGMLD",   lat, lon, day_offset, n_days) |> Array{FT}
 
 U = sose.get_profile_time_series(ds3, "UVEL",   lat, lon, day_offset, n_days) |> Array{FT}
 V = sose.get_profile_time_series(ds3, "VVEL",   lat, lon, day_offset, n_days) |> Array{FT}
@@ -114,35 +141,41 @@ end
 
 sose.plot_site_analysis(ds2, lat, lon, day_offset, n_days)
 
+# =#
+
 ## Create linear interpolations for base state solution
 
 @info "Interpolating SOSE data..."
 
 ts = day * (0:n_days-1) |> collect
-zC = ds3.Z.values
-zC = ds3.Zl.values
+zC_SOSE = ds3.Z.values
+zF_SOSE = ds3.Zl.values
 
-ℑτx = interpolate((ts,), τx, Gridded(Linear()))
-ℑτy = interpolate((ts,), τy, Gridded(Linear()))
-ℑQθ = interpolate((ts,), Qθ, Gridded(Linear()))
-ℑQs = interpolate((ts,), Qs, Gridded(Linear()))
+ℑτx  = interpolate((ts,), τx,  Gridded(Linear()))
+ℑτy  = interpolate((ts,), τy,  Gridded(Linear()))
+ℑQθ  = interpolate((ts,), Qθ,  Gridded(Linear()))
+ℑQs  = interpolate((ts,), Qs,  Gridded(Linear()))
+ℑmld = interpolate((ts,), mld, Gridded(Linear()))
 
-# z coordinate needs to be in increasing order.
-reverse!(zC)
+# Coordinates needs to be in increasing order for Interpolations.jl
+reverse!(zC_SOSE)
+reverse!(zF_SOSE)
+
 U = reverse(U, dims=2)
 V = reverse(V, dims=2)
 Θ = reverse(Θ, dims=2)
 S = reverse(S, dims=2)
-Ugeo = reverse(U, dims=2)
-Vgeo = reverse(V, dims=2)
+N = reverse(N, dims=2)
+Ugeo = reverse(Ugeo, dims=2)
+Vgeo = reverse(Vgeo, dims=2)
 
-ℑU = interpolate((ts, zC), U, Gridded(Linear()))
-ℑV = interpolate((ts, zC), V, Gridded(Linear()))
-ℑΘ = interpolate((ts, zC), Θ, Gridded(Linear()))
-ℑS = interpolate((ts, zC), S, Gridded(Linear()))
-ℑN = interpolate((ts, zF), S, Gridded(Linear()))
-ℑUgeo = interpolate((ts, zC), Ugeo, Gridded(Linear()))
-ℑVgeo = interpolate((ts, zC), Vgeo, Gridded(Linear()))
+ℑU = interpolate((ts, zC_SOSE), U, Gridded(Linear()))
+ℑV = interpolate((ts, zC_SOSE), V, Gridded(Linear()))
+ℑΘ = interpolate((ts, zC_SOSE), Θ, Gridded(Linear()))
+ℑS = interpolate((ts, zC_SOSE), S, Gridded(Linear()))
+ℑN = interpolate((ts, zF_SOSE), S, Gridded(Linear()))
+ℑUgeo = interpolate((ts, zC_SOSE), Ugeo, Gridded(Linear()))
+ℑVgeo = interpolate((ts, zC_SOSE), Vgeo, Gridded(Linear()))
 
 ## Set up forcing forcings to
 ##   1. include mean flow interactions in the momentum equation, and
@@ -286,9 +319,10 @@ function print_progress(simulation)
 
     # Print progress statement.
     i, t = model.clock.iteration, model.clock.time
+    date_time = start_time + Millisecond(round(Int, 1000t))
 
     @info @sprintf("[%06.2f%%] iteration: %d, time: %s, CFL: %.2e, νCFL: %.2e, next Δt: %s",
-                   progress, i, prettytime(t), cfl(model), dcfl(model), prettytime(simulation.Δt.Δt))
+                   progress, i, date_time, cfl(model), dcfl(model), prettytime(simulation.Δt.Δt))
 
     @info @sprintf("          └── u⃗_max: (%.2e, %.2e, %.2e) m/s, T: (min=%.2f, max=%.2f) °C, S: (min=%.2f, max=%.2f) psu, νκ_max: (ν=%.2e, κT=%.2e, κS=%.2e)",
                    umax, vmax, wmax, Tmin, Tmax, Smin, Smax, νmax, κTmax, κSmax)
@@ -298,21 +332,29 @@ end
 
 simulation = Simulation(model, Δt=wizard, stop_time=n_days * days, iteration_interval=10, progress=print_progress)
 
-## Output writing
+## Diagnosing mixed layer depth
+
+function mixed_layer_depth(model)
+    T = model.tracers.T
+    ∂T̄∂z = AveragedField(∂z(T), dims=(1, 2))
+    compute!(∂T̄∂z)
+
+    _, k_boundary_layer = findmax(abs.(interior(∂T̄∂z)))
+
+    if k_boundary_layer isa CartesianIndex
+        k_boundary_layer = k_boundary_layer.I[3]
+    end
+
+    mixed_layer_depth = - model.grid.zF[k_boundary_layer]
+
+    @info "Mixed layer depth is $mixed_layer_depth meters"
+
+    return mixed_layer_depth
+end
+
+## Output 3D fields
 
 @info "Garnishing output writers..."
-
-u, v, w, T, S = fields(model)
-b = BuoyancyField(model)
-fields_to_output = (; u, v, w, T, S, b)
-
-profiles = (
-    U = AveragedField(u, dims=(1, 2)),
-    V = AveragedField(v, dims=(1, 2)),
-    T = AveragedField(T, dims=(1, 2)),
-    S = AveragedField(S, dims=(1, 2)),
-    B = AveragedField(b, dims=(1, 2))
-)
 
 filename_prefix = "lesbrary_latitude$(lat)_longitude$(lon)_days$(n_days)"
 
@@ -320,6 +362,10 @@ global_attributes = Dict(
     "latitude" => lat,
     "longitude" => lon
 )
+
+u, v, w, T, S = fields(model)
+b = BuoyancyField(model)
+fields_to_output = (;stop_time= u, v, w, T, S, b)
 
 simulation.output_writers[:fields] =
     NetCDFOutputWriter(model, fields_to_output, global_attributes = global_attributes,
@@ -341,11 +387,27 @@ simulation.output_writers[:slice] =
                                 mode = "c",
                         field_slicer = FieldSlicer(i=1))
 
+## Output statistics (horizontal averages)
+
+@info "Squeezing out statistics..."
+
+profiles = (
+    U = AveragedField(u, dims=(1, 2)),
+    V = AveragedField(v, dims=(1, 2)),
+    T = AveragedField(T, dims=(1, 2)),
+    S = AveragedField(S, dims=(1, 2)),
+    B = AveragedField(b, dims=(1, 2))
+)
+
 simulation.output_writers[:profiles] =
     NetCDFOutputWriter(model, profiles, global_attributes = global_attributes,
                        schedule = TimeInterval(5minutes),
                        filepath = filename_prefix * "_profiles.nc",
                            mode = "c")
+
+## Output background state
+
+@info "Inscribing background state..."
 
 large_scale_outputs = Dict(
     "τx" => model -> ℑτx.(model.clock.time),
@@ -358,7 +420,9 @@ large_scale_outputs = Dict(
      "S" => model ->  ℑS.(model.clock.time, znodes(Center, model.grid)[:]),
   "∂ρ∂z" => model ->  ℑN.(model.clock.time, znodes(Face, model.grid)[:]),
   "Ugeo" => model -> ℑUgeo.(model.clock.time, znodes(Center, model.grid)[:]),
-  "Vgeo" => model -> ℑVgeo.(model.clock.time, znodes(Center, model.grid)[:])
+  "Vgeo" => model -> ℑVgeo.(model.clock.time, znodes(Center, model.grid)[:]),
+  "mld_SOSE" => model -> ℑmld.(model.clock.time),
+  "mld_LES"  => mixed_layer_depth
 )
 
 large_scale_dims = Dict(
@@ -372,7 +436,9 @@ large_scale_dims = Dict(
        "S" => ("zC",),
     "∂ρ∂z" => ("zF",),
     "Ugeo" => ("zC",),
-    "Vgeo" => ("zC",)
+    "Vgeo" => ("zC",),
+    "mld_SOSE" => (),
+    "mld_LES"  => ()
 )
 
 simulation.output_writers[:large_scale] =
@@ -418,13 +484,15 @@ fish = raw"""
            Δ : %.3g, %.3g, %.3g [m]
         φ, λ : %.2f, %.2f [latitude, longitude]
            f : %.3e [s⁻¹]
-        days : %d
+       start : %s
+         end : %s
         %s""",
         wave,
         grid.Nx, grid.Ny, grid.Nz,
         grid.Lx, grid.Ly, grid.Lz,
         grid.Δx, grid.Δy, grid.Δz,
-        lat, lon, model.coriolis.f, days,
+        lat, lon, model.coriolis.f,
+        start_date, end_date,
         fish)
 
 @info "Teaching the simulation to run!..."
@@ -522,7 +590,7 @@ hidedecorations!(ax_S_yz)
 supertitle = fig[0, :] = Label(fig, plot_title, textsize=30)
 
 filepath = filename_prefix * "_surface_slice_movie.mp4"
-record(fig, filepath, 1:10:Nt, framerate=15) do n
+record(fig, filepath, 1:2:Nt, framerate=30) do n
     @info "Animating surface and slice movie frame $n/$Nt..."
     frame[] = n
 end
@@ -608,7 +676,7 @@ ylims!(ax_B, extrema(zf))
 ax_N = fig[1, 6] = Axis(fig, xlabel="kg/m⁴", ylabel="z (m)")
 line_N_SOSE  = lines!(ax_N, ∂ρ∂z_SOSE, zf, label="∂ρ∂z (SOSE)", linewidth=3, color=colors[3], linestyle=:dash)
 axislegend(ax_N, position=:rb, framevisible=false)
-xlims!(ax_N, extrema(ds_p[:∂ρ∂z]))
+xlims!(ax_N, extrema(ds_b[:∂ρ∂z]))
 ylims!(ax_N, extrema(zf))
 
 # ax_τ = fig[2, :] = Axis(fig, ylabel="N/m²")
@@ -634,7 +702,7 @@ ylims!(ax_N, extrema(zf))
 supertitle = fig[0, :] = Label(fig, plot_title, textsize=30)
 
 filepath = filename_prefix * "_first_order_statistics.mp4"
-record(fig, filepath, 1:5:Nt, framerate=15) do n
+record(fig, filepath, 1:Nt, framerate=30) do n
     @info "Animating first-order statistics movie frame $n/$Nt..."
     frame[] = n
 end
@@ -648,11 +716,16 @@ ds_b = NCDstack(filename_prefix * "_large_scale.nc")
 times = ds_p[:time] / day
 Nt = length(times)
 
+# Makie doesn't support DateTime plotting yet :(
+# date_times = [start_time + Millisecond(round(Int, 1000t)) for t in times]
+
 τx_SOSE = ds_b[:τx].data
 τy_SOSE = ds_b[:τy].data
 τ_SOSE = @. √(τx_SOSE^2 + τy_SOSE^2)
 QΘ_SOSE = ds_b[:QT].data
 QS_SOSE = ds_b[:QS].data
+mld_SOSE = ds_b[:mld_SOSE].data
+mld_LES = ds_b[:mld_LES].data
 
 fig = Figure(resolution=(1920, 1080))
 plot_title = @sprintf("Realistic SOSE LESbrary.jl (%.2f°N, %.2f°E) surface forcings", lat, lon)
@@ -672,10 +745,17 @@ xlims!(ax_QΘ, extrema(times))
 ylims!(ax_QΘ, extrema(QΘ_SOSE))
 hidexdecorations!(ax_τ, grid=false)
 
-ax_QS = fig[3, 1] = Axis(fig, xlabel="time (days)", ylabel="QS (kg/m²/s))")
+ax_QS = fig[3, 1] = Axis(fig, xlabel="time (days)", ylabel="QS (kg/m²/s)")
 line_QS = lines!(ax_QS, times, QS_SOSE, linewidth=3, color=colors[3])
 xlims!(ax_QS, extrema(times))
 ylims!(ax_QS, extrema(QS_SOSE))
+
+ax_mld = fig[4, 1] = Axis(fig, xlabel="time (days)", ylabel="Mixed layer depth (m)")
+line_mld_SOSE = lines!(ax_mld, times, mld_SOSE, label="SOSE", linewidth=3, color=colors[3], linestyle=:dash)
+line_mld_LES = lines!(ax_mld, times, mld_LES, label="LES", linewidth=3, color=colors[3])
+axislegend(ax_mld, position=:rb, framevisible=false)
+xlims!(ax_mld, extrema(times))
+ylims!(ax_mld, extrema([extrema(mld_SOSE)..., extrema(mld_LES)...]))
 
 supertitle = fig[0, :] = Label(fig, plot_title, textsize=30)
 
