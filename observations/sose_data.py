@@ -121,3 +121,53 @@ def compute_geostrophic_velocities(ds, lat, lon, day_offset, days, zF, α, β, g
 
     return U_geo, V_geo
 
+def plot_site_analysis(ds, lat, lon, day_offset, days):
+    logging.info(f"Plotting site analysis at (lat={lat}°N, lon={lon}°E) for {days} days...")
+
+    time = ds.time.values
+    time_slice = slice(day_offset, day_offset + days)
+    simulation_time = ds.time.isel(time=time_slice).values
+
+    τx  = ds.oceTAUX.sel(XG=lon, YC=lat, method="nearest").values
+    τy  = ds.oceTAUY.sel(XC=lon, YG=lat, method="nearest").values
+    Qθ  = ds.oceQnet.sel(XC=lon, YC=lat, method="nearest").values
+    Qs  = ds.oceFWflx.sel(XC=lon, YC=lat, method="nearest").values
+    mld = ds.BLGMLD.sel(XC=lon, YC=lat, method="nearest").values
+
+    fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(16, 12), dpi=200)
+
+    fig.suptitle(f"LESbrary.jl SOSE site analysis at (lat={lat}°N, lon={lon}°E)")
+
+    ax_τ = axes[0]
+    ax_τ.plot(time, τx, label=r"$\tau_x$")
+    ax_τ.plot(time, τy, label=r"$\tau_y$")
+    ax_τ.axvspan(simulation_time[0], simulation_time[-1], color='gold', alpha=0.5)
+    ax_τ.legend(frameon=False)
+    ax_τ.set_ylabel(r"Wind stress (N/m$^2$)")
+    ax_τ.set_xlim([time[0], time[-1]])
+    ax_τ.set_xticklabels([])
+
+    ax_Qθ = axes[1]
+    ax_Qθ.plot(time, Qθ)
+    ax_Qθ.axvspan(simulation_time[0], simulation_time[-1], color='gold', alpha=0.5)
+    ax_Qθ.set_ylabel(r"Surface heat flux (W/m$^2$)," + "\n>0 increases T")
+    ax_Qθ.set_xlim([time[0], time[-1]])
+    ax_Qθ.set_xticklabels([])
+
+    ax_Qs = axes[2]
+    ax_Qs.plot(time, Qs)
+    ax_Qs.axvspan(simulation_time[0], simulation_time[-1], color='gold', alpha=0.5)
+    ax_Qs.set_ylabel("Net surface\n" + r"freshwater flux (kg/m$^2$/s)" + "\n(+=down)," + "\n>0 decreases salinity")
+    ax_Qs.set_xlim([time[0], time[-1]])
+    ax_Qs.set_xticklabels([])
+
+    ax_mld = axes[3]
+    ax_mld.plot(time, mld)
+    ax_mld.axvspan(simulation_time[0], simulation_time[-1], color='gold', alpha=0.5)
+    ax_mld.set_xlabel("Time")
+    ax_mld.set_ylabel("Mixed layer depth (m)")
+    ax_mld.set_xlim([time[0], time[-1]])
+    ax_mld.invert_yaxis()
+
+    plt.savefig(f"lesbrary_latitude{lat}_longitude{lon}_days{days}_sose_surface_forcing.png", dpi=300)
+    plt.close(fig)
