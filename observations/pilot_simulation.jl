@@ -36,7 +36,7 @@ sys.path.insert(0, ".")
 
 @info "Mapping grid..."
 
-lat, lon = -50, 90
+lat, lon = -50, 275
 day_offset, n_days = 250, 10
 
 arch = CPU()
@@ -77,16 +77,20 @@ if (!@isdefined ds2) && (!@isdefined ds3)
 end
 
 date_times = sose.get_times(ds2)
+start_time = date_times[day_offset]
+stop_time = date_times[day_offset + n_days]
+@info "Simulation start time = $start_time, stop time = $stop_time"
 
 τx = sose.get_scalar_time_series(ds2, "oceTAUX",  lat, lon, day_offset, n_days) |> Array{FT}
 τy = sose.get_scalar_time_series(ds2, "oceTAUY",  lat, lon, day_offset, n_days) |> Array{FT}
 Qθ = sose.get_scalar_time_series(ds2, "oceQnet",  lat, lon, day_offset, n_days) |> Array{FT}
 Qs = sose.get_scalar_time_series(ds2, "oceFWflx", lat, lon, day_offset, n_days) |> Array{FT}
 
-U = sose.get_profile_time_series(ds3, "UVEL",  lat, lon, day_offset, n_days) |> Array{FT}
-V = sose.get_profile_time_series(ds3, "VVEL",  lat, lon, day_offset, n_days) |> Array{FT}
-Θ = sose.get_profile_time_series(ds3, "THETA", lat, lon, day_offset, n_days) |> Array{FT}
-S = sose.get_profile_time_series(ds3, "SALT",  lat, lon, day_offset, n_days) |> Array{FT}
+U = sose.get_profile_time_series(ds3, "UVEL",   lat, lon, day_offset, n_days) |> Array{FT}
+V = sose.get_profile_time_series(ds3, "VVEL",   lat, lon, day_offset, n_days) |> Array{FT}
+Θ = sose.get_profile_time_series(ds3, "THETA",  lat, lon, day_offset, n_days) |> Array{FT}
+S = sose.get_profile_time_series(ds3, "SALT",   lat, lon, day_offset, n_days) |> Array{FT}
+N = sose.get_profile_time_series(ds3, "DRHODR", lat, lon, day_offset, n_days) |> Array{FT}
 
 # Nominal values for α, β to compute geostrophic velocities
 # FIXME: Use TEOS-10 (Θ, Sᴬ, Z) dependent values
@@ -104,12 +108,19 @@ if (!@isdefined Ugeo) && (!@isdefined Vgeo)
     ds3.close()
 end
 
+## Plot SOSE site analysis...
+
+@info "Performing ocean site analysis..."
+
+sose.plot_site_analysis(ds2, lat, lon, day_offset, n_days)
+
 ## Create linear interpolations for base state solution
 
 @info "Interpolating SOSE data..."
 
 ts = day * (0:n_days-1) |> collect
 zC = ds3.Z.values
+zC = ds3.Zl.values
 
 ℑτx = interpolate((ts,), τx, Gridded(Linear()))
 ℑτy = interpolate((ts,), τy, Gridded(Linear()))
@@ -129,6 +140,7 @@ Vgeo = reverse(V, dims=2)
 ℑV = interpolate((ts, zC), V, Gridded(Linear()))
 ℑΘ = interpolate((ts, zC), Θ, Gridded(Linear()))
 ℑS = interpolate((ts, zC), S, Gridded(Linear()))
+ℑN = interpolate((ts, zF), S, Gridded(Linear()))
 ℑUgeo = interpolate((ts, zC), Ugeo, Gridded(Linear()))
 ℑVgeo = interpolate((ts, zC), Vgeo, Gridded(Linear()))
 
@@ -284,15 +296,15 @@ function print_progress(simulation)
     return nothing
 end
 
-simulation = Simulation(model, Δt=wizard, stop_time=7days, iteration_interval=10, progress=print_progress)
+simulation = Simulation(model, Δt=wizard, stop_time=n_days * days, iteration_interval=10, progress=print_progress)
 
 ## Output writing
 
 @info "Garnishing output writers..."
 
 u, v, w, T, S = fields(model)
-
 b = BuoyancyField(model)
+fields_to_output = (; u, v, w, T, S, b)
 
 profiles = (
     U = AveragedField(u, dims=(1, 2)),
@@ -310,20 +322,20 @@ global_attributes = Dict(
 )
 
 simulation.output_writers[:fields] =
-    NetCDFOutputWriter(model, fields(model), global_attributes = global_attributes,
+    NetCDFOutputWriter(model, fields_to_output, global_attributes = global_attributes,
                        schedule = TimeInterval(6hours),
                        filepath = filename_prefix * "_fields.nc",
                            mode = "c")
 
 simulation.output_writers[:surface] =
-    NetCDFOutputWriter(model, fields(model), global_attributes = global_attributes,
+    NetCDFOutputWriter(model, fields_to_output, global_attributes = global_attributes,
                             schedule = TimeInterval(5minutes),
                             filepath = filename_prefix * "_surface.nc",
                                 mode = "c",
                         field_slicer = FieldSlicer(k=grid.Nz))
 
 simulation.output_writers[:slice] =
-    NetCDFOutputWriter(model, fields(model), global_attributes = global_attributes,
+    NetCDFOutputWriter(model, fields_to_output, global_attributes = global_attributes,
                             schedule = TimeInterval(5minutes),
                             filepath = filename_prefix * "_slice.nc",
                                 mode = "c",
@@ -344,6 +356,7 @@ large_scale_outputs = Dict(
      "v" => model ->  ℑV.(model.clock.time, znodes(Center, model.grid)[:]),
      "T" => model ->  ℑΘ.(model.clock.time, znodes(Center, model.grid)[:]),
      "S" => model ->  ℑS.(model.clock.time, znodes(Center, model.grid)[:]),
+  "∂ρ∂z" => model ->  ℑN.(model.clock.time, znodes(Face, model.grid)[:]),
   "Ugeo" => model -> ℑUgeo.(model.clock.time, znodes(Center, model.grid)[:]),
   "Vgeo" => model -> ℑVgeo.(model.clock.time, znodes(Center, model.grid)[:])
 )
@@ -357,6 +370,7 @@ large_scale_dims = Dict(
        "v" => ("zC",),
        "T" => ("zC",),
        "S" => ("zC",),
+    "∂ρ∂z" => ("zF",),
     "Ugeo" => ("zC",),
     "Vgeo" => ("zC",)
 )
@@ -451,7 +465,7 @@ U_lims = 0.5 .* (-U_max, +U_max)
 
 frame = Node(1)
 
-plot_title = @lift @sprintf("Realistic SOSE LESbrary.jl (%.2f°N, %.2f°E): time = %s", lat, lon, prettytime(times[$frame]))
+plot_title = @lift @sprintf("Realistic SOSE LESbrary.jl (%.2f°N, %.2f°E): time = %s", lat, lon, start_time + Millisecond(round(Int, 1000 * times[$frame])))
 
 u_xy = @lift ds_xy[:u][Ti=$frame].data |> squeeze
 v_xy = @lift ds_xy[:v][Ti=$frame].data |> squeeze
@@ -526,11 +540,11 @@ Nt = length(times)
 zc = ds_p[:zC].data
 zf = ds_p[:zF].data
 
-fig = Figure(resolution=(1920, 1080))
+fig = Figure(resolution=(2500, 1080))
 
 frame = Node(1)
 
-plot_title = @lift @sprintf("Realistic SOSE LESbrary.jl (%.2f°N, %.2f°E): time = %s", lat, lon, prettytime(times[$frame]))
+plot_title = @lift @sprintf("Realistic SOSE LESbrary.jl (%.2f°N, %.2f°E): time = %s", lat, lon, start_time + Millisecond(round(Int, 1000 * times[$frame])))
 
 U_LES = @lift ds_p[:U][Ti=$frame].data
 V_LES = @lift ds_p[:V][Ti=$frame].data
@@ -542,6 +556,7 @@ U_SOSE = @lift ds_b[:u][Ti=$frame].data
 V_SOSE = @lift ds_b[:v][Ti=$frame].data
 T_SOSE = @lift ds_b[:T][Ti=$frame].data
 S_SOSE = @lift ds_b[:S][Ti=$frame].data
+∂ρ∂z_SOSE = @lift ds_b[:∂ρ∂z][Ti=$frame].data
 
 U_geo = @lift ds_b[:Ugeo][Ti=$frame].data
 V_geo = @lift ds_b[:Vgeo][Ti=$frame].data
@@ -589,6 +604,12 @@ line_B_LES  = lines!(ax_B, B_LES, zc, label="B (LES)", linewidth=3, color=colors
 axislegend(ax_B, position=:rb, framevisible=false)
 xlims!(ax_B, extrema(ds_p[:B]))
 ylims!(ax_B, extrema(zf))
+
+ax_N = fig[1, 6] = Axis(fig, xlabel="kg/m⁴", ylabel="z (m)")
+line_N_SOSE  = lines!(ax_N, ∂ρ∂z_SOSE, zf, label="∂ρ∂z (SOSE)", linewidth=3, color=colors[3], linestyle=:dash)
+axislegend(ax_N, position=:rb, framevisible=false)
+xlims!(ax_N, extrema(ds_p[:∂ρ∂z]))
+ylims!(ax_N, extrema(zf))
 
 # ax_τ = fig[2, :] = Axis(fig, ylabel="N/m²")
 # line_τx = lines!(ax_τ, time_so_far, τx_SOSE, label="τx", linewidth=3, color=colors[1])
