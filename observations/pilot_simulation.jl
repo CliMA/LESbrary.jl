@@ -363,7 +363,7 @@ global_attributes = Dict(
 
 u, v, w, T, S = fields(model)
 b = BuoyancyField(model)
-fields_to_output = (;stop_time= u, v, w, T, S, b)
+fields_to_output = (; u, v, w, T, S, b)
 
 simulation.output_writers[:fields] =
     NetCDFOutputWriter(model, fields_to_output, global_attributes = global_attributes,
