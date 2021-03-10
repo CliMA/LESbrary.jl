@@ -73,7 +73,7 @@ Lx = Ly = 250.0
 Lz = 2Lx
 
 topology = (Periodic, Periodic, Bounded)
-grid = RegularCartesianGrid(topology=topology, size=(Nx, Ny, Nz), x=(0.0, Lx), y=(0.0, Ly), z=(-Lz, 0.0))
+grid = RegularRectilinearGrid(topology=topology, size=(Nx, Ny, Nz), x=(0.0, Lx), y=(0.0, Ly), z=(-Lz, 0.0))
 
 ## Pick a Coriolis approximation
 
