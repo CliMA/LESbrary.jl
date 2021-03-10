@@ -5,10 +5,10 @@ logging.getLogger().setLevel(logging.INFO)
 import xgcm
 import numpy as np
 import xarray as xr
+import matplotlib.pyplot as plt
 
 from datetime import datetime
 from dask.diagnostics import ProgressBar
-
 
 def open_sose_2d_datasets(dir):
     logging.info("Opening SOSE 2D datasets...")
@@ -24,14 +24,15 @@ def open_sose_2d_datasets(dir):
     return xr.merge([mld, tau_x, tau_y, surf_S_flux, surf_T_flux, surf_FW_flux, Qnet, Qsw])
 
 def open_sose_3d_datasets(dir):
-    logging.info("Opening SOSE 3D datasets...")
+    logging.info("Opening SOSE 3D datasets (this can take some time)...")
     u = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_Uvel.nc"),  chunks={'XG': 10, 'YC': 10, 'time': 10}, decode_cf=False)
     v = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_Vvel.nc"),  chunks={'XC': 10, 'YG': 10, 'time': 10}, decode_cf=False)
     w = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_Wvel.nc"),  chunks={'XC': 10, 'YC': 10, 'time': 10}, decode_cf=False)
     T = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_Theta.nc"), chunks={'XC': 10, 'YC': 10, 'time': 10}, decode_cf=False)
     S = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_Salt.nc"),  chunks={'XC': 10, 'YC': 10, 'time': 10}, decode_cf=False)
+    N = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_Strat.nc"), chunks={'XC': 10, 'YC': 10, 'time': 10}, decode_cf=False)
 
-    return xr.merge([u, v, w, T, S])
+    return xr.merge([u, v, w, T, S, N])
 
 def get_times(ds):
     ts = ds.time.values
@@ -41,7 +42,7 @@ def get_times(ds):
 
 def get_scalar_time_series(ds, var, lat, lon, day_offset, days):
     logging.info(f"Getting time series of {var} at (lat={lat}°N, lon={lon}°E)...")
-    time_slice = slice(day_offset, day_offset + days)
+    time_slice = slice(day_offset, day_offset + days + 1)
     with ProgressBar():
         if var in ["UVEL", "oceTAUX"]:
             time_series = ds[var].isel(time=time_slice).sel(XG=lon, YC=lat, method="nearest").values
@@ -53,7 +54,7 @@ def get_scalar_time_series(ds, var, lat, lon, day_offset, days):
 
 def get_profile_time_series(ds, var, lat, lon, day_offset, days):
     logging.info(f"Getting time series of {var} at (lat={lat}°N, lon={lon}°E) for {days} days...")
-    time_slice = slice(day_offset, day_offset + days)
+    time_slice = slice(day_offset, day_offset + days + 1)
     with ProgressBar():
         if var in ["UVEL", "oceTAUX"]:
             time_series = ds[var].isel(time=time_slice).sel(XG=lon, YC=lat, method="nearest").values
@@ -70,7 +71,7 @@ def compute_geostrophic_velocities(ds, lat, lon, day_offset, days, zF, α, β, g
     ds = ds.reindex(Z=ds.Z[::-1], Zl=ds.Zl[::-1])
 
     # Only pull out the data we need as time has chunk size 1.
-    time_slice = slice(day_offset, day_offset + days)
+    time_slice = slice(day_offset, day_offset + days + 1)
 
     U =  ds.UVEL.isel(time=time_slice)
     V =  ds.VVEL.isel(time=time_slice)
@@ -120,3 +121,53 @@ def compute_geostrophic_velocities(ds, lat, lon, day_offset, days, zF, α, β, g
 
     return U_geo, V_geo
 
+def plot_site_analysis(ds, lat, lon, day_offset, days):
+    logging.info(f"Plotting site analysis at (lat={lat}°N, lon={lon}°E) for {days} days...")
+
+    time = ds.time.values
+    time_slice = slice(day_offset, day_offset + days + 1)
+    simulation_time = ds.time.isel(time=time_slice).values
+
+    τx  = ds.oceTAUX.sel(XG=lon, YC=lat, method="nearest").values
+    τy  = ds.oceTAUY.sel(XC=lon, YG=lat, method="nearest").values
+    Qθ  = ds.oceQnet.sel(XC=lon, YC=lat, method="nearest").values
+    Qs  = ds.oceFWflx.sel(XC=lon, YC=lat, method="nearest").values
+    mld = ds.BLGMLD.sel(XC=lon, YC=lat, method="nearest").values
+
+    fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(16, 12), dpi=200)
+
+    fig.suptitle(f"LESbrary.jl SOSE site analysis at (lat={lat}°N, lon={lon}°E)")
+
+    ax_τ = axes[0]
+    ax_τ.plot(time, τx, label=r"$\tau_x$")
+    ax_τ.plot(time, τy, label=r"$\tau_y$")
+    ax_τ.axvspan(simulation_time[0], simulation_time[-1], color='gold', alpha=0.5)
+    ax_τ.legend(frameon=False)
+    ax_τ.set_ylabel(r"Wind stress (N/m$^2$)")
+    ax_τ.set_xlim([time[0], time[-1]])
+    ax_τ.set_xticklabels([])
+
+    ax_Qθ = axes[1]
+    ax_Qθ.plot(time, Qθ)
+    ax_Qθ.axvspan(simulation_time[0], simulation_time[-1], color='gold', alpha=0.5)
+    ax_Qθ.set_ylabel(r"Surface heat flux (W/m$^2$)," + "\n>0 increases T")
+    ax_Qθ.set_xlim([time[0], time[-1]])
+    ax_Qθ.set_xticklabels([])
+
+    ax_Qs = axes[2]
+    ax_Qs.plot(time, Qs)
+    ax_Qs.axvspan(simulation_time[0], simulation_time[-1], color='gold', alpha=0.5)
+    ax_Qs.set_ylabel("Net surface\n" + r"freshwater flux (kg/m$^2$/s)" + "\n(+=down)," + "\n>0 decreases salinity")
+    ax_Qs.set_xlim([time[0], time[-1]])
+    ax_Qs.set_xticklabels([])
+
+    ax_mld = axes[3]
+    ax_mld.plot(time, mld)
+    ax_mld.axvspan(simulation_time[0], simulation_time[-1], color='gold', alpha=0.5)
+    ax_mld.set_xlabel("Time")
+    ax_mld.set_ylabel("Mixed layer depth (m)")
+    ax_mld.set_xlim([time[0], time[-1]])
+    ax_mld.invert_yaxis()
+
+    plt.savefig(f"lesbrary_latitude{lat}_longitude{lon}_{simulation_time[0]}_to{simulation_time[-1]}_site_analysis.png", dpi=300)
+    plt.close(fig)
