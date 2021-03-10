@@ -1,6 +1,6 @@
 # # Free convection
 
-# This script runs a simulation of convection driven by cooling at the 
+# This script runs a simulation of convection driven by cooling at the
 # surface of an idealized, stratified, rotating ocean surface boundary layer.
 
 using LESbrary, Printf, Statistics
@@ -9,7 +9,7 @@ using LESbrary, Printf, Statistics
 
 using Oceananigans.Grids
 
-grid = RegularCartesianGrid(size=(32, 32, 32), x=(0, 128), y=(0, 128), z=(-64, 0))
+grid = RegularRectilinearGrid(size=(32, 32, 32), x=(0, 128), y=(0, 128), z=(-64, 0))
 
 # Buoyancy and boundary conditions
 
@@ -69,8 +69,8 @@ using LESbrary.Utils: SimulationProgressMessenger
 # Adaptive time-stepping
 wizard = TimeStepWizard(cfl=1.5, Δt=2.0, max_change=1.1, max_Δt=30.0)
 
-simulation = Simulation(model, Δt=wizard, stop_time=8hour, iteration_interval=100, 
-                        progress=SimulationProgressMessenger(model, wizard))
+simulation = Simulation(model, Δt=wizard, stop_time=8hour, iteration_interval=100,
+                        progress=SimulationProgressMessenger(wizard))
 
 # Prepare Output
 
@@ -85,7 +85,7 @@ data_directory = joinpath(@__DIR__, "..", "data", prefix) # save data in /data/p
 mkpath(data_directory)
 cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
 
-simulation.output_writers[:fields] = JLD2OutputWriter(model, merge(model.velocities, model.tracers); 
+simulation.output_writers[:fields] = JLD2OutputWriter(model, merge(model.velocities, model.tracers);
                                                            schedule = TimeInterval(4hour),
                                                              prefix = prefix * "_fields",
                                                                 dir = data_directory,
@@ -99,8 +99,8 @@ simulation.output_writers[:slices] = JLD2OutputWriter(model, merge(model.velocit
                                                                 dir = data_directory,
                                                        max_filesize = 2GiB,
                                                               force = true)
- 
-    
+
+
 # Horizontally-averaged turbulence statistics
 turbulence_statistics = LESbrary.TurbulenceStatistics.first_through_second_order(model)
 tke_budget_statistics = LESbrary.TurbulenceStatistics.turbulent_kinetic_energy_budget(model)

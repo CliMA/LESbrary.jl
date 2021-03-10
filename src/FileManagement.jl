@@ -46,7 +46,7 @@ function get_grid(filename)
 
     close(file)
 
-    grid = RegularCartesianGrid(size=(Nx, Ny, Nz), length=(Lx, Ly, Lz))
+    grid = RegularRectilinearGrid(size=(Nx, Ny, Nz), length=(Lx, Ly, Lz))
 
     return grid
 end
@@ -123,12 +123,12 @@ function set_from_file!(model, filename; i=length(get_iters(filename)))
 
     # Load initial condition from file
     iter = parse(Int, keys(file["timeseries/t"])[i])
-    
+
     u₀ = file["timeseries/u/$iter"]
     v₀ = file["timeseries/v/$iter"]
     w₀ = file["timeseries/w/$iter"]
     b₀ = file["timeseries/b/$iter"]
-    
+
     close(file)
 
     array_type = typeof(model.velocities.u.data.parent)
@@ -197,7 +197,7 @@ function collect_horizontal_averages(filename)
     grid = get_grid(filename)
 
     cell_quantity_names = (:U, :V, :b, :U², :V², :E, :νₑ, :κₑ_b)
-    cell_quantities = NamedTuple{cell_quantity_names}(Tuple(zeros(grid.Nz, length(iters)) 
+    cell_quantities = NamedTuple{cell_quantity_names}(Tuple(zeros(grid.Nz, length(iters))
                                                             for i = 1:length(cell_quantity_names)))
 
     face_quantity_names = (:W², :W³, :wu, :wv, :wb, :τ₁₃, :τ₂₃, :τ₃₃, :q₃_b)

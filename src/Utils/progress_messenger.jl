@@ -1,23 +1,15 @@
-mutable struct SimulationProgressMessenger{T, U, V, W, N, A, D, Δ} <: Function
+mutable struct SimulationProgressMessenger{T, A, D, Δ} <: Function
     wall_time₀ :: T  # Wall time at simulation start
     wall_time⁻ :: T  # Wall time at previous calback
-          umax :: U
-          vmax :: V
-          wmax :: W
-          νmax :: N
        adv_cfl :: A
        dif_cfl :: D
             Δt :: Δ
 end
 
-SimulationProgressMessenger(model, Δt) =
+SimulationProgressMessenger(Δt) =
     SimulationProgressMessenger(
                       1e-9 * time_ns(),
                       1e-9 * time_ns(),
-                      FieldMaximum(abs, model.velocities.u),
-                      FieldMaximum(abs, model.velocities.v),
-                      FieldMaximum(abs, model.velocities.w),
-                      FieldMaximum(abs, model.diffusivities.νₑ),
                       AdvectiveCFL(Δt),
                       DiffusiveCFL(Δt),
                       Δt)
@@ -37,11 +29,16 @@ function (pm::SimulationProgressMessenger)(simulation)
     wall_time_per_step = time_since_last_callback / simulation.iteration_interval
     pm.wall_time⁻ = 1e-9 * time_ns()
 
+    u_max = maximum(abs, model.velocities.u)
+    v_max = maximum(abs, model.velocities.v)
+    w_max = maximum(abs, model.velocities.w)
+    ν_max = maximum(abs, model.diffusivities.νₑ)
+
     @info @sprintf("[%06.2f%%] iteration: % 6d, time: % 10s, Δt: % 10s, wall time: % 8s (% 8s / time step)",
                     progress, i, prettytime(t), prettytime(get_Δt(pm.Δt)), prettytime(current_wall_time), prettytime(wall_time_per_step))
 
-    @info @sprintf("          └── umax: (%.2e, %.2e, %.2e) m/s, CFL: %.2e, νmax: %.2e m²/s, νCFL: %.2e",
-                    pm.umax(model), pm.vmax(model), pm.wmax(model), pm.adv_cfl(model), pm.νmax(model), pm.dif_cfl(model))
+    @info @sprintf("          └── u⃗_max: (%.2e, %.2e, %.2e) m/s, CFL: %.2e, ν_max: %.2e m²/s, νCFL: %.2e",
+                    u_max, v_max, w_max, pm.adv_cfl(model), ν_max, pm.dif_cfl(model))
 
     @info ""
 

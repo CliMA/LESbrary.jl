@@ -116,7 +116,7 @@ args = parse_command_line_arguments()
 Nh = args["Nh"]
 Nz = args["Nz"]
 
-grid = RegularCartesianGrid(size=(Nh, Nh, Nz), x=(0, 256), y=(0, 256), z=(-128, 0))
+grid = RegularRectilinearGrid(size=(Nh, Nh, Nz), x=(0, 256), y=(0, 256), z=(-128, 0))
 
 # Buoyancy and boundary conditions
 
@@ -179,7 +179,7 @@ model = IncompressibleModel(architecture = GPU(),
 Ξ(z) = rand() * exp(z / 8)
 
 initial_temperature(x, y, z) = θ_surface + dθdz * z + 1e-6 * Ξ(z) * dθdz * grid.Lz
-                   
+
 set!(model, T = initial_temperature)
 
 # # Prepare the simulation
@@ -204,7 +204,7 @@ slice_interval = 15minute
 mkpath(data_directory)
 cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
 
-simulation.output_writers[:fields] = JLD2OutputWriter(model, merge(model.velocities, model.tracers); 
+simulation.output_writers[:fields] = JLD2OutputWriter(model, merge(model.velocities, model.tracers);
                                                            schedule = TimeInterval(12hour),
                                                              prefix = prefix * "_fields",
                                                                 dir = data_directory,
@@ -240,7 +240,7 @@ tke_budget_statistics = turbulent_kinetic_energy_budget(model;
                                                         U = turbulence_statistics[:u],
                                                         V = turbulence_statistics[:v])
 
-statistics = merge(turbulence_statistics, tke_budget_statistics) 
+statistics = merge(turbulence_statistics, tke_budget_statistics)
 
 simulation.output_writers[:statistics] = JLD2OutputWriter(model, statistics,
                                                           schedule = TimeInterval(slice_interval),

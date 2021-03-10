@@ -43,7 +43,7 @@ for arch in architectures
         @info "Testing turbulence statistics [$(typeof(arch))]..."
 
         model = IncompressibleModel(architecture = arch,
-                                    grid = RegularCartesianGrid(size=(1, 1, 1), extent=(1, 1, 1)),
+                                    grid = RegularRectilinearGrid(size=(1, 1, 1), extent=(1, 1, 1)),
                                     closure = AnisotropicMinimumDissipation())
 
         simulation = Simulation(model, Δt=1.0, stop_iteration=1)

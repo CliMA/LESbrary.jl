@@ -201,7 +201,7 @@ end
 
 @info "Mapping grid..."
 
-grid = RegularCartesianGrid(size=(Nx, Ny, Nz), x=(0, Lx), y=(0, Ly), z=(-Lz, 0))
+grid = RegularRectilinearGrid(size=(Nx, Ny, Nz), x=(0, Lx), y=(0, Ly), z=(-Lz, 0))
 
 # Buoyancy and boundary conditions
 
@@ -355,7 +355,7 @@ simulation = Simulation(model,
                     Δt = wizard,
              stop_time = stop_time,
     iteration_interval = 10,
-              progress = SimulationProgressMessenger(model, wizard)
+              progress = SimulationProgressMessenger(wizard)
 )
 
 # # Prepare Output
@@ -850,7 +850,7 @@ if make_animation
     hideydecorations!(ax_tke_sp, grid=false)
 
     supertitle = fig[0, :] = Label(fig, plot_title, textsize=30)
-    
+
     filepath = joinpath(data_directory, "instantaneous_statistics.mp4")
     record(fig, filepath, 1:Nt, framerate=15) do n
         @info "Animating instantaneous statistics movie frame $n/$Nt..."
