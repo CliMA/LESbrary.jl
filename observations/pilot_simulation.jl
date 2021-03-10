@@ -54,8 +54,8 @@ lat, lon = -50, 275
 sose_start_date = Date(2013, 1, 1)
 sose_end_date = Date(2018, 1, 1)
 
-start_date = Date(2013, 9, 7)
-stop_date = Date(2013, 9, 17)
+start_date = Date(2013, 6, 1)
+stop_date = Date(2013, 6, 10)
 
 @assert start_date >= sose_start_date
 @assert stop_date <= sose_end_date
