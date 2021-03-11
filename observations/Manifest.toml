@@ -647,7 +647,7 @@ uuid = "c1c5ebd0-6772-5130-a774-d5fcae4a789d"
 version = "3.100.0+3"
 
 [[LESbrary]]
-deps = ["Adapt", "ArgParse", "CUDA", "CairoMakie", "GeoData", "Glob", "Interpolations", "JLD2", "KernelAbstractions", "Logging", "NCDatasets", "NLsolve", "Oceananigans", "Oceanostics", "OffsetArrays", "Plots", "Polynomials", "Printf", "Random", "SeawaterPolynomials", "Statistics", "Test"]
+deps = ["Adapt", "ArgParse", "CUDA", "CairoMakie", "GeoData", "Glob", "Interpolations", "JLD2", "KernelAbstractions", "Logging", "NCDatasets", "NLsolve", "Oceananigans", "Oceanostics", "OffsetArrays", "Plots", "Polynomials", "Printf", "Random", "Statistics", "Test"]
 path = ".."
 uuid = "0d21a966-bb61-11e9-3e8e-8da3363c58dd"
 version = "0.1.0"
@@ -1048,10 +1048,10 @@ uuid = "647866c9-e3ac-4575-94e7-e3d426903924"
 version = "0.1.1"
 
 [[Polynomials]]
-deps = ["Intervals", "LinearAlgebra", "OffsetArrays", "RecipesBase"]
-git-tree-sha1 = "1c6c5b0c3713738d6b987903c529d80622c37e07"
+deps = ["Intervals", "LinearAlgebra", "RecipesBase"]
+git-tree-sha1 = "039e1916e84cbe204c5321cc0a21a55519532630"
 uuid = "f27b6e38-b328-58d1-80ce-0feddd5e7a45"
-version = "1.2.0"
+version = "2.0.0"
 
 [[Printf]]
 deps = ["Unicode"]
