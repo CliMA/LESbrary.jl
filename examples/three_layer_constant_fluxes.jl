@@ -28,6 +28,7 @@ using Oceananigans.Fields
 using Oceananigans.Advection
 using Oceananigans.OutputWriters
 using Oceananigans.Utils
+using Oceananigans.Units
 
 using Oceananigans.Grids: Face, Center
 using Oceananigans.Fields: PressureField
@@ -201,7 +202,7 @@ end
 
 @info "Mapping grid..."
 
-grid = RegularCartesianGrid(size=(Nx, Ny, Nz), x=(0, Lx), y=(0, Ly), z=(-Lz, 0))
+grid = RegularRectilinearGrid(size=(Nx, Ny, Nz), x=(0, Lx), y=(0, Ly), z=(-Lz, 0))
 
 # Buoyancy and boundary conditions
 
@@ -355,7 +356,7 @@ simulation = Simulation(model,
                     Δt = wizard,
              stop_time = stop_time,
     iteration_interval = 10,
-              progress = SimulationProgressMessenger(model, wizard)
+              progress = SimulationProgressMessenger(wizard)
 )
 
 # # Prepare Output
@@ -399,7 +400,7 @@ tke_budget_statistics = turbulent_kinetic_energy_budget(model, b=b, p=p, U=U, V=
                                                         shear_production=shear_production, dissipation=dissipation)
 
 Ri_local = KernelComputedField(Center, Center, Face, richardson_number_ccf!, model,
-                               field_dependencies=(U, V, b), parameters=(dUdz_bg=0, dVdz_bg=0, N2_bg=0))
+                               computed_dependencies=(U, V, b), parameters=(dUdz_bg=0, dVdz_bg=0, N2_bg=0))
 
 Ri = AveragedField(Ri_local, dims=(1, 2))
 
@@ -850,7 +851,7 @@ if make_animation
     hideydecorations!(ax_tke_sp, grid=false)
 
     supertitle = fig[0, :] = Label(fig, plot_title, textsize=30)
-    
+
     filepath = joinpath(data_directory, "instantaneous_statistics.mp4")
     record(fig, filepath, 1:Nt, framerate=15) do n
         @info "Animating instantaneous statistics movie frame $n/$Nt..."

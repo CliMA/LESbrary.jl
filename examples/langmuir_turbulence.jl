@@ -121,14 +121,14 @@ uˢ(z) = Uˢ * exp(2wavenumber * z)
 ##### Grid
 #####
 
-grid = RegularCartesianGrid(size=(Nh, Nh, Nz), extent=(Lh, Lh, Lz))
+grid = RegularRectilinearGrid(size=(Nh, Nh, Nz), extent=(Lh, Lh, Lz))
 
 #####
 ##### Boundary conditions
 #####
 
 u_bcs = UVelocityBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᵘ))
-                                               
+
 b_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᵇ),
                                        bottom = BoundaryCondition(Gradient, N²))
 
