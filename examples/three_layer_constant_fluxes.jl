@@ -28,6 +28,7 @@ using Oceananigans.Fields
 using Oceananigans.Advection
 using Oceananigans.OutputWriters
 using Oceananigans.Utils
+using Oceananigans.Units
 
 using Oceananigans.Grids: Face, Center
 using Oceananigans.Fields: PressureField
