@@ -513,6 +513,7 @@ statistics_to_output = Dict(string(k) => v for (k, v) in statistics_to_output)
 
 simulation.output_writers[:xy_nc] =
     NetCDFOutputWriter(model, fields_to_output,
+                     mode = "c",
                  filepath = joinpath(data_directory, "xy_slice.nc"),
                  schedule = TimeInterval(snapshot_time_interval),
              field_slicer = FieldSlicer(k=k_xy_slice),
@@ -520,6 +521,7 @@ simulation.output_writers[:xy_nc] =
 
 simulation.output_writers[:xz_nc] =
     NetCDFOutputWriter(model, fields_to_output,
+                     mode = "c",
                  filepath = joinpath(data_directory, "xz_slice.nc"),
                  schedule = TimeInterval(snapshot_time_interval),
              field_slicer = FieldSlicer(j=1),
@@ -527,6 +529,7 @@ simulation.output_writers[:xz_nc] =
 
 simulation.output_writers[:yz_nc] =
     NetCDFOutputWriter(model, fields_to_output,
+                     mode = "c",
                  filepath = joinpath(data_directory, "yz_slice.nc"),
                  schedule = TimeInterval(snapshot_time_interval),
              field_slicer = FieldSlicer(i=1),
@@ -534,12 +537,14 @@ simulation.output_writers[:yz_nc] =
 
 simulation.output_writers[:statistics_nc] =
     NetCDFOutputWriter(model, statistics_to_output,
+                     mode = "c",
                  filepath = joinpath(data_directory, "instantaneous_statistics.nc"),
                  schedule = TimeInterval(snapshot_time_interval),
         global_attributes = global_attributes)
 
 simulation.output_writers[:averaged_statistics_nc] =
     NetCDFOutputWriter(model, statistics_to_output,
+                     mode = "c",
                  filepath = joinpath(data_directory, "time_averaged_statistics.nc"),
                  schedule = AveragedTimeInterval(averages_time_interval, window = averages_time_window),
         global_attributes = global_attributes)
