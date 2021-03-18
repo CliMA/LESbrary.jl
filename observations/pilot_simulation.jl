@@ -9,7 +9,7 @@ using Oceananigans.Grids
 using Oceananigans.Operators
 using Oceananigans.Fields
 using Oceananigans.Advection
-using Oceananigans.Buoyancy
+using Oceananigans.BuoyancyModels
 using Oceananigans.BoundaryConditions
 using Oceananigans.AbstractOperations
 using Oceananigans.Diagnostics
