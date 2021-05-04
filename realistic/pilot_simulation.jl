@@ -45,7 +45,7 @@ FT = Float64
 
 @info "Finding an interesting spot in the Southern Ocean..."
 
-lat, lon = -50, 275
+lat, lon = -35, 210
 
 ## Pick simulation time
 
