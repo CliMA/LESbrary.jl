@@ -1,23 +1,16 @@
 using Logging
 using Printf
-using Dates
 using PyCall
 using Conda
 
 using Oceananigans
-using Oceananigans.Grids
+using Oceananigans.Units
 using Oceananigans.Operators
-using Oceananigans.Fields
-using Oceananigans.Advection
-using Oceananigans.BuoyancyModels
-using Oceananigans.BoundaryConditions
-using Oceananigans.AbstractOperations
-using Oceananigans.Diagnostics
-using Oceananigans.OutputWriters
-using Oceananigans.Utils
 using SeawaterPolynomials.TEOS10
 
-using Oceananigans.Utils: second, minute, minutes, hour, hours, day, days
+using Oceananigans.BuoyancyModels: BuoyancyField
+
+using Dates: Date, DateTime, Millisecond # Avoid conflicts with Oceananigans.Units
 using Interpolations: interpolate, gradient, Gridded, Linear
 const ∇ = gradient
 
@@ -45,7 +38,7 @@ FT = Float64
 
 @info "Finding an interesting spot in the Southern Ocean..."
 
-lat, lon = -50, 275
+lat, lon = -35, 210
 
 ## Pick simulation time
 
@@ -89,7 +82,6 @@ buoyancy = SeawaterBuoyancy(equation_of_state=TEOS10EquationOfState(FT))
 
 ## Load large-scale (base state) solution from SOSE
 
-# #=
 @info "Summoning SOSE data..."
 
 sose = pyimport("sose_data")
@@ -102,7 +94,7 @@ if (!@isdefined ds2) && (!@isdefined ds3)
     ds3 = sose.open_sose_3d_datasets(SOSE_DIR)
 end
 
-date_times = sose.get_times(ds2)
+date_times = convert.(Date, sose.get_times(ds2))
 start_time = date_times[day_offset]
 stop_time = date_times[day_offset + n_days]
 @info "Simulation start time = $start_time, stop time = $stop_time"
@@ -302,24 +294,26 @@ function print_progress(simulation)
     progress = 100 * (model.clock.time / simulation.stop_time)
 
     # Find maximum velocities.
-    umax = interiorparent(model.velocities.u) |> maximum
-    vmax = interiorparent(model.velocities.v) |> maximum
-    wmax = interiorparent(model.velocities.w) |> maximum
+    umax = maximum(abs, model.velocities.u)
+    vmax = maximum(abs, model.velocities.v)
+    wmax = maximum(abs, model.velocities.w)
 
     # Find tracer extrema
-    Tmin, Tmax = interiorparent(model.tracers.T) |> extrema
-    Smin, Smax = interiorparent(model.tracers.S) |> extrema
+    Tmin = minimum(model.tracers.T)
+    Tmax = maximum(model.tracers.T)
+    Smin = minimum(model.tracers.S)
+    Smax = maximum(model.tracers.S)
 
     # Find maximum ν and κ.
-    νmax = interiorparent(model.diffusivities.νₑ) |> maximum
-    κTmax = interiorparent(model.diffusivities.κₑ.T) |> maximum
-    κSmax = interiorparent(model.diffusivities.κₑ.S) |> maximum
+     νmax = maximum(model.diffusivities.νₑ)
+    κTmax = maximum(model.diffusivities.κₑ.T)
+    κSmax = maximum(model.diffusivities.κₑ.S)
 
     # Print progress statement.
     i, t = model.clock.iteration, model.clock.time
-    date_time = start_time + Millisecond(round(Int, 1000t))
+    date_time = DateTime(start_time) + Millisecond(round(Int, 1000t))
 
-    @info @sprintf("[%06.2f%%] iteration: %d, time: %s, CFL: %.2e, νCFL: %.2e, next Δt: %s",
+    @info @sprintf("[%06.2f%%] iteration: %d, simulation time: %s, CFL: %.2e, νCFL: %.2e, next Δt: %s",
                    progress, i, date_time, cfl(model), dcfl(model), prettytime(simulation.Δt.Δt))
 
     @info @sprintf("          └── u⃗_max: (%.2e, %.2e, %.2e) m/s, T: (min=%.2f, max=%.2f) °C, S: (min=%.2f, max=%.2f) psu, νκ_max: (ν=%.2e, κT=%.2e, κS=%.2e)",
