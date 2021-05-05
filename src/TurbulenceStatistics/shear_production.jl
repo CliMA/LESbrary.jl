@@ -1,4 +1,4 @@
-struct ShearProduction{A, G, U, V, W, Ua, Va} <: AbstractField{Center, Center, Center, A, G}
+struct ShearProduction{A, G, U, V, W, Ua, Va} <: AbstractDataField{Center, Center, Center, A, G, T}
     data :: A
     grid :: G
        u :: U
@@ -17,7 +17,7 @@ in the turbulent kinetic energy budget for `model`.
 Calling `compute!(shear_production::ShearProduction)` computes the current shear production
 term and stores in `tke.data`.
 """
-function ShearProduction(model; data = nothing, 
+function ShearProduction(model; data = nothing,
                                    U = AveragedField(model.velocities.u, dims=(1, 2)),
                                    V = AveragedField(model.velocities.v, dims=(1, 2)))
 
