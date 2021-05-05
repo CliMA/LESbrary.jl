@@ -22,7 +22,7 @@ using Oceananigans
 using Oceananigans.Advection
 using Oceananigans.Grids
 using Oceananigans.Fields
-using Oceananigans.Buoyancy
+using Oceananigans.BuoyancyModels
 using Oceananigans.BoundaryConditions
 using Oceananigans.Diagnostics
 using Oceananigans.OutputWriters
@@ -30,9 +30,9 @@ using Oceananigans.Utils
 
 using LESbrary
 
-using Oceananigans.Buoyancy: g_Earth
+using Oceananigans.BuoyancyModels: g_Earth
 using Oceananigans.Fields: PressureField
-using Oceananigans.Buoyancy: BuoyancyTracer
+using Oceananigans.BuoyancyModels: BuoyancyTracer
 using Oceananigans.SurfaceWaves: UniformStokesDrift
 
 using LESbrary.TurbulenceStatistics: TurbulentKineticEnergy, ShearProduction, ViscousDissipation

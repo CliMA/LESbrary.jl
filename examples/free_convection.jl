@@ -13,7 +13,7 @@ grid = RegularRectilinearGrid(size=(32, 32, 32), x=(0, 128), y=(0, 128), z=(-64,
 
 # Buoyancy and boundary conditions
 
-using Oceananigans.Buoyancy, Oceananigans.BoundaryConditions
+using Oceananigans.BuoyancyModels, Oceananigans.BoundaryConditions
 
 Qᵇ = 1e-7
 N² = 1e-5

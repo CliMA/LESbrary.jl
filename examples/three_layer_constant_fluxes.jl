@@ -22,7 +22,7 @@ using LESbrary
 using Oceanostics
 using Oceananigans
 using Oceananigans.Grids
-using Oceananigans.Buoyancy
+using Oceananigans.BuoyancyModels
 using Oceananigans.BoundaryConditions
 using Oceananigans.Fields
 using Oceananigans.Advection

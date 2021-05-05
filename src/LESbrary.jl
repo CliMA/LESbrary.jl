@@ -12,7 +12,7 @@ using
     Oceananigans.Grids,
     Oceananigans.Utils
 
-using Oceananigans.Buoyancy: g_Earth
+using Oceananigans.BuoyancyModels: g_Earth
 
 using Oceananigans: @hascuda, Face, Center
 

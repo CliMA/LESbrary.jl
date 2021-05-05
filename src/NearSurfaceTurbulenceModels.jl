@@ -68,7 +68,7 @@ end
 
 save_closure_parameters!(args...) = nothing # fallback
 
-const EnhancedAMD = VerstappenAnisotropicMinimumDissipation{FT, PK, <:SurfaceEnhancedModelConstant} where {FT, PK}
+const EnhancedAMD = AnisotropicMinimumDissipation{FT, PK, <:SurfaceEnhancedModelConstant} where {FT, PK}
 
 function save_closure_parameters!(file, closure::EnhancedAMD)
     file["closure/C₀"] = closure.Cν.C₀

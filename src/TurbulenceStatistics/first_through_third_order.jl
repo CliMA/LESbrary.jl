@@ -1,5 +1,5 @@
 using Oceananigans.Fields: XFaceField, YFaceField, ZFaceField, CenterField, PressureField
-using Oceananigans.Buoyancy: BuoyancyField
+using Oceananigans.BuoyancyModels: BuoyancyField
 
 has_buoyancy_tracer(model) = :b ∈ keys(model.tracers)
 
