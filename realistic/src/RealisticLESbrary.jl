@@ -1,6 +1,6 @@
 module RealisticLESbrary
 
-export InterpolatedProfile, InterpolatedProfileTimeSeries
+export InterpolatedProfile, InterpolatedProfileTimeSeries, ∂z, ∂t
 
 include("interpolated_profiles.jl")
 
