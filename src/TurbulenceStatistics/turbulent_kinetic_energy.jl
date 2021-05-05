@@ -3,20 +3,21 @@ using Adapt
 using Statistics
 
 using Oceananigans.Fields
+using Oceananigans.Fields: AbstractDataField
 using Oceananigans.Utils: work_layout
 using Oceananigans.Operators: ℑxᶜᵃᵃ, ℑyᵃᶜᵃ, ℑzᵃᵃᶜ
 using Oceananigans.Fields: AbstractField, new_data
 
 import Oceananigans.Fields: compute!
 
-struct TurbulentKineticEnergy{A, G, U, V, W, Ua, Va} <: AbstractField{Center, Center, Center, A, G}
+struct TurbulentKineticEnergy{A, G, T, U, V, W, UH, VH} <: AbstractDataField{Center, Center, Center, A, G, T}
     data :: A
     grid :: G
        u :: U
        v :: V
        w :: W
-       U :: Ua # horizontally-averaged u
-       V :: Va # horizontally-averaged v
+       U :: UH # horizontally-averaged u
+       V :: VH # horizontally-averaged v
 end
 
 """
@@ -28,7 +29,7 @@ Calling `compute!(tke::TurbulentKineticEnergy)` computes the turbulent kinetic e
 and stores it in `tke.data`.
 """
 function TurbulentKineticEnergy(model;
-                                data = nothing, 
+                                data = nothing,
                                    U = AveragedField(model.velocities.u, dims=(1, 2)),
                                    V = AveragedField(model.velocities.v, dims=(1, 2)))
 
@@ -38,7 +39,16 @@ function TurbulentKineticEnergy(model;
 
     u, v, w = model.velocities
 
-    return TurbulentKineticEnergy(data, model.grid, u, v, w, U, V)
+    A  = typeof(model.architecture)
+    G  = typeof(model.grid)
+    T  = eltype(model.grid)
+    UT = typeof(u)
+    VT = typeof(v)
+    WT = typeof(w)
+    UH = typeof(U)
+    VH = typeof(V)
+
+    return TurbulentKineticEnergy{A, G, T, UT, VT, WT, UH, VH}(data, model.grid, u, v, w, U, V)
 end
 
 function compute!(tke::TurbulentKineticEnergy)

@@ -1,21 +1,23 @@
 module LESbrary
 
-using OffsetArrays, JLD2, Printf, Glob, Statistics
+using Statistics
+using Printf
 
-using
-    Oceananigans.AbstractOperations,
-    Oceananigans.BoundaryConditions,
-    Oceananigans.TurbulenceClosures,
-    Oceananigans.Diagnostics,
-    Oceananigans.Fields,
-    Oceananigans.Operators,
-    Oceananigans.Grids,
-    Oceananigans.Utils
+using OffsetArrays
+using Glob
+using JLD2
 
+using Oceananigans.AbstractOperations
+using Oceananigans.BoundaryConditions
+using Oceananigans.TurbulenceClosures
+using Oceananigans.Diagnostics
+using Oceananigans.Fields
+using Oceananigans.Operators
+using Oceananigans.Grids
+using Oceananigans.Utils
+
+using Oceananigans: Face, Center
 using Oceananigans.BuoyancyModels: g_Earth
-
-using Oceananigans: @hascuda, Face, Center
-
 using Oceananigans.Fields: xnodes, ynodes, znodes
 
 include("Utils/Utils.jl")
