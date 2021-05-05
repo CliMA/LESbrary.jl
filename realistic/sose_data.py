@@ -1,6 +1,5 @@
 import os
 import logging
-logging.getLogger().setLevel(logging.INFO)
 
 import xgcm
 import dask
@@ -10,6 +9,12 @@ import matplotlib.pyplot as plt
 
 from datetime import datetime
 from dask.diagnostics import ProgressBar
+
+logging.basicConfig(
+     format = "%(asctime)s %(levelname)-8s %(message)s",
+      level = logging.INFO,
+    datefmt = "%Y-%m-%d %H:%M:%S"
+)
 
 def open_sose_2d_datasets(dir):
     logging.info("Opening SOSE 2D datasets...")
@@ -109,11 +114,10 @@ def compute_geostrophic_velocities(ds, lat, lon, day_offset, days, zF, α, β, g
     grid = xgcm.Grid(ds, metrics=metrics, periodic=('X', 'Y'))
 
     # Vertical integrals from z'=-Lz to z'=z (cumulative integrals)
-    with dask.config.set({"array.slicing.split_large_chunks": False}):
-        Σdz_dΘdx = grid.cumint(grid.derivative(Θ, 'X'), 'Z', boundary="extend")
-        Σdz_dΘdy = grid.cumint(grid.derivative(Θ, 'Y'), 'Z', boundary="extend")
-        Σdz_dSdx = grid.cumint(grid.derivative(S, 'X'), 'Z', boundary="extend")
-        Σdz_dSdy = grid.cumint(grid.derivative(S, 'Y'), 'Z', boundary="extend")
+    Σdz_dΘdx = grid.cumint(grid.derivative(Θ, 'X'), 'Z', boundary="extend")
+    Σdz_dΘdy = grid.cumint(grid.derivative(Θ, 'Y'), 'Z', boundary="extend")
+    Σdz_dSdx = grid.cumint(grid.derivative(S, 'X'), 'Z', boundary="extend")
+    Σdz_dSdy = grid.cumint(grid.derivative(S, 'Y'), 'Z', boundary="extend")
 
     # Assuming linear equation of state
     Σdz_dBdx = g * (α * Σdz_dΘdx - β * Σdz_dSdx)

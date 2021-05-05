@@ -14,7 +14,9 @@ using RealisticLESbrary
 
 Logging.global_logger(OceananigansLogger())
 
-include("load_sose_data.jl")
+# include("load_sose_data.jl")
+include("interpolate_sose_data.jl")
+include("make_plots_and_movies.jl")
 
 ## Pick architecture and float type
 
@@ -73,28 +75,30 @@ buoyancy = SeawaterBuoyancy(equation_of_state=TEOS10EquationOfState(FT))
 
 SOSE_DIR = "/storage3/bsose_i122/"
 
-sose_times, sose_vertical_grid, surface_forcings, profiles = load_sose_data(SOSE_DIR, lat, lon, day_offset, n_days, grid, buoyancy, coriolis)
+# sose_datetimes, sose_grid, sose_surface_forcings, sose_profiles =
+#     load_sose_data(SOSE_DIR, lat, lon, day_offset, n_days, grid, buoyancy, coriolis)
 
-#=
-
-date_times = convert.(Date, sose.get_times(ds2))
-start_time = date_times[day_offset]
-stop_time = date_times[day_offset + n_days]
-@info "Simulation start time = $start_time, stop time = $stop_time"
-
-## Plot SOSE site analysis...
-
-@info "Performing ocean site analysis..."
-
-# sose.plot_site_analysis(ds2, lat, lon, day_offset, n_days)
+dates = convert.(Date, sose_datetimes)
+start_date = dates[day_offset]
+stop_date = dates[day_offset + n_days]
+@info "Simulation start date: $start_date, stop date: $stop_date"
 
 ## Create linear interpolations for base state solution
 
 @info "Interpolating SOSE data..."
 
-ts = day * (0:n_days) |> collect
-zC_SOSE = ds3.Z.values
-zF_SOSE = ds3.Zl.values
+times = day * (0:n_days)
+
+interpolated_surface_forcings = interpolate_surface_forcings(sose_surface_forcings, times)
+interpolated_profiles = interpolate_profiles(sose_profiles, sose_grid, grid, times)
+
+@info "Plotting initial state for inspection..."
+
+plot_initial_args = (sose_profiles, sose_grid, interpolated_profiles, grid, lat, lon, start_date)
+plot_initial_state(plot_initial_args..., z_bottom=-Lz, filepath="initial_state.png")
+plot_initial_state(plot_initial_args..., z_bottom=-10Lz, filepath="initial_state_deep.png")
+
+#=
 
 ℑτx  = interpolate((ts,), τx,  Gridded(Linear()))
 ℑτy  = interpolate((ts,), τy,  Gridded(Linear()))
