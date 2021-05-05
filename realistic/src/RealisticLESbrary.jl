@@ -1,5 +1,7 @@
 module RealisticLESbrary
 
-greet() = print("Hello World!")
+export InterpolatedProfile, InterpolatedProfileTimeSeries
+
+include("interpolated_profiles.jl")
 
 end # module
