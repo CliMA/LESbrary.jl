@@ -3,6 +3,7 @@ import logging
 logging.getLogger().setLevel(logging.INFO)
 
 import xgcm
+import dask
 import numpy as np
 import xarray as xr
 import matplotlib.pyplot as plt
@@ -29,12 +30,11 @@ def open_sose_3d_datasets(dir):
 
     u = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_Uvel.nc"),  chunks={'XG': 10, 'YC': 10, 'time': 10}, decode_cf=False)
     v = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_Vvel.nc"),  chunks={'XC': 10, 'YG': 10, 'time': 10}, decode_cf=False)
-    w = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_Wvel.nc"),  chunks={'XC': 10, 'YC': 10, 'time': 10}, decode_cf=False)
     T = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_Theta.nc"), chunks={'XC': 10, 'YC': 10, 'time': 10}, decode_cf=False)
     S = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_Salt.nc"),  chunks={'XC': 10, 'YC': 10, 'time': 10}, decode_cf=False)
     N = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_Strat.nc"), chunks={'XC': 10, 'YC': 10, 'time': 10}, decode_cf=False)
 
-    return xr.merge([u, v, w, T, S, N])
+    return xr.merge([u, v, T, S, N])
 
 def open_sose_advective_flux_datasets(dir):
     logging.info("Opening SOSE advective flux datasets (this can take some time)...")
@@ -65,7 +65,7 @@ def get_scalar_time_series(ds, var, lat, lon, day_offset, days):
     return time_series
 
 def get_profile_time_series(ds, var, lat, lon, day_offset, days):
-    logging.info(f"Getting time series of {var} at (lat={lat}°N, lon={lon}°E) for {days} days...")
+    logging.info(f"Getting time series of {var} at ({lat}°N, {lon}°E) for {days} days...")
     time_slice = slice(day_offset, day_offset + days + 1)
     with ProgressBar():
         if var in ["UVEL", "oceTAUX"]:
@@ -77,7 +77,7 @@ def get_profile_time_series(ds, var, lat, lon, day_offset, days):
     return time_series
 
 def compute_geostrophic_velocities(ds, lat, lon, day_offset, days, zF, α, β, g, f):
-    logging.info(f"Computing geostrophic velocities at (lat={lat}°N, lon={lon}°E) for {days} days...")
+    logging.info(f"Computing geostrophic velocities at ({lat}°N, {lon}°E) for {days} days...")
 
     # Reverse z index so we calculate cumulative integrals bottom up
     ds = ds.reindex(Z=ds.Z[::-1], Zl=ds.Zl[::-1])
@@ -109,10 +109,11 @@ def compute_geostrophic_velocities(ds, lat, lon, day_offset, days, zF, α, β, g
     grid = xgcm.Grid(ds, metrics=metrics, periodic=('X', 'Y'))
 
     # Vertical integrals from z'=-Lz to z'=z (cumulative integrals)
-    Σdz_dΘdx = grid.cumint(grid.derivative(Θ, 'X'), 'Z', boundary="extend")
-    Σdz_dΘdy = grid.cumint(grid.derivative(Θ, 'Y'), 'Z', boundary="extend")
-    Σdz_dSdx = grid.cumint(grid.derivative(S, 'X'), 'Z', boundary="extend")
-    Σdz_dSdy = grid.cumint(grid.derivative(S, 'Y'), 'Z', boundary="extend")
+    with dask.config.set({"array.slicing.split_large_chunks": False}):
+        Σdz_dΘdx = grid.cumint(grid.derivative(Θ, 'X'), 'Z', boundary="extend")
+        Σdz_dΘdy = grid.cumint(grid.derivative(Θ, 'Y'), 'Z', boundary="extend")
+        Σdz_dSdx = grid.cumint(grid.derivative(S, 'X'), 'Z', boundary="extend")
+        Σdz_dSdy = grid.cumint(grid.derivative(S, 'Y'), 'Z', boundary="extend")
 
     # Assuming linear equation of state
     Σdz_dBdx = g * (α * Σdz_dΘdx - β * Σdz_dSdx)
@@ -130,7 +131,7 @@ def compute_geostrophic_velocities(ds, lat, lon, day_offset, days, zF, α, β, g
     return U_geo, V_geo
 
 def plot_site_analysis(ds, lat, lon, day_offset, days):
-    logging.info(f"Plotting site analysis at (lat={lat}°N, lon={lon}°E) for {days} days...")
+    logging.info(f"Plotting site analysis at ({lat}°N, {lon}°E) for {days} days...")
 
     time = ds.time.values
     time_slice = slice(day_offset, day_offset + days + 1)
@@ -144,7 +145,7 @@ def plot_site_analysis(ds, lat, lon, day_offset, days):
 
     fig, axes = plt.subplots(nrows=4, ncols=1, figsize=(16, 12), dpi=200)
 
-    fig.suptitle(f"LESbrary.jl SOSE site analysis at (lat={lat}°N, lon={lon}°E)")
+    fig.suptitle(f"LESbrary.jl SOSE site analysis at ({lat}°N, {lon}°E)")
 
     ax_τ = axes[0]
     ax_τ.plot(time, τx, label=r"$\tau_x$")
@@ -184,7 +185,7 @@ def plot_site_analysis(ds, lat, lon, day_offset, days):
     plt.close(fig)
 
 def plot_lateral_flux_site_analysis(ds, lat, lon, day_offset, days):
-    logging.info(f"Plotting lateral flux site analysis at (lat={lat}°N, lon={lon}°E) for {days} days...")
+    logging.info(f"Plotting lateral flux site analysis at ({lat}°N, {lon}°E) for {days} days...")
 
     time = ds.time.values
     time_slice = slice(day_offset, day_offset + days + 1)
@@ -212,7 +213,7 @@ def plot_lateral_flux_site_analysis(ds, lat, lon, day_offset, days):
 
     fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(16, 12))
 
-    fig.suptitle(f"LESbrary.jl SOSE site analysis: lateral fluxes at (lat={lat}°N, lon={lon}°E)")
+    fig.suptitle(f"LESbrary.jl SOSE site analysis: lateral fluxes at ({lat}°N, {lon}°E)")
 
     ax_T = axes[0]
     ax_T.plot(time, Σdz_uT, label=r"$\int uT \; dz$")
@@ -242,7 +243,7 @@ def plot_lateral_flux_site_analysis(ds, lat, lon, day_offset, days):
 
     fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(16, 12))
 
-    fig.suptitle(f"LESbrary.jl SOSE site analysis: lateral flux differences at (lat={lat}°N, lon={lon}°E)")
+    fig.suptitle(f"LESbrary.jl SOSE site analysis: lateral flux differences at ({lat}°N, {lon}°E)")
 
     ax_T = axes[0]
     ax_T.plot(time, ΔΣdz_uT, label=r"$\Delta \int uT \; dz$")

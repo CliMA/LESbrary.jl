@@ -1,7 +1,5 @@
 using Logging
 using Printf
-using PyCall
-using Conda
 
 using Oceananigans
 using Oceananigans.Units
@@ -11,23 +9,12 @@ using SeawaterPolynomials.TEOS10
 using Oceananigans.BuoyancyModels: BuoyancyField
 
 using Dates: Date, DateTime, Millisecond # Avoid conflicts with Oceananigans.Units
-using Interpolations: interpolate, gradient, Gridded, Linear
-const ∇ = gradient
+
+using RealisticLESbrary
 
 Logging.global_logger(OceananigansLogger())
 
-# Install needed Python packages
-Conda.add("xarray")
-Conda.add_channel("conda-forge")
-Conda.add("xgcm", channel="conda-forge")
-Conda.add("netcdf4")
-
-# Needed to import local Python modules like sose_data
-# See: https://github.com/JuliaPy/PyCall.jl/issues/48
-py"""
-import sys
-sys.path.insert(0, ".")
-"""
+include("load_sose_data.jl")
 
 ## Pick architecture and float type
 
@@ -82,56 +69,24 @@ buoyancy = SeawaterBuoyancy(equation_of_state=TEOS10EquationOfState(FT))
 
 ## Load large-scale (base state) solution from SOSE
 
-@info "Summoning SOSE data..."
-
-sose = pyimport("sose_data")
+@info "Summoning SOSE data and diagnosing geostrophic background state..."
 
 SOSE_DIR = "/storage3/bsose_i122/"
 
-# Don't have to wait minutes to load 3D data if we already did so.
-if (!@isdefined ds2) && (!@isdefined ds3)
-    ds2 = sose.open_sose_2d_datasets(SOSE_DIR)
-    ds3 = sose.open_sose_3d_datasets(SOSE_DIR)
-end
+sose_times, sose_vertical_grid, surface_forcings, profiles = load_sose_data(SOSE_DIR, lat, lon, day_offset, n_days, grid, buoyancy, coriolis)
+
+#=
 
 date_times = convert.(Date, sose.get_times(ds2))
 start_time = date_times[day_offset]
 stop_time = date_times[day_offset + n_days]
 @info "Simulation start time = $start_time, stop time = $stop_time"
 
-τx  = sose.get_scalar_time_series(ds2, "oceTAUX",  lat, lon, day_offset, n_days) |> Array{FT}
-τy  = sose.get_scalar_time_series(ds2, "oceTAUY",  lat, lon, day_offset, n_days) |> Array{FT}
-Qθ  = sose.get_scalar_time_series(ds2, "oceQnet",  lat, lon, day_offset, n_days) |> Array{FT}
-Qs  = sose.get_scalar_time_series(ds2, "oceFWflx", lat, lon, day_offset, n_days) |> Array{FT}
-mld = sose.get_scalar_time_series(ds2, "BLGMLD",   lat, lon, day_offset, n_days) |> Array{FT}
-
-U = sose.get_profile_time_series(ds3, "UVEL",   lat, lon, day_offset, n_days) |> Array{FT}
-V = sose.get_profile_time_series(ds3, "VVEL",   lat, lon, day_offset, n_days) |> Array{FT}
-Θ = sose.get_profile_time_series(ds3, "THETA",  lat, lon, day_offset, n_days) |> Array{FT}
-S = sose.get_profile_time_series(ds3, "SALT",   lat, lon, day_offset, n_days) |> Array{FT}
-N = sose.get_profile_time_series(ds3, "DRHODR", lat, lon, day_offset, n_days) |> Array{FT}
-
-# Nominal values for α, β to compute geostrophic velocities
-# FIXME: Use TEOS-10 (Θ, Sᴬ, Z) dependent values
-α = 1.67e-4
-β = 7.80e-4
-
-@info "Diagnosing geostrophic background state..."
-
-# Don't have to wait minutes to compute Ugeo and Vgeo if we already did so.
-if (!@isdefined Ugeo) && (!@isdefined Vgeo)
-    Ugeo, Vgeo = sose.compute_geostrophic_velocities(ds3, lat, lon, day_offset, n_days, grid.zF, α, β,
-                                                     buoyancy.gravitational_acceleration, coriolis.f)
-
-    ds2.close()
-    ds3.close()
-end
-
 ## Plot SOSE site analysis...
 
 @info "Performing ocean site analysis..."
 
-sose.plot_site_analysis(ds2, lat, lon, day_offset, n_days)
+# sose.plot_site_analysis(ds2, lat, lon, day_offset, n_days)
 
 ## Create linear interpolations for base state solution
 
