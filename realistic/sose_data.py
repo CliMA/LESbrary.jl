@@ -12,6 +12,7 @@ from dask.diagnostics import ProgressBar
 
 def open_sose_2d_datasets(dir):
     logging.info("Opening SOSE 2D datasets...")
+
     mld          = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_MLD.nc"),       chunks={'XC': 100, 'YC': 100})
     tau_x        = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_oceTAUX.nc"),   chunks={'XG': 100, 'YC': 100})
     tau_y        = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_oceTAUY.nc"),   chunks={'XC': 100, 'YG': 100})
@@ -25,6 +26,7 @@ def open_sose_2d_datasets(dir):
 
 def open_sose_3d_datasets(dir):
     logging.info("Opening SOSE 3D datasets (this can take some time)...")
+
     u = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_Uvel.nc"),  chunks={'XG': 10, 'YC': 10, 'time': 10}, decode_cf=False)
     v = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_Vvel.nc"),  chunks={'XC': 10, 'YG': 10, 'time': 10}, decode_cf=False)
     w = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_Wvel.nc"),  chunks={'XC': 10, 'YC': 10, 'time': 10}, decode_cf=False)
@@ -33,6 +35,16 @@ def open_sose_3d_datasets(dir):
     N = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_Strat.nc"), chunks={'XC': 10, 'YC': 10, 'time': 10}, decode_cf=False)
 
     return xr.merge([u, v, w, T, S, N])
+
+def open_sose_advective_flux_datasets(dir):
+    logging.info("Opening SOSE advective flux datasets (this can take some time)...")
+
+    uT = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_5day_ADVx_TH.nc"),  chunks={'XG': 10, 'YC': 10, 'time': 10})
+    vT = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_5day_ADVy_TH.nc"),  chunks={'XC': 10, 'YG': 10, 'time': 10})
+    uS = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_5day_ADVx_SLT.nc"), chunks={'XG': 10, 'YC': 10, 'time': 10})
+    vS = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_5day_ADVy_SLT.nc"), chunks={'XC': 10, 'YG': 10, 'time': 10})
+
+    return xr.merge([uT, vT, uS, vS])
 
 def get_times(ds):
     ts = ds.time.values
@@ -106,10 +118,6 @@ def compute_geostrophic_velocities(ds, lat, lon, day_offset, days, zF, α, β, g
     Σdz_dBdx = g * (α * Σdz_dΘdx - β * Σdz_dSdx)
     Σdz_dBdy = g * (α * Σdz_dΘdy - β * Σdz_dSdy)
 
-    # Interpolate velocities in z
-    # ℑU = U.interp(Z=zF, method="linear", kwargs={"fill_value": "extrapolate"})
-    # ℑV = V.interp(Z=zF, method="linear", kwargs={"fill_value": "extrapolate"})
-
     # Velocities at depth
     z_bottom = ds.Z.values[0]
     U_d = U.sel(XG=lon, YC=lat, Z=z_bottom, method="nearest")
@@ -169,5 +177,97 @@ def plot_site_analysis(ds, lat, lon, day_offset, days):
     ax_mld.set_xlim([time[0], time[-1]])
     ax_mld.invert_yaxis()
 
-    plt.savefig(f"lesbrary_latitude{lat}_longitude{lon}_{simulation_time[0]}_to{simulation_time[-1]}_site_analysis.png", dpi=300)
+    start_date_str = numpy_datetime_to_date_str(simulation_time[0])
+    end_date_str = numpy_datetime_to_date_str(simulation_time[-1])
+
+    plt.savefig(f"lesbrary_site_analysis_latitude{lat}_longitude{lon}_{start_date_str}_to{end_date_str}.png", dpi=300)
     plt.close(fig)
+
+def plot_lateral_flux_site_analysis(ds, lat, lon, day_offset, days):
+    logging.info(f"Plotting lateral flux site analysis at (lat={lat}°N, lon={lon}°E) for {days} days...")
+
+    time = ds.time.values
+    time_slice = slice(day_offset, day_offset + days + 1)
+    simulation_time = ds.time.isel(time=time_slice).values
+
+    # Compute column-integrated fluxes and flux differences
+
+    uT = ds.ADVx_TH
+    vT = ds.ADVy_TH
+    uS = ds.ADVx_SLT
+    vS = ds.ADVy_SLT
+
+    with ProgressBar():
+        Σdz_uT = uT.integrate(coord="Z").sel(XG=lon, YC=lat, method="nearest").values
+        Σdz_vT = vT.integrate(coord="Z").sel(XC=lon, YG=lat, method="nearest").values
+        Σdz_uS = uS.integrate(coord="Z").sel(XG=lon, YC=lat, method="nearest").values
+        Σdz_vS = vS.integrate(coord="Z").sel(XC=lon, YG=lat, method="nearest").values
+
+        ΔΣdz_uT = uT.integrate(coord="Z").diff("XG").sel(XG=lon, YC=lat, method="nearest").values
+        ΔΣdz_vT = vT.integrate(coord="Z").diff("YG").sel(XC=lon, YG=lat, method="nearest").values
+        ΔΣdz_uS = uS.integrate(coord="Z").diff("XG").sel(XG=lon, YC=lat, method="nearest").values
+        ΔΣdz_vS = vS.integrate(coord="Z").diff("YG").sel(XC=lon, YG=lat, method="nearest").values
+
+    # Plot column-integrated fluxes time series
+
+    fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(16, 12))
+
+    fig.suptitle(f"LESbrary.jl SOSE site analysis: lateral fluxes at (lat={lat}°N, lon={lon}°E)")
+
+    ax_T = axes[0]
+    ax_T.plot(time, Σdz_uT, label=r"$\int uT \; dz$")
+    ax_T.plot(time, Σdz_vT, label=r"$\int vT \; dz$")
+    ax_T.axvspan(simulation_time[0], simulation_time[-1], color='gold', alpha=0.5)
+    ax_T.legend(frameon=False)
+    ax_T.set_ylabel(r"$\degree C \cdot m^4/s$")
+    ax_T.set_xlim([time[0], time[-1]])
+    ax_T.set_xticklabels([])
+
+    ax_S = axes[1]
+    ax_S.plot(time, Σdz_uS, label=r"$\int uS \; dz$")
+    ax_S.plot(time, Σdz_vS, label=r"$\int vS \; dz$")
+    ax_S.axvspan(simulation_time[0], simulation_time[-1], color='gold', alpha=0.5)
+    ax_S.legend(frameon=False)
+    ax_S.set_ylabel(r"$\mathrm{psu} \cdot m^4/s$")
+    ax_S.set_xlim([time[0], time[-1]])
+
+    start_date_str = numpy_datetime_to_date_str(simulation_time[0])
+    end_date_str = numpy_datetime_to_date_str(simulation_time[-1])
+    filename = f"lesbrary_site_analysis_lateral_fluxes_latitude{lat}_longitude{lon}_{start_date_str}_to_{end_date_str}.png"
+    logging.info(f"Saving {filename}...")
+    plt.savefig(filename, dpi=300)
+    plt.close(fig)
+
+    # Plot flux differences time series
+
+    fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(16, 12))
+
+    fig.suptitle(f"LESbrary.jl SOSE site analysis: lateral flux differences at (lat={lat}°N, lon={lon}°E)")
+
+    ax_T = axes[0]
+    ax_T.plot(time, ΔΣdz_uT, label=r"$\Delta \int uT \; dz$")
+    ax_T.plot(time, ΔΣdz_vT, label=r"$\Delta \int vT \; dz$")
+    ax_T.axvspan(simulation_time[0], simulation_time[-1], color='gold', alpha=0.5)
+    ax_T.legend(frameon=False)
+    ax_T.set_ylabel(r"\degree C \cdot m^4/s")
+    ax_T.set_xlim([time[0], time[-1]])
+    ax_T.set_xticklabels([])
+
+    ax_S = axes[1]
+    ax_S.plot(time, ΔΣdz_uS, label=r"$\Delta \int uS \; dz$")
+    ax_S.plot(time, ΔΣdz_vS, label=r"$\Delta \int vS \; dz$")
+    ax_S.axvspan(simulation_time[0], simulation_time[-1], color='gold', alpha=0.5)
+    ax_S.legend(frameon=False)
+    ax_S.set_ylabel(r"\mathrm{psu} \cdot m^4/s")
+    ax_S.set_xlim([time[0], time[-1]])
+
+    start_date_str = numpy_datetime_to_date_str(simulation_time[0])
+    end_date_str = numpy_datetime_to_date_str(simulation_time[-1])
+    filename = f"lesbrary_site_analysis_lateral_flux_differences_latitude{lat}_longitude{lon}_{start_date_str}_to_{end_date_str}.png"
+    logging.info(f"Saving {filename}...")
+    plt.savefig(filename, dpi=300)
+    plt.close(fig)
+
+# https://stackoverflow.com/a/45494027
+def numpy_datetime_to_date_str(dt):
+    return str(dt)[:10]
