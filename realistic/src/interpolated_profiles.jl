@@ -1,5 +1,3 @@
-import Base: getindex
-
 @inline fractional_index(x, xs, Δx) = @inbounds (x - xs[1]) / Δx
 
 # Linear Lagrange polynomials

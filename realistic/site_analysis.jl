@@ -1,5 +1,6 @@
 using ArgParse
 using PyCall
+using RealisticLESbrary
 
 using Dates: Date
 
@@ -35,12 +36,6 @@ function parse_command_line_arguments()
     return parse_args(settings)
 end
 
-function dates_to_offset(start_date, end_date, sose_start_date; step=1)
-    offset = (start_date - sose_start_date).value / step + 1
-    n_dates = (end_date - start_date).value / step
-    return floor(Int, offset), ceil(Int, n_dates)
-end
-
 @info "Parsing command line arguments..."
 
 args = parse_command_line_arguments()
@@ -52,19 +47,14 @@ start_date = Date(args["start"])
 end_date = Date(args["end"])
 sose_dir = args["sose-dir"]
 
-sose_start_date = Date(2013, 1, 1)
-sose_end_date = Date(2018, 1, 1)
-
-@assert start_date < end_date
-@assert start_date >= sose_start_date
-@assert end_date <= sose_end_date
+validate_sose_dates(start_date, end_date)
 
 @info "Performing ocean site analysis from $start_date to $end_date..."
 
 ds2 = sose.open_sose_2d_datasets(sose_dir)
-offset, n_dates = dates_to_offset(start_date, end_date, sose_start_date)
+offset, n_dates = dates_to_offset(start_date, end_date)
 sose_site_analysis.plot_surface_forcing_site_analysis(ds2, lat, lon, offset-1, n_dates)
 
 ds_fluxes = sose.open_sose_advective_flux_datasets(sose_dir)
-offset, n_dates = dates_to_offset(start_date, end_date, sose_start_date, step=5)
+offset, n_dates = dates_to_offset(start_date, end_date, step=5)
 sose_site_analysis.plot_lateral_flux_site_analysis(ds_fluxes, lat, lon, offset-1, n_dates)
