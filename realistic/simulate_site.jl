@@ -14,7 +14,7 @@ using RealisticLESbrary: ∂z, ∂t
 
 Logging.global_logger(OceananigansLogger())
 
-# include("load_sose_data.jl")
+include("load_sose_data.jl")
 include("interpolate_sose_data.jl")
 include("make_plots_and_movies.jl")
 include("mixed_layer_depth.jl")
@@ -102,8 +102,8 @@ buoyancy = SeawaterBuoyancy(equation_of_state=TEOS10EquationOfState())
 
 @info "Summoning SOSE data and diagnosing geostrophic background state..."
 
-# sose_datetimes, sose_grid, sose_surface_forcings, sose_profiles =
-#     load_sose_data(sose_dir, lat, lon, day_offset, n_days, grid, buoyancy, coriolis)
+sose_datetimes, sose_grid, sose_surface_forcings, sose_profiles =
+    load_sose_data(sose_dir, lat, lon, day_offset, n_days, grid, buoyancy, coriolis)
 
 dates = convert.(Date, sose_datetimes)
 start_date = dates[day_offset]
@@ -312,7 +312,7 @@ end
 
 simulation = Simulation(model,
                     Δt = wizard,
-             stop_time = 100, # n_days * days,
+             stop_time = n_days * days,
     iteration_interval = 10,
               progress = ProgressTicker(time_ns()),
             parameters = (; start_date, end_date, mixed_layer_depth)
