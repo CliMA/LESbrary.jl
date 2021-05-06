@@ -64,6 +64,10 @@ end
     ξ, k = mod(k, 1), Base.unsafe_trunc(Int, k)
     η, n = mod(n, 1), Base.unsafe_trunc(Int, n)
 
+    if k == length(profile.z)
+        k = k - 1
+    end
+
     dataᵏ   = ϕ₀(η) * profile.data[k,   n] + ϕ₁(η) * profile.data[k,   n+1]
     dataᵏ⁺¹ = ϕ₀(η) * profile.data[k+1, n] + ϕ₁(η) * profile.data[k+1, n+1]
 
