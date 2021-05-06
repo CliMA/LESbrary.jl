@@ -65,7 +65,7 @@ def plot_surface_forcing_site_analysis(ds, lat, lon, date_offset, n_dates):
     start_date_str = numpy_datetime_to_date_str(simulation_time[0])
     end_date_str = numpy_datetime_to_date_str(simulation_time[-1])
 
-    filename = f"lesbrary_surface_forcing_site_analysis_latitude{lat}_longitude{lon}_{start_date_str}_to{end_date_str}.png"
+    filename = f"lesbrary_site_analysis_surface_forcing_latitude{lat}_longitude{lon}_{start_date_str}_to{end_date_str}.png"
     logging.info(f"Saving {filename}...")
     plt.savefig(filename, dpi=300)
     plt.close(fig)
@@ -104,6 +104,8 @@ def plot_lateral_flux_site_analysis(ds, lat, lon, date_offset, n_dates):
     ax_T = axes[0]
     ax_T.plot(time, Σdz_uT, label=r"$\int uT \; dz$")
     ax_T.plot(time, Σdz_vT, label=r"$\int vT \; dz$")
+    ax_T.plot(time, ΔΣdz_uT, label=r"$\Delta \int uT \; dz$")
+    ax_T.plot(time, ΔΣdz_vT, label=r"$\Delta \int vT \; dz$")
     ax_T.axvspan(simulation_time[0], simulation_time[-1], color='gold', alpha=0.5)
     ax_T.legend(frameon=False)
     ax_T.set_ylabel(r"$\degree C \cdot m^4/s$")
@@ -113,6 +115,8 @@ def plot_lateral_flux_site_analysis(ds, lat, lon, date_offset, n_dates):
     ax_S = axes[1]
     ax_S.plot(time, Σdz_uS, label=r"$\int uS \; dz$")
     ax_S.plot(time, Σdz_vS, label=r"$\int vS \; dz$")
+    ax_S.plot(time, ΔΣdz_uS, label=r"$\Delta \int uS \; dz$")
+    ax_S.plot(time, ΔΣdz_vS, label=r"$\Delta \int vS \; dz$")
     ax_S.axvspan(simulation_time[0], simulation_time[-1], color='gold', alpha=0.5)
     ax_S.legend(frameon=False)
     ax_S.set_ylabel(r"$\mathrm{psu} \cdot m^4/s$")
@@ -121,36 +125,6 @@ def plot_lateral_flux_site_analysis(ds, lat, lon, date_offset, n_dates):
     start_date_str = numpy_datetime_to_date_str(simulation_time[0])
     end_date_str = numpy_datetime_to_date_str(simulation_time[-1])
     filename = f"lesbrary_site_analysis_lateral_fluxes_latitude{lat}_longitude{lon}_{start_date_str}_to_{end_date_str}.png"
-    logging.info(f"Saving {filename}...")
-    plt.savefig(filename, dpi=300)
-    plt.close(fig)
-
-    # Plot flux differences time series
-
-    fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(16, 12))
-
-    fig.suptitle(f"LESbrary.jl SOSE site analysis: lateral flux differences at ({lat}°N, {lon}°E)")
-
-    ax_T = axes[0]
-    ax_T.plot(time, ΔΣdz_uT, label=r"$\Delta \int uT \; dz$")
-    ax_T.plot(time, ΔΣdz_vT, label=r"$\Delta \int vT \; dz$")
-    ax_T.axvspan(simulation_time[0], simulation_time[-1], color='gold', alpha=0.5)
-    ax_T.legend(frameon=False)
-    ax_T.set_ylabel(r"\degree C \cdot m^4/s")
-    ax_T.set_xlim([time[0], time[-1]])
-    ax_T.set_xticklabels([])
-
-    ax_S = axes[1]
-    ax_S.plot(time, ΔΣdz_uS, label=r"$\Delta \int uS \; dz$")
-    ax_S.plot(time, ΔΣdz_vS, label=r"$\Delta \int vS \; dz$")
-    ax_S.axvspan(simulation_time[0], simulation_time[-1], color='gold', alpha=0.5)
-    ax_S.legend(frameon=False)
-    ax_S.set_ylabel(r"\mathrm{psu} \cdot m^4/s")
-    ax_S.set_xlim([time[0], time[-1]])
-
-    start_date_str = numpy_datetime_to_date_str(simulation_time[0])
-    end_date_str = numpy_datetime_to_date_str(simulation_time[-1])
-    filename = f"lesbrary_site_analysis_lateral_flux_differences_latitude{lat}_longitude{lon}_{start_date_str}_to_{end_date_str}.png"
     logging.info(f"Saving {filename}...")
     plt.savefig(filename, dpi=300)
     plt.close(fig)

@@ -30,7 +30,7 @@ def open_sose_2d_datasets(dir):
     return xr.merge([mld, tau_x, tau_y, surf_S_flux, surf_T_flux, surf_FW_flux, Qnet, Qsw])
 
 def open_sose_3d_datasets(dir):
-    logging.info("Opening SOSE 3D datasets (this can take some time)...")
+    logging.info("Opening SOSE 3D datasets (this can take a few minutes)...")
 
     u = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_Uvel.nc"),  chunks={'XG': 10, 'YC': 10, 'time': 10}, decode_cf=False)
     v = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_1day_Vvel.nc"),  chunks={'XC': 10, 'YG': 10, 'time': 10}, decode_cf=False)
@@ -41,7 +41,7 @@ def open_sose_3d_datasets(dir):
     return xr.merge([u, v, T, S, N])
 
 def open_sose_advective_flux_datasets(dir):
-    logging.info("Opening SOSE advective flux datasets (this can take some time)...")
+    logging.info("Opening SOSE advective flux datasets (this can take a few minutes)...")
 
     uT = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_5day_ADVx_TH.nc"),  chunks={'XG': 10, 'YC': 10, 'time': 10})
     vT = xr.open_dataset(os.path.join(dir, "bsose_i122_2013to2017_5day_ADVy_TH.nc"),  chunks={'XC': 10, 'YG': 10, 'time': 10})
