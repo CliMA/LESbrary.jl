@@ -12,11 +12,15 @@ using Dates: Date, DateTime, Second, Millisecond, now, format
 using Oceananigans: Center # Not sure why I need this.
 using Oceananigans.Architectures: array_type
 using Oceananigans.BuoyancyModels: BuoyancyField
-using RealisticLESbrary: ∂z, ∂t, rebuild
+using RealisticLESbrary: ∂z, ∂t
 
 Logging.global_logger(OceananigansLogger())
 
-# TODO: Put this fix in Oceananigans.jl
+# We want to time how long simulation setup takes.
+t0 = time_ns()
+
+# Remove this fix once https://github.com/CliMA/Oceananigans.jl/pull/1642
+# makes it into a tagged release.
 
 import Adapt
 using Oceananigans.Forcings: DiscreteForcing
@@ -25,7 +29,7 @@ Adapt.adapt_structure(to, forcing::DiscreteForcing) =
     DiscreteForcing(Adapt.adapt(to, forcing.func),
                     Adapt.adapt(to, forcing.parameters))
 
-# include("load_sose_data.jl")
+include("load_sose_data.jl")
 include("interpolate_sose_data.jl")
 include("make_plots_and_movies.jl")
 include("mixed_layer_depth.jl")
@@ -34,6 +38,21 @@ function parse_command_line_arguments()
     settings = ArgParseSettings()
 
     @add_arg_table! settings begin
+        "--architecture"
+            help = "Architecture to run on: CPU (default) or GPU"
+            default = "CPU"
+            arg_type = String
+
+        "--size"
+            help = "The number of grid points in x, y, and z."
+            nargs = 3
+            arg_type = Int
+
+        "--extent"
+            help = "The length of the x, y, and z dimensions."
+            nargs = 3
+            arg_type = Float64
+
         "--latitude"
             help = "Site latitude in degrees North (°N). Note that the SOSE dataset only goes up to -30°N."
             arg_type = Float64
@@ -50,11 +69,6 @@ function parse_command_line_arguments()
             help = "End date (format YYYY-mm-dd) between 2013-01-01 and 2018-01-01. Must be after the start date."
             arg_type = String
 
-        "--architecture"
-            help = "Architecture to run on: CPU (default) or GPU"
-            default = "CPU"
-            arg_type = String
-
         "--sose-dir"
             help = "Directory containing the SOSE datasets."
             arg_type = String
@@ -63,6 +77,18 @@ function parse_command_line_arguments()
             help = "Directory to write output to. Defaults to the current working directory."
             default = pwd()
             arg_type = String
+
+        "--no-surface-forcing"
+            help = "Disable surface forcing of momentum, temperature, and salinity."
+            action = :store_true
+
+        "--no-background-state"
+            help = "Disable the geostrophic background state and relaxation of temperature and salinity."
+            action = :store_true
+
+        "--no-animate"
+            help = "Do not produce plots and animations after the simulation has finished."
+            action = :store_true
     end
 
     return parse_args(settings)
@@ -73,6 +99,8 @@ end
 
 args = parse_command_line_arguments()
 
+Nx, Ny, Nz = args["size"]
+Lx, Ly, Lz = args["extent"]
 lat = args["latitude"]
 lon = args["longitude"]
 
@@ -85,20 +113,17 @@ arch_str2type = Dict("CPU" => CPU(), "GPU" => GPU())
 arch = arch_str2type[args["architecture"]]
 
 sose_dir = args["sose-dir"]
-output_dir = args["output-dir"]
+output_dir = abspath(args["output-dir"])
 mkpath(output_dir)
 
+apply_surface_forcing = !args["no-surface-forcing"]
+apply_background_state = !args["no-background-state"]
+make_animation = !args["no-animate"]
 
 @info "Mapping grid..."
 
-Nx = Ny = 32
-Nz = 2Nx
-
-Lz = 500.0
-Lx = Ly = Lz/2
-
 topology = (Periodic, Periodic, Bounded)
-grid = RegularRectilinearGrid(topology=topology, size=(Nx, Ny, Nz), x=(0.0, Lx), y=(0.0, Ly), z=(-Lz, 0.0))
+grid = RegularRectilinearGrid(topology=topology, size=(Nx, Ny, Nz), x=(0.0, Lx), y=(0.0, Ly), z=(-Lz, 0.0), halo=(3, 3, 3))
 
 
 @info "Spinning up a tangent plane..."
@@ -114,8 +139,8 @@ buoyancy = SeawaterBuoyancy(equation_of_state=TEOS10EquationOfState())
 @info "Summoning SOSE data and diagnosing geostrophic background state..."
 
 # Don't pass an array_type to keep this data on the CPU until we interpolate it.
-# sose_datetimes, sose_grid, sose_surface_forcings, sose_profiles =
-#     load_sose_data(sose_dir, lat, lon, day_offset, n_days, grid, buoyancy, coriolis)
+sose_datetimes, sose_grid, sose_surface_forcings, sose_profiles =
+    load_sose_data(sose_dir, lat, lon, day_offset, n_days, grid, buoyancy, coriolis)
 
 dates = convert.(Date, sose_datetimes)
 start_date = dates[day_offset]
@@ -128,6 +153,10 @@ stop_date = dates[day_offset + n_days]
 times = day * (0:n_days)
 interpolated_surface_forcings = interpolate_surface_forcings(sose_surface_forcings, times, array_type=array_type(arch))
 interpolated_profiles = interpolate_profiles(sose_profiles, sose_grid, grid, times, array_type=array_type(arch))
+
+# We need a CPU version for set! and output writing (to avoid CUDA scalar operations).
+interpolated_surface_forcings_cpu = interpolate_surface_forcings(sose_surface_forcings, times)
+interpolated_profiles_cpu = interpolate_profiles(sose_profiles, sose_grid, grid, times)
 
 
 @info "Plotting initial state for inspection..."
@@ -235,8 +264,8 @@ model = IncompressibleModel(
                buoyancy = buoyancy,
                coriolis = coriolis,
                 closure = AnisotropicMinimumDissipation(),
-    boundary_conditions = boundary_conditions,
-                forcing = forcings
+    boundary_conditions = apply_surface_forcing ? boundary_conditions : NamedTuple(),
+                forcing = apply_background_state ? forcings : NamedTuple()
 )
 
 
@@ -244,14 +273,11 @@ model = IncompressibleModel(
 
 ε(μ) = μ * randn() # noise
 
-cpu_interpolated_Θ = rebuild(interpolated_profiles.Θ, Array{Float64})
-cpu_interpolated_S = rebuild(interpolated_profiles.S, Array{Float64})
-
 U₀(x, y, z) = 0
 V₀(x, y, z) = 0
 W₀(x, y, z) = ε(1e-10)
-Θ₀(x, y, z) = cpu_interpolated_Θ(z, 0)
-S₀(x, y, z) = cpu_interpolated_S(z, 0)
+Θ₀(x, y, z) = interpolated_profiles_cpu.Θ(z, 0)
+S₀(x, y, z) = interpolated_profiles_cpu.S(z, 0)
 
 Oceananigans.set!(model, u=U₀, v=V₀, w=W₀, T=Θ₀, S=S₀)
 
@@ -387,45 +413,45 @@ simulation.output_writers[:profiles] =
                            mode = "c")
 
 
-# @info "Inscribing background state..."
+@info "Inscribing background state..."
 
-# large_scale_outputs = Dict(
-#     "τx" => model -> interpolated_surface_forcings.τx.(model.clock.time),
-#     "τy" => model -> interpolated_surface_forcings.τy.(model.clock.time),
-#     "QT" => model -> interpolated_surface_forcings.Qθ.(model.clock.time),
-#     "QS" => model -> interpolated_surface_forcings.Qs.(model.clock.time),
-#      "u" => model -> interpolated_profiles.U.(znodes(Center, model.grid)[:], model.clock.time),
-#      "v" => model -> interpolated_profiles.V.(znodes(Center, model.grid)[:], model.clock.time),
-#      "T" => model -> interpolated_profiles.Θ.(znodes(Center, model.grid)[:], model.clock.time),
-#      "S" => model -> interpolated_profiles.S.(znodes(Center, model.grid)[:], model.clock.time),
-#   "Ugeo" => model -> interpolated_profiles.Ugeo.(znodes(Center, model.grid)[:], model.clock.time),
-#   "Vgeo" => model -> interpolated_profiles.Vgeo.(znodes(Center, model.grid)[:], model.clock.time),
-#   "mld_SOSE" => model -> interpolated_surface_forcings.mld.(model.clock.time),
-#   "mld_LES"  => mixed_layer_depth
-# )
+large_scale_outputs = Dict(
+    "τx" => model -> interpolated_surface_forcings_cpu.τx.(model.clock.time),
+    "τy" => model -> interpolated_surface_forcings_cpu.τy.(model.clock.time),
+    "QT" => model -> interpolated_surface_forcings_cpu.Qθ.(model.clock.time),
+    "QS" => model -> interpolated_surface_forcings_cpu.Qs.(model.clock.time),
+     "u" => model -> interpolated_profiles_cpu.U.(znodes(Center, model.grid)[:], model.clock.time),
+     "v" => model -> interpolated_profiles_cpu.V.(znodes(Center, model.grid)[:], model.clock.time),
+     "T" => model -> interpolated_profiles_cpu.Θ.(znodes(Center, model.grid)[:], model.clock.time),
+     "S" => model -> interpolated_profiles_cpu.S.(znodes(Center, model.grid)[:], model.clock.time),
+  "Ugeo" => model -> interpolated_profiles_cpu.Ugeo.(znodes(Center, model.grid)[:], model.clock.time),
+  "Vgeo" => model -> interpolated_profiles_cpu.Vgeo.(znodes(Center, model.grid)[:], model.clock.time),
+  "mld_SOSE" => model -> interpolated_surface_forcings_cpu.mld.(model.clock.time),
+  "mld_LES"  => mixed_layer_depth
+)
 
-# large_scale_dims = Dict(
-#       "τx" => (),
-#       "τy" => (),
-#       "QT" => (),
-#       "QS" => (),
-#        "u" => ("zC",),
-#        "v" => ("zC",),
-#        "T" => ("zC",),
-#        "S" => ("zC",),
-#     "∂ρ∂z" => ("zF",),
-#     "Ugeo" => ("zC",),
-#     "Vgeo" => ("zC",),
-#     "mld_SOSE" => (),
-#     "mld_LES"  => ()
-# )
+large_scale_dims = Dict(
+      "τx" => (),
+      "τy" => (),
+      "QT" => (),
+      "QS" => (),
+       "u" => ("zC",),
+       "v" => ("zC",),
+       "T" => ("zC",),
+       "S" => ("zC",),
+    "∂ρ∂z" => ("zF",),
+    "Ugeo" => ("zC",),
+    "Vgeo" => ("zC",),
+    "mld_SOSE" => (),
+    "mld_LES"  => ()
+)
 
-# simulation.output_writers[:large_scale] =
-#     NetCDFOutputWriter(model, large_scale_outputs, global_attributes = global_attributes,
-#                          schedule = TimeInterval(5minutes),
-#                          filepath = filepath_prefix * "_large_scale.nc",
-#                        dimensions = large_scale_dims,
-#                              mode = "c")
+simulation.output_writers[:large_scale] =
+    NetCDFOutputWriter(model, large_scale_outputs, global_attributes = global_attributes,
+                         schedule = TimeInterval(5minutes),
+                         filepath = filepath_prefix * "_large_scale.nc",
+                       dimensions = large_scale_dims,
+                             mode = "c")
 
 
 wave = raw"""
@@ -457,27 +483,41 @@ o   .''''.            o   .''''.            o   .''''.
 """
 
 print(wave)
+println()
 
-@printf("""
+@printf("                    arch : %s                       \n", typeof(arch))
+@printf("                       N : %d, %d, %d               \n", grid.Nx, grid.Ny, grid.Nz)
+@printf("                       L : %.3g, %.3g, %.3g (meters)\n", grid.Lx, grid.Ly, grid.Lz)
+@printf("                       Δ : %.3g, %.3g, %.3g (meters)\n", grid.Δx, grid.Δy, grid.Δz)
+@printf("                    φ, λ : %.2f°N, %.2f°E           \n", lat, lon)
+@printf("                   start : %s                       \n", start_date)
+@printf("                     end : %s                       \n", end_date)
 
-           N : %d, %d, %d
-           L : %.3g, %.3g, %.3g (meters)
-           Δ : %.3g, %.3g, %.3g (meters)
-        φ, λ : %.2f°N, %.2f°E
-           f : %.3e (s⁻¹)
-       start : %s
-         end : %s
+println()
 
-         """,
-        grid.Nx, grid.Ny, grid.Nz,
-        grid.Lx, grid.Ly, grid.Lz,
-        grid.Δx, grid.Δy, grid.Δz,
-        lat, lon, model.coriolis.f,
-        start_date, stop_date)
+@printf("              output dir : %s\n", output_dir)
+@printf("   apply surface forcing : %s\n", apply_surface_forcing)
+@printf("  apply background state : %s\n", apply_background_state)
+@printf("         make animations : %s\n", make_animation)
 
+println()
 print(fish)
+
+
+t1 = time_ns()
+t_setup = prettytime((t1 - t0) * 1e-9)
+@info "Simulation setup took $t_setup."
 
 
 @info "Teaching the simulation to run!..."
 
 run!(simulation)
+
+
+@info "Plotting stuff and making movies..."
+
+if make_animation
+    plot_surface_forcings(filepath_prefix)
+    animate_fields(lat, lon, start_date, filepath_prefix)
+    animate_profiles(lat, lon, start_date, filepath_prefix)
+end

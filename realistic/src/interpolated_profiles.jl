@@ -17,9 +17,6 @@ struct InterpolatedProfile{D, Z, Δ, T}
     z_max :: T
 end
 
-rebuild(p::InterpolatedProfile, new_array_type) =
-    InterpolatedProfile(new_array_type(p.data), p.z, p.Δz, p.z_max)
-
 @inline function _interpolate(profile::InterpolatedProfile, zᵢ)
     k = 1 + fractional_index(zᵢ, profile.z, profile.Δz)
     ξ, k = mod(k, 1), Base.unsafe_trunc(Int, k)
@@ -60,9 +57,6 @@ struct InterpolatedProfileTimeSeries{D, Z, T, ΔZ, ΔT, FT}
     z_max :: FT
     t_max :: FT
 end
-
-rebuild(p::InterpolatedProfileTimeSeries, new_array_type) =
-InterpolatedProfileTimeSeries(new_array_type(p.data), p.z, p.t, p.Δz, p.Δt, p.z_max, p.t_max)
 
 @inline function _interpolate(profile::InterpolatedProfileTimeSeries, zᵢ, tᵢ)
     k = 1 + fractional_index(zᵢ, profile.z, profile.Δz)
