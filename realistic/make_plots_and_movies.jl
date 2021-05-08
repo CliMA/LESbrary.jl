@@ -136,7 +136,7 @@ function plot_surface_forcings(filepath_prefix)
 end
 
 
-function animate_fields(lat, lon, start_date, filepath_prefix; frame_skip=10, fps=30)
+function animate_fields(lat, lon, start_date, filepath_prefix; frame_skip=2, fps=30)
 
     ds_xy = NCDstack(filepath_prefix * "_surface.nc")
     ds_yz = NCDstack(filepath_prefix * "_slice.nc")
