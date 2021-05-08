@@ -7,7 +7,7 @@ using Oceananigans.Units
 using Oceananigans.Operators
 using SeawaterPolynomials.TEOS10
 
-using Oceananigans: Periodic # Not sure why I need this.
+using Oceananigans: Center # Not sure why I need this.
 using Oceananigans.BuoyancyModels: BuoyancyField
 using Dates: Date, DateTime, Second, Millisecond, now, format
 using RealisticLESbrary: ∂z, ∂t

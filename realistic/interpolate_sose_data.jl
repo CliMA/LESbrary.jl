@@ -1,5 +1,6 @@
-using Interpolations
 using RealisticLESbrary
+
+using Interpolations: Gridded, Linear, interpolate
 
 function interpolate_surface_forcings(sose_surface_forcings, times)
     Δt = times[2] - times[1]
