@@ -1,3 +1,5 @@
+import Adapt
+
 @inline fractional_index(x, xs, Δx) = @inbounds (x - xs[1]) / Δx
 
 # Linear Lagrange polynomials
@@ -38,6 +40,12 @@ end
     zᵢ >= profile.z_max && (k = k - 1) # Ensure we don't go out of bounds.
     return @inbounds (profile.data[k+1] - profile.data[k]) / profile.Δz
 end
+
+Adapt.adapt_structure(to, profile::InterpolatedProfile) =
+    InterpolatedProfile(Adapt.adapt(to, profile.data),
+                        Adapt.adapt(to, profile.z),
+                        Adapt.adapt(to, profile.Δz),
+                        Adapt.adapt(to, profile.z_max))
 
 #####
 ##### Linear interpolated for regularly spaced profile time series, e.g. T(z, t).
@@ -113,3 +121,12 @@ end
 
     return (dataⁿ⁺¹ - dataⁿ) / profile.Δt
 end
+
+Adapt.adapt_structure(to, profile::InterpolatedProfileTimeSeries) =
+    InterpolatedProfileTimeSeries(Adapt.adapt(to, profile.data),
+                                  Adapt.adapt(to, profile.z),
+                                  Adapt.adapt(to, profile.t),
+                                  Adapt.adapt(to, profile.Δz),
+                                  Adapt.adapt(to, profile.Δt),
+                                  Adapt.adapt(to, profile.z_max),
+                                  Adapt.adapt(to, profile.t_max))

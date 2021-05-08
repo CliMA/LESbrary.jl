@@ -16,6 +16,15 @@ using RealisticLESbrary: ∂z, ∂t, rebuild
 
 Logging.global_logger(OceananigansLogger())
 
+# TODO: Put this fix in Oceananigans.jl
+
+import Adapt
+using Oceananigans.Forcings: DiscreteForcing
+
+Adapt.adapt_structure(to, forcing::DiscreteForcing) =
+    DiscreteForcing(Adapt.adapt(to, forcing.func),
+                    Adapt.adapt(to, forcing.parameters))
+
 # include("load_sose_data.jl")
 include("interpolate_sose_data.jl")
 include("make_plots_and_movies.jl")
@@ -124,8 +133,8 @@ interpolated_profiles = interpolate_profiles(sose_profiles, sose_grid, grid, tim
 @info "Plotting initial state for inspection..."
 
 plot_initial_args = (sose_profiles, sose_grid, interpolated_profiles, grid, lat, lon, start_date)
-CUDA.@allowscalar plot_initial_state(plot_initial_args..., z_bottom=-Lz, filepath="initial_state.png")
-CUDA.@allowscalar plot_initial_state(plot_initial_args..., z_bottom=-10Lz, filepath="initial_state_deep.png")
+CUDA.@allowscalar plot_initial_state(plot_initial_args..., z_bottom=-Lz, filepath=joinpath(output_dir, "initial_state.png"))
+CUDA.@allowscalar plot_initial_state(plot_initial_args..., z_bottom=max(-10Lz, minimum(sose_grid.zF)), filepath=joinpath(output_dir, "initial_state_deep.png"))
 
 
 @info "Forcing mean-flow interactions and relaxing tracers..."
@@ -170,24 +179,25 @@ week = 7days
 @inline T_forcing_wrapper(i, j, k, grid, clock, fields, params) = Fθ′(i, j, k, grid, clock.time, fields.u, fields.v, fields.w, fields.T, params) + Fθ_μ(i, j, k, grid, clock.time, fields.T, params)
 @inline S_forcing_wrapper(i, j, k, grid, clock, fields, params) = Fs′(i, j, k, grid, clock.time, fields.u, fields.v, fields.w, fields.S, params) + FS_μ(i, j, k, grid, clock.time, fields.S, params)
 
-parameters = (
-    ℑτx = interpolated_surface_forcings.τx,
-    ℑτy = interpolated_surface_forcings.τy,
-    ℑQθ = interpolated_surface_forcings.Qθ,
-    ℑQs = interpolated_surface_forcings.Qs,
-     ℑU = interpolated_profiles.Ugeo,
-     ℑV = interpolated_profiles.Vgeo,
-     ℑΘ = interpolated_profiles.Θ,
-     ℑS = interpolated_profiles.S,
-      μ = μ
-)
+ℑτx = interpolated_surface_forcings.τx
+ℑτy = interpolated_surface_forcings.τy
+ℑQθ = interpolated_surface_forcings.Qθ
+ℑQs = interpolated_surface_forcings.Qs
+ ℑU = interpolated_profiles.Ugeo
+ ℑV = interpolated_profiles.Vgeo
+ ℑΘ = interpolated_profiles.Θ
+ ℑS = interpolated_profiles.S
+
+# Only give each forcing function the parameters it needs to avoid an
+# ERROR: CUDA error: a PTX JIT compilation failed
+# due to kernel arguments taking up too much parameter space on the GPU.
 
 forcings = (
-    u = Forcing(u_forcing_wrapper, discrete_form=true, parameters=parameters),
-    v = Forcing(v_forcing_wrapper, discrete_form=true, parameters=parameters),
-    w = Forcing(w_forcing_wrapper, discrete_form=true, parameters=parameters),
-    T = Forcing(T_forcing_wrapper, discrete_form=true, parameters=parameters),
-    S = Forcing(S_forcing_wrapper, discrete_form=true, parameters=parameters)
+    u = Forcing(u_forcing_wrapper, discrete_form=true, parameters=(; ℑU, ℑV)),
+    v = Forcing(v_forcing_wrapper, discrete_form=true, parameters=(; ℑU, ℑV)),
+    w = Forcing(w_forcing_wrapper, discrete_form=true, parameters=(; ℑU, ℑV)),
+    T = Forcing(T_forcing_wrapper, discrete_form=true, parameters=(; ℑU, ℑV, ℑΘ, μ)),
+    S = Forcing(S_forcing_wrapper, discrete_form=true, parameters=(; ℑU, ℑV, ℑS, μ))
 )
 
 
@@ -206,10 +216,10 @@ const cₚ = 4000.0  # Specific heat capacity of seawater at constant pressure [
 @inline     heat_flux(x, y, t, p) = - p.ℑQθ(t) / ρ₀ / cₚ
 @inline     salt_flux(x, y, t, p) =   p.ℑQs(t) / ρ₀
 
-u′_bcs = UVelocityBoundaryConditions(grid, top=FluxBoundaryCondition(wind_stress_x; parameters))
-v′_bcs = VVelocityBoundaryConditions(grid, top=FluxBoundaryCondition(wind_stress_y; parameters))
-θ′_bcs =    TracerBoundaryConditions(grid, top=FluxBoundaryCondition(heat_flux; parameters))
-s′_bcs =    TracerBoundaryConditions(grid, top=FluxBoundaryCondition(salt_flux; parameters))
+u′_bcs = UVelocityBoundaryConditions(grid, top=FluxBoundaryCondition(wind_stress_x, parameters=(; ℑτx)))
+v′_bcs = VVelocityBoundaryConditions(grid, top=FluxBoundaryCondition(wind_stress_y, parameters=(; ℑτy)))
+θ′_bcs =    TracerBoundaryConditions(grid, top=FluxBoundaryCondition(heat_flux, parameters=(; ℑQθ)))
+s′_bcs =    TracerBoundaryConditions(grid, top=FluxBoundaryCondition(salt_flux, parameters=(; ℑQs)))
 
 boundary_conditions = (u=u′_bcs, v=v′_bcs, T=θ′_bcs, S=s′_bcs)
 
@@ -377,45 +387,45 @@ simulation.output_writers[:profiles] =
                            mode = "c")
 
 
-@info "Inscribing background state..."
+# @info "Inscribing background state..."
 
-large_scale_outputs = Dict(
-    "τx" => model -> interpolated_surface_forcings.τx.(model.clock.time),
-    "τy" => model -> interpolated_surface_forcings.τy.(model.clock.time),
-    "QT" => model -> interpolated_surface_forcings.Qθ.(model.clock.time),
-    "QS" => model -> interpolated_surface_forcings.Qs.(model.clock.time),
-     "u" => model -> interpolated_profiles.U.(znodes(Center, model.grid)[:], model.clock.time),
-     "v" => model -> interpolated_profiles.V.(znodes(Center, model.grid)[:], model.clock.time),
-     "T" => model -> interpolated_profiles.Θ.(znodes(Center, model.grid)[:], model.clock.time),
-     "S" => model -> interpolated_profiles.S.(znodes(Center, model.grid)[:], model.clock.time),
-  "Ugeo" => model -> interpolated_profiles.Ugeo.(znodes(Center, model.grid)[:], model.clock.time),
-  "Vgeo" => model -> interpolated_profiles.Vgeo.(znodes(Center, model.grid)[:], model.clock.time),
-  "mld_SOSE" => model -> interpolated_surface_forcings.mld.(model.clock.time),
-  "mld_LES"  => mixed_layer_depth
-)
+# large_scale_outputs = Dict(
+#     "τx" => model -> interpolated_surface_forcings.τx.(model.clock.time),
+#     "τy" => model -> interpolated_surface_forcings.τy.(model.clock.time),
+#     "QT" => model -> interpolated_surface_forcings.Qθ.(model.clock.time),
+#     "QS" => model -> interpolated_surface_forcings.Qs.(model.clock.time),
+#      "u" => model -> interpolated_profiles.U.(znodes(Center, model.grid)[:], model.clock.time),
+#      "v" => model -> interpolated_profiles.V.(znodes(Center, model.grid)[:], model.clock.time),
+#      "T" => model -> interpolated_profiles.Θ.(znodes(Center, model.grid)[:], model.clock.time),
+#      "S" => model -> interpolated_profiles.S.(znodes(Center, model.grid)[:], model.clock.time),
+#   "Ugeo" => model -> interpolated_profiles.Ugeo.(znodes(Center, model.grid)[:], model.clock.time),
+#   "Vgeo" => model -> interpolated_profiles.Vgeo.(znodes(Center, model.grid)[:], model.clock.time),
+#   "mld_SOSE" => model -> interpolated_surface_forcings.mld.(model.clock.time),
+#   "mld_LES"  => mixed_layer_depth
+# )
 
-large_scale_dims = Dict(
-      "τx" => (),
-      "τy" => (),
-      "QT" => (),
-      "QS" => (),
-       "u" => ("zC",),
-       "v" => ("zC",),
-       "T" => ("zC",),
-       "S" => ("zC",),
-    "∂ρ∂z" => ("zF",),
-    "Ugeo" => ("zC",),
-    "Vgeo" => ("zC",),
-    "mld_SOSE" => (),
-    "mld_LES"  => ()
-)
+# large_scale_dims = Dict(
+#       "τx" => (),
+#       "τy" => (),
+#       "QT" => (),
+#       "QS" => (),
+#        "u" => ("zC",),
+#        "v" => ("zC",),
+#        "T" => ("zC",),
+#        "S" => ("zC",),
+#     "∂ρ∂z" => ("zF",),
+#     "Ugeo" => ("zC",),
+#     "Vgeo" => ("zC",),
+#     "mld_SOSE" => (),
+#     "mld_LES"  => ()
+# )
 
-simulation.output_writers[:large_scale] =
-    NetCDFOutputWriter(model, large_scale_outputs, global_attributes = global_attributes,
-                         schedule = TimeInterval(5minutes),
-                         filepath = filepath_prefix * "_large_scale.nc",
-                       dimensions = large_scale_dims,
-                             mode = "c")
+# simulation.output_writers[:large_scale] =
+#     NetCDFOutputWriter(model, large_scale_outputs, global_attributes = global_attributes,
+#                          schedule = TimeInterval(5minutes),
+#                          filepath = filepath_prefix * "_large_scale.nc",
+#                        dimensions = large_scale_dims,
+#                              mode = "c")
 
 
 wave = raw"""

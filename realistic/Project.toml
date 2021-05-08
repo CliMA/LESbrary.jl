@@ -4,6 +4,7 @@ authors = ["ali-ramadhan <ali.hh.ramadhan@gmail.com>"]
 version = "0.1.0"
 
 [deps]
+Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 Conda = "8f4d0f93-b110-5947-807f-2305c1781a2d"
