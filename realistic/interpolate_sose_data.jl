@@ -1,6 +1,7 @@
 using RealisticLESbrary
 
-using Interpolations: Gridded, Linear, interpolate
+import Interpolations
+using Interpolations: Gridded, Linear, interpolate, extrapolate
 
 function interpolate_surface_forcings(sose_surface_forcings, times; array_type=Array{Float64})
     Δt = times[2] - times[1]
@@ -26,6 +27,9 @@ function interpolate_profile(profile, sose_grid, grid, times, array_type)
     profile = reverse(profile, dims=2)
 
     ℑprofile = interpolate((times, sose_zC), profile, Gridded(Linear()))
+
+    # We might go out of bounds if the Oceananigans is fine. In that case, grab the nearest value.
+    ℑprofile = extrapolate(ℑprofile, Interpolations.Flat())
 
     interior_zC = grid.zC[1:grid.Nz]
     interpolated_data = ℑprofile.(times', interior_zC)
