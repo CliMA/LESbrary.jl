@@ -75,7 +75,68 @@ function plot_initial_state(sose_profiles, sose_grid, interpolated_profiles, gri
 end
 
 
-function animate_fields(lat, lon, start_date, filepath_prefix)
+function plot_surface_forcings(filepath_prefix)
+
+    ds_b = NCDstack(filepath_prefix * "_large_scale.nc")
+
+    times = ds_b[:time] / day
+    Nt = length(times)
+
+    colors = ["dodgerblue2", "crimson", "forestgreen"]
+
+    # Makie doesn't support DateTime plotting yet :(
+    # date_times = [start_date + Millisecond(round(Int, 1000t)) for t in times]
+
+    τx_SOSE = ds_b[:τx].data
+    τy_SOSE = ds_b[:τy].data
+    τ_SOSE = @. √(τx_SOSE^2 + τy_SOSE^2)
+    QΘ_SOSE = ds_b[:QT].data
+    QS_SOSE = ds_b[:QS].data
+    mld_SOSE = ds_b[:mld_SOSE].data
+    mld_LES = ds_b[:mld_LES].data
+
+    fig = Figure(resolution=(1920, 1080))
+    plot_title = @sprintf("Realistic SOSE LESbrary.jl (%.2f°N, %.2f°E) surface forcings", lat, lon)
+
+    ax_τ = fig[1, 1] = Axis(fig, ylabel="N/m²")
+    line_τx = lines!(ax_τ, times, τx_SOSE, label="τx", linewidth=3, color=colors[1])
+    line_τy = lines!(ax_τ, times, τy_SOSE, label="τy", linewidth=3, color=colors[2])
+    line_τ  = lines!(ax_τ, times, τ_SOSE, label="√(τx² + τy²)", linewidth=3, color=colors[3])
+    axislegend(ax_τ, position=:rb, framevisible=false)
+    xlims!(ax_τ, extrema(times))
+    ylims!(ax_τ, extrema([extrema(τx_SOSE)..., extrema(τy_SOSE)..., extrema(τ_SOSE)...]))
+    hidexdecorations!(ax_τ, grid=false)
+
+    ax_QΘ = fig[2, 1] = Axis(fig, ylabel="QΘ (W/m²)")
+    line_QΘ = lines!(ax_QΘ, times, QΘ_SOSE, linewidth=3, color=colors[3])
+    xlims!(ax_QΘ, extrema(times))
+    ylims!(ax_QΘ, extrema(QΘ_SOSE))
+    hidexdecorations!(ax_τ, grid=false)
+
+    ax_QS = fig[3, 1] = Axis(fig, xlabel="time (days)", ylabel="QS (kg/m²/s)")
+    line_QS = lines!(ax_QS, times, QS_SOSE, linewidth=3, color=colors[3])
+    xlims!(ax_QS, extrema(times))
+    ylims!(ax_QS, extrema(QS_SOSE))
+
+    ax_mld = fig[4, 1] = Axis(fig, xlabel="time (days)", ylabel="Mixed layer depth (m)")
+    line_mld_SOSE = lines!(ax_mld, times, mld_SOSE, label="SOSE", linewidth=3, color=colors[3], linestyle=:dash)
+    line_mld_LES = lines!(ax_mld, times, mld_LES, label="LES", linewidth=3, color=colors[3])
+    axislegend(ax_mld, position=:rb, framevisible=false)
+    xlims!(ax_mld, extrema(times))
+    ylims!(ax_mld, extrema([extrema(mld_SOSE)..., extrema(mld_LES)...]))
+
+    supertitle = fig[0, :] = Label(fig, plot_title, textsize=30)
+
+    filepath = filepath_prefix * "_surface_forcings.png"
+    save(filepath, fig)
+
+    @info "Figure saved: $filepath"
+
+    return nothing
+end
+
+
+function animate_fields(lat, lon, start_date, filepath_prefix; frame_skip=10, fps=30)
 
     ds_xy = NCDstack(filepath_prefix * "_surface.nc")
     ds_yz = NCDstack(filepath_prefix * "_slice.nc")
@@ -157,7 +218,7 @@ function animate_fields(lat, lon, start_date, filepath_prefix)
     supertitle = fig[0, :] = Label(fig, plot_title, textsize=30)
 
     filepath = filepath_prefix * "_surface_slice_movie.mp4"
-    record(fig, filepath, 1:10:Nt, framerate=30) do n
+    record(fig, filepath, 1:frame_skip:Nt, framerate=fps) do n
         @info "Animating surface and slice movie frame $n/$Nt..."
         frame[] = n
     end
@@ -168,7 +229,7 @@ function animate_fields(lat, lon, start_date, filepath_prefix)
 end
 
 
-function animate_profiles(lat, lon, start_date, filepath_prefix)
+function animate_profiles(lat, lon, start_date, filepath_prefix; frame_skip=2, fps=30)
 
     ds_p = NCDstack(filepath_prefix * "_profiles.nc")
     ds_b = NCDstack(filepath_prefix * "_large_scale.nc")
@@ -273,73 +334,12 @@ function animate_profiles(lat, lon, start_date, filepath_prefix)
     supertitle = fig[0, :] = Label(fig, plot_title, textsize=30)
 
     filepath = filepath_prefix * "_first_order_statistics.mp4"
-    record(fig, filepath, 1:2:Nt, framerate=30) do n
+    record(fig, filepath, 1:frame_skip:Nt, framerate=fps) do n
         @info "Animating first-order statistics movie frame $n/$Nt..."
         frame[] = n
     end
 
     @info "Movie saved: $filepath"
-
-    return nothing
-end
-
-
-function plot_surface_forcings(filepath_prefix)
-
-    ds_b = NCDstack(filepath_prefix * "_large_scale.nc")
-
-    times = ds_b[:time] / day
-    Nt = length(times)
-
-    colors = ["dodgerblue2", "crimson", "forestgreen"]
-
-    # Makie doesn't support DateTime plotting yet :(
-    # date_times = [start_date + Millisecond(round(Int, 1000t)) for t in times]
-
-    τx_SOSE = ds_b[:τx].data
-    τy_SOSE = ds_b[:τy].data
-    τ_SOSE = @. √(τx_SOSE^2 + τy_SOSE^2)
-    QΘ_SOSE = ds_b[:QT].data
-    QS_SOSE = ds_b[:QS].data
-    mld_SOSE = ds_b[:mld_SOSE].data
-    mld_LES = ds_b[:mld_LES].data
-
-    fig = Figure(resolution=(1920, 1080))
-    plot_title = @sprintf("Realistic SOSE LESbrary.jl (%.2f°N, %.2f°E) surface forcings", lat, lon)
-
-    ax_τ = fig[1, 1] = Axis(fig, ylabel="N/m²")
-    line_τx = lines!(ax_τ, times, τx_SOSE, label="τx", linewidth=3, color=colors[1])
-    line_τy = lines!(ax_τ, times, τy_SOSE, label="τy", linewidth=3, color=colors[2])
-    line_τ  = lines!(ax_τ, times, τ_SOSE, label="√(τx² + τy²)", linewidth=3, color=colors[3])
-    axislegend(ax_τ, position=:rb, framevisible=false)
-    xlims!(ax_τ, extrema(times))
-    ylims!(ax_τ, extrema([extrema(τx_SOSE)..., extrema(τy_SOSE)..., extrema(τ_SOSE)...]))
-    hidexdecorations!(ax_τ, grid=false)
-
-    ax_QΘ = fig[2, 1] = Axis(fig, ylabel="QΘ (W/m²)")
-    line_QΘ = lines!(ax_QΘ, times, QΘ_SOSE, linewidth=3, color=colors[3])
-    xlims!(ax_QΘ, extrema(times))
-    ylims!(ax_QΘ, extrema(QΘ_SOSE))
-    hidexdecorations!(ax_τ, grid=false)
-
-    ax_QS = fig[3, 1] = Axis(fig, xlabel="time (days)", ylabel="QS (kg/m²/s)")
-    line_QS = lines!(ax_QS, times, QS_SOSE, linewidth=3, color=colors[3])
-    xlims!(ax_QS, extrema(times))
-    ylims!(ax_QS, extrema(QS_SOSE))
-
-    ax_mld = fig[4, 1] = Axis(fig, xlabel="time (days)", ylabel="Mixed layer depth (m)")
-    line_mld_SOSE = lines!(ax_mld, times, mld_SOSE, label="SOSE", linewidth=3, color=colors[3], linestyle=:dash)
-    line_mld_LES = lines!(ax_mld, times, mld_LES, label="LES", linewidth=3, color=colors[3])
-    axislegend(ax_mld, position=:rb, framevisible=false)
-    xlims!(ax_mld, extrema(times))
-    ylims!(ax_mld, extrema([extrema(mld_SOSE)..., extrema(mld_LES)...]))
-
-    supertitle = fig[0, :] = Label(fig, plot_title, textsize=30)
-
-    filepath = filepath_prefix * "_surface_forcings.png"
-    save(filepath, fig)
-
-    @info "Figure saved: $filepath"
 
     return nothing
 end
