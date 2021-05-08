@@ -1,13 +1,13 @@
 using Logging
 using Printf
 using ArgParse
-using CUDA
 
 using Oceananigans
 using Oceananigans.Units
 using Oceananigans.Operators
 using SeawaterPolynomials.TEOS10
 
+using CUDA: @allowscalar
 using Dates: Date, DateTime, Second, Millisecond, now, format
 using Oceananigans: Center # Not sure why I need this.
 using Oceananigans.Architectures: array_type
@@ -162,8 +162,8 @@ interpolated_profiles_cpu = interpolate_profiles(sose_profiles, sose_grid, grid,
 @info "Plotting initial state for inspection..."
 
 plot_initial_args = (sose_profiles, sose_grid, interpolated_profiles, grid, lat, lon, start_date)
-CUDA.@allowscalar plot_initial_state(plot_initial_args..., z_bottom=-Lz, filepath=joinpath(output_dir, "initial_state.png"))
-CUDA.@allowscalar plot_initial_state(plot_initial_args..., z_bottom=max(-10Lz, minimum(sose_grid.zF)), filepath=joinpath(output_dir, "initial_state_deep.png"))
+@allowscalar plot_initial_state(plot_initial_args..., z_bottom=-Lz, filepath=joinpath(output_dir, "initial_state.png"))
+@allowscalar plot_initial_state(plot_initial_args..., z_bottom=max(-10Lz, minimum(sose_grid.zF)), filepath=joinpath(output_dir, "initial_state_deep.png"))
 
 
 @info "Forcing mean-flow interactions and relaxing tracers..."
