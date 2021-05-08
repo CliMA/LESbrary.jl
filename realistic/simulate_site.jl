@@ -1,20 +1,22 @@
 using Logging
 using Printf
 using ArgParse
+using CUDA
 
 using Oceananigans
 using Oceananigans.Units
 using Oceananigans.Operators
 using SeawaterPolynomials.TEOS10
 
-using Oceananigans: Center # Not sure why I need this.
-using Oceananigans.BuoyancyModels: BuoyancyField
 using Dates: Date, DateTime, Second, Millisecond, now, format
-using RealisticLESbrary: ∂z, ∂t
+using Oceananigans: Center # Not sure why I need this.
+using Oceananigans.Architectures: array_type
+using Oceananigans.BuoyancyModels: BuoyancyField
+using RealisticLESbrary: ∂z, ∂t, rebuild
 
 Logging.global_logger(OceananigansLogger())
 
-include("load_sose_data.jl")
+# include("load_sose_data.jl")
 include("interpolate_sose_data.jl")
 include("make_plots_and_movies.jl")
 include("mixed_layer_depth.jl")
@@ -102,8 +104,9 @@ buoyancy = SeawaterBuoyancy(equation_of_state=TEOS10EquationOfState())
 
 @info "Summoning SOSE data and diagnosing geostrophic background state..."
 
-sose_datetimes, sose_grid, sose_surface_forcings, sose_profiles =
-    load_sose_data(sose_dir, lat, lon, day_offset, n_days, grid, buoyancy, coriolis)
+# Don't pass an array_type to keep this data on the CPU until we interpolate it.
+# sose_datetimes, sose_grid, sose_surface_forcings, sose_profiles =
+#     load_sose_data(sose_dir, lat, lon, day_offset, n_days, grid, buoyancy, coriolis)
 
 dates = convert.(Date, sose_datetimes)
 start_date = dates[day_offset]
@@ -114,16 +117,15 @@ stop_date = dates[day_offset + n_days]
 @info "Interpolating SOSE data..."
 
 times = day * (0:n_days)
-
-interpolated_surface_forcings = interpolate_surface_forcings(sose_surface_forcings, times)
-interpolated_profiles = interpolate_profiles(sose_profiles, sose_grid, grid, times)
+interpolated_surface_forcings = interpolate_surface_forcings(sose_surface_forcings, times, array_type=array_type(arch))
+interpolated_profiles = interpolate_profiles(sose_profiles, sose_grid, grid, times, array_type=array_type(arch))
 
 
 @info "Plotting initial state for inspection..."
 
 plot_initial_args = (sose_profiles, sose_grid, interpolated_profiles, grid, lat, lon, start_date)
-plot_initial_state(plot_initial_args..., z_bottom=-Lz, filepath="initial_state.png")
-plot_initial_state(plot_initial_args..., z_bottom=-10Lz, filepath="initial_state_deep.png")
+CUDA.@allowscalar plot_initial_state(plot_initial_args..., z_bottom=-Lz, filepath="initial_state.png")
+CUDA.@allowscalar plot_initial_state(plot_initial_args..., z_bottom=-10Lz, filepath="initial_state_deep.png")
 
 
 @info "Forcing mean-flow interactions and relaxing tracers..."
@@ -232,11 +234,14 @@ model = IncompressibleModel(
 
 ε(μ) = μ * randn() # noise
 
+cpu_interpolated_Θ = rebuild(interpolated_profiles.Θ, Array{Float64})
+cpu_interpolated_S = rebuild(interpolated_profiles.S, Array{Float64})
+
 U₀(x, y, z) = 0
 V₀(x, y, z) = 0
 W₀(x, y, z) = ε(1e-10)
-Θ₀(x, y, z) = interpolated_profiles.Θ(z, 0)
-S₀(x, y, z) = interpolated_profiles.S(z, 0)
+Θ₀(x, y, z) = cpu_interpolated_Θ(z, 0)
+S₀(x, y, z) = cpu_interpolated_S(z, 0)
 
 Oceananigans.set!(model, u=U₀, v=V₀, w=W₀, T=Θ₀, S=S₀)
 
