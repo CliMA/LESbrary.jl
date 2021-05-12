@@ -29,9 +29,9 @@ urls = [
     "http://sose.ucsd.edu/SO6/ITER122/budgets/bsose_i122_2013to2017_5day_ADVx_TH.nc",
     # Meridional advective flux of potential temperature [degC m^3/s]
     "http://sose.ucsd.edu/SO6/ITER122/budgets/bsose_i122_2013to2017_5day_ADVy_TH.nc",
-    # Zonal advective flux of potential temperature [psu m^3/s]
+    # Zonal advective flux of salinity [psu m^3/s]
     "http://sose.ucsd.edu/SO6/ITER122/budgets/bsose_i122_2013to2017_5day_ADVx_SLT.nc",
-    # Meridional advective flux of potential temperature [psu m^3/s]
+    # Meridional advective flux of salinity [psu m^3/s]
     "http://sose.ucsd.edu/SO6/ITER122/budgets/bsose_i122_2013to2017_5day_ADVy_SLT.nc",
 
     ## 2D diagnostics
