@@ -86,15 +86,15 @@ def plot_lateral_flux_site_analysis(ds_fluxes, ds_2d, lat, lon, date_offset, n_d
 
     with ProgressBar():
         # We sum instead of integrating since the fluxes are already multipled by an area.
-        ΣuT = uT.sum("Z").sel(XG=lon, YC=lat, method="nearest").isel(time=0).values
-        ΣvT = vT.sum("Z").sel(XC=lon, YG=lat, method="nearest").isel(time=0).values
-        ΣuS = uS.sum("Z").sel(XG=lon, YC=lat, method="nearest").isel(time=0).values
-        ΣvS = vS.sum("Z").sel(XC=lon, YG=lat, method="nearest").isel(time=0).values
+        ΣuT = uT.sum("Z").sel(XG=lon, YC=lat, method="nearest").values
+        ΣvT = vT.sum("Z").sel(XC=lon, YG=lat, method="nearest").values
+        ΣuS = uS.sum("Z").sel(XG=lon, YC=lat, method="nearest").values
+        ΣvS = vS.sum("Z").sel(XC=lon, YG=lat, method="nearest").values
 
-        ΔΣuT = uT.sum("Z").diff("XG").sel(XG=lon, YC=lat, method="nearest").isel(time=0).values
-        ΔΣvT = vT.sum("Z").diff("YG").sel(XC=lon, YG=lat, method="nearest").isel(time=0).values
-        ΔΣuS = uS.sum("Z").diff("XG").sel(XG=lon, YC=lat, method="nearest").isel(time=0).values
-        ΔΣvS = vS.sum("Z").diff("YG").sel(XC=lon, YG=lat, method="nearest").isel(time=0).values
+        ΔΣuT = uT.sum("Z").diff("XG").sel(XG=lon, YC=lat, method="nearest").values
+        ΔΣvT = vT.sum("Z").diff("YG").sel(XC=lon, YG=lat, method="nearest").values
+        ΔΣuS = uS.sum("Z").diff("XG").sel(XG=lon, YC=lat, method="nearest").values
+        ΔΣvS = vS.sum("Z").diff("YG").sel(XC=lon, YG=lat, method="nearest").values
 
     # Plot column-integrated fluxes time series
 
@@ -141,13 +141,10 @@ def plot_lateral_flux_site_analysis(ds_fluxes, ds_2d, lat, lon, date_offset, n_d
 
     dx = ds_fluxes.dxC.sel(XG=lon, YC=lat, method="nearest").values[()]
     dy = ds_fluxes.dyC.sel(XC=lon, YG=lat, method="nearest").values[()]
-    H = sum(ds_fluxes.drF).values[()]
 
-    # Column cross sections
-    A_xz = dx * H
-    A_yz = dy * H
-
-    lateral_Qθ = ρ0 * cp * (ΔΣuT / A_xz + ΔΣvT / A_yz)
+    # ΔΣuT + ΔΣvT is the net amount of heat advected into the column and we want to
+    # convert it into an "equivalent surface heat flux" to compare with the surface heat flux.
+    lateral_Qθ = ρ0 * cp * (ΔΣuT + ΔΣvT) / (dx * dy)
 
     ax_T = axes[0]
     ax_T.plot(time_2d, surface_Qθ, label="surface heat flux")
