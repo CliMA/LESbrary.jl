@@ -12,7 +12,7 @@ include("run_script.jl")
         ("TimeInterval(4hour)", "TimeInterval(2minute)"),
         ("AveragedTimeInterval(1hour, window=15minute)", "AveragedTimeInterval(2minute, window=1minute)"),
         ("iteration_interval=100", "iteration_interval=1"),
-        ("stop_time=8hour", "stop_time=1second")
+        ("stop_time=8hour", "stop_time=1")
     ]
 
     @test run_script(replace_strings, "free_convection", free_convection_filepath)
