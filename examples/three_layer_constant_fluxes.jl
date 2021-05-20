@@ -33,12 +33,13 @@ using Oceananigans.Units
 using Oceananigans.Grids: Face, Center
 using Oceananigans.Fields: PressureField
 using Oceanostics.FlowDiagnostics: richardson_number_ccf!
+using Oceanostics.TurbulentKineticEnergyTerms: TurbulentKineticEnergy, ShearProduction_z
 
 using LESbrary.Utils: SimulationProgressMessenger, fit_cubic, poly
 using LESbrary.NearSurfaceTurbulenceModels: SurfaceEnhancedModelConstant
 using LESbrary.TurbulenceStatistics: first_through_second_order, turbulent_kinetic_energy_budget,
                                      subfilter_momentum_fluxes, subfilter_tracer_fluxes,
-                                     TurbulentKineticEnergy, ShearProduction, ViscousDissipation
+                                     ViscousDissipation
 
 Logging.global_logger(OceananigansLogger())
 
@@ -393,8 +394,8 @@ U = primitive_statistics[:u]
 V = primitive_statistics[:v]
 
 e = TurbulentKineticEnergy(model, U=U, V=V)
-shear_production = ShearProduction(model, data=ccc_scratch.data, U=U, V=V)
-dissipation = ViscousDissipation(model, data=ccc_scratch.data)
+shear_production = ShearProduction_z(model, U=U, V=V)
+dissipation = ViscousDissipation(model)
 
 tke_budget_statistics = turbulent_kinetic_energy_budget(model, b=b, p=p, U=U, V=V, e=e,
                                                         shear_production=shear_production, dissipation=dissipation)
