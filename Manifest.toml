@@ -573,11 +573,11 @@ version = "0.58.0"
 
 [[Oceanostics]]
 deps = ["KernelAbstractions", "Oceananigans", "Printf", "Test"]
-git-tree-sha1 = "78f79838cea1a3bab47cff96f616acb092a88a73"
-repo-rev = "ali/cleanup"
+git-tree-sha1 = "2dfe6b850726a14d667815f13e510798dcff71c7"
+repo-rev = "main"
 repo-url = "https://github.com/tomchor/Oceanostics.jl.git"
 uuid = "d0ccf422-c8fb-49b5-a76d-74acdde946ac"
-version = "0.3.2"
+version = "0.3.3"
 
 [[OffsetArrays]]
 deps = ["Adapt"]
