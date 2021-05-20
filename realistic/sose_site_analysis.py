@@ -70,7 +70,7 @@ def plot_surface_forcing_site_analysis(ds, lat, lon, date_offset, n_dates):
     plt.savefig(filename, dpi=300)
     plt.close(fig)
 
-def plot_lateral_flux_site_analysis(ds_fluxes, ds_2d, lat, lon, date_offset, n_dates, ρ0, cp):
+def plot_lateral_flux_site_analysis(ds_fluxes, ds_2d, lat, lon, depth, date_offset, n_dates, ρ0, cp):
     logging.info(f"Plotting lateral flux site analysis at ({lat}°N, {lon}°E) for {n_dates} dates...")
 
     time = ds_fluxes.time.values
@@ -79,10 +79,10 @@ def plot_lateral_flux_site_analysis(ds_fluxes, ds_2d, lat, lon, date_offset, n_d
 
     # Compute column-integrated fluxes and flux differences
 
-    uT = ds_fluxes.ADVx_TH
-    vT = ds_fluxes.ADVy_TH
-    uS = ds_fluxes.ADVx_SLT
-    vS = ds_fluxes.ADVy_SLT
+    uT = ds_fluxes.ADVx_TH.sel(Z=slice(0, -depth))
+    vT = ds_fluxes.ADVy_TH.sel(Z=slice(0, -depth))
+    uS = ds_fluxes.ADVx_SLT.sel(Z=slice(0, -depth))
+    vS = ds_fluxes.ADVy_SLT.sel(Z=slice(0, -depth))
 
     with ProgressBar():
         # We sum instead of integrating since the fluxes are already multipled by an area.
@@ -100,7 +100,7 @@ def plot_lateral_flux_site_analysis(ds_fluxes, ds_2d, lat, lon, date_offset, n_d
 
     fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(16, 12))
 
-    fig.suptitle(f"LESbrary.jl SOSE site analysis: lateral fluxes at ({lat}°N, {lon}°E)")
+    fig.suptitle(f"LESbrary.jl SOSE site analysis: lateral fluxes at ({lat}°N, {lon}°E) down until {depth} m")
 
     ax_T = axes[0]
     ax_T.plot(time, ΣuT, label=r"$\int uT \; dz$")
@@ -132,7 +132,7 @@ def plot_lateral_flux_site_analysis(ds_fluxes, ds_2d, lat, lon, date_offset, n_d
 
     fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(16, 12))
 
-    fig.suptitle(f"LESbrary.jl SOSE site analysis: lateral vs. surface fluxes at ({lat}°N, {lon}°E)")
+    fig.suptitle(f"LESbrary.jl SOSE site analysis: lateral vs. surface fluxes at ({lat}°N, {lon}°E) down until {depth} m")
 
     time_2d = ds_2d.time.values
 
