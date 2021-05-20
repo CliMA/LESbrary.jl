@@ -573,7 +573,7 @@ version = "0.58.0"
 
 [[Oceanostics]]
 deps = ["KernelAbstractions", "Oceananigans", "Printf", "Test"]
-git-tree-sha1 = "79bfc6ede8299f96cb929f7fd05adad1c93a82cd"
+git-tree-sha1 = "78f79838cea1a3bab47cff96f616acb092a88a73"
 repo-rev = "ali/cleanup"
 repo-url = "https://github.com/tomchor/Oceanostics.jl.git"
 uuid = "d0ccf422-c8fb-49b5-a76d-74acdde946ac"
