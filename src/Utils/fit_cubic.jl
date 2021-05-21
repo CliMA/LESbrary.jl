@@ -22,4 +22,3 @@ function fit_cubic(p1, p2, s1, s2)
     results = nlsolve(f!, zeros(4))
     return results.zero
 end
-

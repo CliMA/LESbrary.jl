@@ -11,6 +11,7 @@ Logging.global_logger(OceananigansLogger())
 architectures = [CPU()]
 
 @testset "LESbrary" begin
+    include("test_utils.jl")
     include("test_turbulence_statistics.jl")
     include("test_examples.jl")
 end
