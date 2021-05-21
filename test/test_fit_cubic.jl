@@ -1,8 +1,5 @@
 using LESbrary.Utils
 
-using Pkg
-Pkg.develop(path=joinpath(@__DIR__, "..", "realistic"))
-
 @testset "fit_cubic" begin
     c = fit_cubic((0, 0), (1, 1), 0, 0)
 

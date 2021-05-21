@@ -670,6 +670,12 @@ git-tree-sha1 = "1be8800271c86f572d334fef6e3b8364eaece7d9"
 uuid = "92933f4c-e287-5a05-a399-4b506db050ca"
 version = "1.6.2"
 
+[[QuadGK]]
+deps = ["DataStructures", "LinearAlgebra"]
+git-tree-sha1 = "12fbe86da16df6679be7521dfb39fbc861e1dc7b"
+uuid = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
+version = "2.4.1"
+
 [[REPL]]
 deps = ["InteractiveUtils", "Markdown", "Sockets", "Unicode"]
 uuid = "3fa0cd96-eef1-5676-8a61-b3b8758bbffb"

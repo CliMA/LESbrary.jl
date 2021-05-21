@@ -1,6 +1,7 @@
 using Test
 using Statistics
 using LESbrary.Utils
+using LESbrary.Utils: ∂z, ∂t
 
 @testset "InterpolatedProfile" begin
 
@@ -11,7 +12,7 @@ using LESbrary.Utils
     N = length(zs)
     data = randn(N)
 
-    prof = InterpolatedProfile(data, zs, Δz)
+    prof = InterpolatedProfile(data, zs, Δz, zs[end])
 
     @test prof(0) == prof.data[1]
     @test prof(5) == prof.data[2]
@@ -27,7 +28,7 @@ using LESbrary.Utils
     f(z) = z^2
     data = f.(zs)
 
-    prof = InterpolatedProfile(data, zs, Δz)
+    prof = InterpolatedProfile(data, zs, Δz, zs[end])
 
     @test ∂z(prof, 2) ≈ (f(5) - f(0)) / Δz
     @test ∂z(prof, 7.4) ≈ (f(10) - f(5)) / Δz
@@ -50,7 +51,7 @@ end
     Nt = length(ts)
     data = randn(Nz, Nt)
 
-    prof = InterpolatedProfileTimeSeries(data, zs, ts, Δz, Δt)
+    prof = InterpolatedProfileTimeSeries(data, zs, ts, Δz, Δt, zs[end], ts[end])
 
     @test prof(0, 0) == prof.data[1, 1]
     @test prof(5, 0) == prof.data[2, 1]
@@ -71,7 +72,7 @@ end
     f(z, t) = 3z^2 + 0.1t^2
     data = f.(zs, ts')
 
-    prof = InterpolatedProfileTimeSeries(data, zs, ts, Δz, Δt)
+    prof = InterpolatedProfileTimeSeries(data, zs, ts, Δz, Δt, zs[end], ts[end])
 
     @test ∂z(prof, 3, 0) ≈ (f(5, 0) - f(0, 0)) / Δz
     @test ∂z(prof, 7.5, 10) ≈ (f(10, 10) - f(5, 10)) / Δz
