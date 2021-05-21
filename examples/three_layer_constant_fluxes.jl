@@ -134,6 +134,10 @@ function parse_command_line_arguments()
             default = 0.1
             arg_type = Float64
 
+        "--time-averaged-statistics"
+            help = "Compute and output time-averaged statistics."
+            action = :store_true
+
         "--animation"
             help = "Make an animation of the horizontal and vertical velocity when the simulation completes."
             action = :store_true
@@ -464,49 +468,58 @@ end
 
 ## Add JLD2 output writers
 
-simulation.output_writers[:xy_jld2] =
-    JLD2OutputWriter(model, fields_to_output,
-                              dir = data_directory,
-                           prefix = "xy_slice",
-                         schedule = TimeInterval(snapshot_time_interval),
-                     field_slicer = FieldSlicer(k=k_xy_slice),
-                            force = force,
-                             init = init_save_some_metadata!)
+name_with_halos(name, with_halos) = with_halos ? "$(name)_with_halos" : name
 
-simulation.output_writers[:xz_jld2] =
-    JLD2OutputWriter(model, fields_to_output,
-                              dir = data_directory,
-                           prefix = "xz_slice",
-                         schedule = TimeInterval(snapshot_time_interval),
-                     field_slicer = FieldSlicer(j=1),
-                            force = force,
-                             init = init_save_some_metadata!)
+for with_halos in [true, false]
 
-simulation.output_writers[:yz_jld2] =
-    JLD2OutputWriter(model, fields_to_output,
-                              dir = data_directory,
-                           prefix = "yz_slice",
-                         schedule = TimeInterval(snapshot_time_interval),
-                     field_slicer = FieldSlicer(i=1),
-                            force = force,
-                             init = init_save_some_metadata!)
+    simulation.output_writers[Symbol(name_with_halos("xy_jld2", with_halos))] =
+        JLD2OutputWriter(model, fields_to_output,
+                                  dir = data_directory,
+                               prefix = name_with_halos("xy_slice", with_halos),
+                             schedule = TimeInterval(snapshot_time_interval),
+                         field_slicer = FieldSlicer(k=k_xy_slice, with_halos=with_halos),
+                                force = force,
+                                 init = init_save_some_metadata!)
 
-simulation.output_writers[:statistics_jld2] =
-    JLD2OutputWriter(model, statistics_to_output,
-                          dir = data_directory,
-                       prefix = "instantaneous_statistics",
-                     schedule = TimeInterval(snapshot_time_interval),
-                        force = force,
-                         init = init_save_some_metadata!)
+    simulation.output_writers[Symbol(name_with_halos("xz_jld2", with_halos))] =
+        JLD2OutputWriter(model, fields_to_output,
+                                  dir = data_directory,
+                               prefix = name_with_halos("xz_slice", with_halos),
+                             schedule = TimeInterval(snapshot_time_interval),
+                         field_slicer = FieldSlicer(j=1, with_halos=with_halos),
+                                force = force,
+                                 init = init_save_some_metadata!)
 
-simulation.output_writers[:averaged_statistics_jld2] =
-    JLD2OutputWriter(model, statistics_to_output,
-                          dir = data_directory,
-                       prefix = "time_averaged_statistics",
-                     schedule = AveragedTimeInterval(averages_time_interval,
-                                                     window = averages_time_window),
-                        force = force,
-                         init = init_save_some_metadata!)
+    simulation.output_writers[Symbol(name_with_halos("yz_jld2", with_halos))] =
+        JLD2OutputWriter(model, fields_to_output,
+                                  dir = data_directory,
+                               prefix = name_with_halos("yz_slice", with_halos),
+                             schedule = TimeInterval(snapshot_time_interval),
+                         field_slicer = FieldSlicer(i=1, with_halos=with_halos),
+                                force = force,
+                                 init = init_save_some_metadata!)
+
+    simulation.output_writers[Symbol(name_with_halos("stats_jld2", with_halos))] =
+        JLD2OutputWriter(model, statistics_to_output,
+                                  dir = data_directory,
+                               prefix = name_with_halos("instantaneous_statistics", with_halos),
+                             schedule = TimeInterval(snapshot_time_interval),
+                         field_slicer = FieldSlicer(with_halos=with_halos),
+                                force = force,
+                                 init = init_save_some_metadata!)
+
+    if args["time-averaged-statistics"]
+        simulation.output_writers[Symbol(name_with_halos("averaged_stats_jld2", with_halos))] =
+            JLD2OutputWriter(model, statistics_to_output,
+                                      dir = data_directory,
+                                   prefix = name_with_halos("time_averaged_statistics", with_halos),
+                                 schedule = AveragedTimeInterval(averages_time_interval,
+                                                                 window = averages_time_window),
+                             field_slicer = FieldSlicer(with_halos=with_halos),
+                                    force = force,
+                                     init = init_save_some_metadata!)
+    end
+end
 
 ## Add NetCDF output writers
 
@@ -536,19 +549,21 @@ simulation.output_writers[:yz_nc] =
              field_slicer = FieldSlicer(i=1),
         global_attributes = global_attributes)
 
-simulation.output_writers[:statistics_nc] =
+simulation.output_writers[:stats_nc] =
     NetCDFOutputWriter(model, statistics_to_output,
                      mode = "c",
                  filepath = joinpath(data_directory, "instantaneous_statistics.nc"),
                  schedule = TimeInterval(snapshot_time_interval),
         global_attributes = global_attributes)
 
-simulation.output_writers[:averaged_statistics_nc] =
-    NetCDFOutputWriter(model, statistics_to_output,
-                     mode = "c",
-                 filepath = joinpath(data_directory, "time_averaged_statistics.nc"),
-                 schedule = AveragedTimeInterval(averages_time_interval, window = averages_time_window),
-        global_attributes = global_attributes)
+if args["time-averaged-statistics"]
+    simulation.output_writers[:averaged_stats_nc] =
+        NetCDFOutputWriter(model, statistics_to_output,
+                         mode = "c",
+                     filepath = joinpath(data_directory, "time_averaged_statistics.nc"),
+                     schedule = AveragedTimeInterval(averages_time_interval, window = averages_time_window),
+            global_attributes = global_attributes)
+end
 
 # # Run
 
