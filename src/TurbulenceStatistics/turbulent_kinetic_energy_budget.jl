@@ -41,9 +41,9 @@ function turbulent_kinetic_energy_budget(model;
                                          p = PressureField(model),
                                          U = AveragedField(model.velocities.u, dims=(1, 2)),
                                          V = AveragedField(model.velocities.v, dims=(1, 2)),
-                                         e = TurbulentKineticEnergy(model, U=U, V=V),
-                                         shear_production = ShearProduction(model, data=c_scratch.data, U=U, V=V),
-                                         dissipation = ViscousDissipation(model, data=c_scratch.data),
+                                         e = Oceanostics.TurbulentKineticEnergy(model, U=U, V=V),
+                                         shear_production = Oceanostics.ShearProduction_z(model, U=U, V=V),
+                                         dissipation = ViscousDissipation(model),
                                         )
 
     u, v, w = model.velocities

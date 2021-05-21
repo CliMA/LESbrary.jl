@@ -11,26 +11,19 @@ export
 
     fit_cubic
 
-using Printf    
+using Printf
 
-using CUDA: has_cuda
+using CUDA: CuDevice, device!
 
 using Oceananigans.Simulations
 using Oceananigans.Diagnostics
 using Oceananigans.Utils
 
-using Oceananigans: @hascuda
-
-@hascuda begin
-    using CUDA
-
-    function select_device!(ndev)
-        @show dev = CuDevice(ndev)
-        CUDA.device!(dev)
-        return nothing
-    end
+function select_device!(ndev)
+    @show dev = CuDevice(ndev)
+    device!(dev)
+    return nothing
 end
-
 
 function save_global!(file, group, name)
     val = try
