@@ -396,6 +396,7 @@ subfilter_flux_statistics = merge(
 
 U = primitive_statistics[:u]
 V = primitive_statistics[:v]
+B = primitive_statistics[:b]
 
 e = TurbulentKineticEnergy(model, U=U, V=V)
 shear_production = ShearProduction_z(model, U=U, V=V)
@@ -404,10 +405,12 @@ dissipation = ViscousDissipation(model)
 tke_budget_statistics = turbulent_kinetic_energy_budget(model, b=b, p=p, U=U, V=V, e=e,
                                                         shear_production=shear_production, dissipation=dissipation)
 
-Ri_local = KernelComputedField(Center, Center, Face, richardson_number_ccf!, model,
-                               computed_dependencies=(U, V, b), parameters=(dUdz_bg=0, dVdz_bg=0, N2_bg=0))
+# FIXME: This 3D kernel actually wastes a lot of computation since we just need a 1D kernel.
+# See: https://github.com/CliMA/LESbrary.jl/issues/114
+Ri_kcf = KernelComputedField(Center, Center, Face, richardson_number_ccf!, model,
+                               computed_dependencies=(U, V, B), parameters=(dUdz_bg=0, dVdz_bg=0, N2_bg=0))
 
-Ri = AveragedField(Ri_local, dims=(1, 2))
+Ri = AveragedField(Ri_kcf, dims=(1, 2))
 
 dynamics_statistics = Dict(:Ri => Ri)
 
