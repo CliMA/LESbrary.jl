@@ -14,9 +14,6 @@ using Logging
 
 using ArgParse
 using JLD2
-using NCDatasets
-using GeoData
-using CairoMakie
 
 using LESbrary
 using Oceanostics
@@ -466,421 +463,79 @@ function init_save_some_metadata!(file, model)
     for (name, value) in pairs(global_attributes)
         file["parameters/$(string(name))"] = value
     end
+
+    file["timeseries/u/serialized/location"] = (Nothing, Nothing, Center)
+    file["timeseries/v/serialized/location"] = (Nothing, Nothing, Center)
+    file["timeseries/T/serialized/location"] = (Nothing, Nothing, Center)
+    file["timeseries/uw/serialized/location"] = (Nothing, Nothing, Face)
+    file["timeseries/vw/serialized/location"] = (Nothing, Nothing, Face)
+    file["timeseries/wT/serialized/location"] = (Nothing, Nothing, Face)
+
+    file["timeseries/u/serialized/boundary_conditions"] = nothing
+    file["timeseries/v/serialized/boundary_conditions"] = nothing
+    file["timeseries/T/serialized/boundary_conditions"] = nothing
+    file["timeseries/uw/serialized/boundary_conditions"] = nothing
+    file["timeseries/vw/serialized/boundary_conditions"] = nothing
+    file["timeseries/wT/serialized/boundary_conditions"] = nothing
+
     return nothing
 end
 
 ## Add JLD2 output writers
 
-name_with_halos(name, with_halos) = with_halos ? "$(name)_with_halos" : name
+using Oceananigans.Fields: interior_copy
 
-for with_halos in [true, false]
-
-    simulation.output_writers[Symbol(name_with_halos("xy_jld2", with_halos))] =
-        JLD2OutputWriter(model, fields_to_output,
-                                  dir = data_directory,
-                               prefix = name_with_halos("xy_slice", with_halos),
-                             schedule = TimeInterval(snapshot_time_interval),
-                         field_slicer = FieldSlicer(k=k_xy_slice, with_halos=with_halos),
-                                force = force,
-                                 init = init_save_some_metadata!)
-
-    simulation.output_writers[Symbol(name_with_halos("xz_jld2", with_halos))] =
-        JLD2OutputWriter(model, fields_to_output,
-                                  dir = data_directory,
-                               prefix = name_with_halos("xz_slice", with_halos),
-                             schedule = TimeInterval(snapshot_time_interval),
-                         field_slicer = FieldSlicer(j=1, with_halos=with_halos),
-                                force = force,
-                                 init = init_save_some_metadata!)
-
-    simulation.output_writers[Symbol(name_with_halos("yz_jld2", with_halos))] =
-        JLD2OutputWriter(model, fields_to_output,
-                                  dir = data_directory,
-                               prefix = name_with_halos("yz_slice", with_halos),
-                             schedule = TimeInterval(snapshot_time_interval),
-                         field_slicer = FieldSlicer(i=1, with_halos=with_halos),
-                                force = force,
-                                 init = init_save_some_metadata!)
-
-    simulation.output_writers[Symbol(name_with_halos("stats_jld2", with_halos))] =
-        JLD2OutputWriter(model, statistics_to_output,
-                                  dir = data_directory,
-                               prefix = name_with_halos("instantaneous_statistics", with_halos),
-                             schedule = TimeInterval(snapshot_time_interval),
-                         field_slicer = FieldSlicer(with_halos=with_halos),
-                                force = force,
-                                 init = init_save_some_metadata!)
-
-    if args["time-averaged-statistics"]
-        simulation.output_writers[Symbol(name_with_halos("averaged_stats_jld2", with_halos))] =
-            JLD2OutputWriter(model, statistics_to_output,
-                                      dir = data_directory,
-                                   prefix = name_with_halos("time_averaged_statistics", with_halos),
-                                 schedule = AveragedTimeInterval(averages_time_interval,
-                                                                 window = averages_time_window),
-                             field_slicer = FieldSlicer(with_halos=with_halos),
-                                    force = force,
-                                     init = init_save_some_metadata!)
-    end
+struct HackyHorizontalAverage{F}
+    field :: F
 end
 
-## Add NetCDF output writers
-
-statistics_to_output = Dict(string(k) => v for (k, v) in statistics_to_output)
-
-simulation.output_writers[:xy_nc] =
-    NetCDFOutputWriter(model, fields_to_output,
-                     mode = "c",
-                 filepath = joinpath(data_directory, "xy_slice.nc"),
-                 schedule = TimeInterval(snapshot_time_interval),
-             field_slicer = FieldSlicer(k=k_xy_slice),
-        global_attributes = global_attributes)
-
-simulation.output_writers[:xz_nc] =
-    NetCDFOutputWriter(model, fields_to_output,
-                     mode = "c",
-                 filepath = joinpath(data_directory, "xz_slice.nc"),
-                 schedule = TimeInterval(snapshot_time_interval),
-             field_slicer = FieldSlicer(j=1),
-        global_attributes = global_attributes)
-
-simulation.output_writers[:yz_nc] =
-    NetCDFOutputWriter(model, fields_to_output,
-                     mode = "c",
-                 filepath = joinpath(data_directory, "yz_slice.nc"),
-                 schedule = TimeInterval(snapshot_time_interval),
-             field_slicer = FieldSlicer(i=1),
-        global_attributes = global_attributes)
-
-simulation.output_writers[:stats_nc] =
-    NetCDFOutputWriter(model, statistics_to_output,
-                     mode = "c",
-                 filepath = joinpath(data_directory, "instantaneous_statistics.nc"),
-                 schedule = TimeInterval(snapshot_time_interval),
-        global_attributes = global_attributes)
-
-if args["time-averaged-statistics"]
-    simulation.output_writers[:averaged_stats_nc] =
-        NetCDFOutputWriter(model, statistics_to_output,
-                         mode = "c",
-                     filepath = joinpath(data_directory, "time_averaged_statistics.nc"),
-                     schedule = AveragedTimeInterval(averages_time_interval, window = averages_time_window),
-            global_attributes = global_attributes)
+function (hha::HackyHorizontalAverage)(model)
+    f = hha.field
+    F = AveragedField(f, dims=(1, 2))
+    interior(F) .= mean(interior_copy(f), dims=(1, 2))
+    return F.data.parent
 end
+
+struct HackyProductHorizontalAverage{F, G}
+    field1 :: F
+    field2 :: G
+end
+
+function (hpha::HackyProductHorizontalAverage)(model)
+    f = hpha.field1
+    g = hpha.field2
+
+    fg = ComputedField(f * g)
+    compute!(fg)
+
+    FG = AveragedField(f * g, dims=(1, 2))
+    interior(FG) .= mean(interior_copy(fg), dims=(1, 2))
+    return FG.data.parent
+end
+
+u, v, w = model.velocities
+T = model.tracers.T
+
+statistics_to_output = (
+    u = HackyHorizontalAverage(u),
+    v = HackyHorizontalAverage(v),
+    T = HackyHorizontalAverage(T),
+    uw = HackyProductHorizontalAverage(u, w),
+    vw = HackyProductHorizontalAverage(v, w),
+    wT = HackyProductHorizontalAverage(w, T)
+)
+
+simulation.output_writers[:stats_with_halos] =
+    JLD2OutputWriter(model, statistics_to_output,
+                              dir = data_directory,
+                           prefix = "instantaneous_statistics_with_halos",
+                         schedule = TimeInterval(snapshot_time_interval),
+                     field_slicer = FieldSlicer(with_halos=true),
+                            force = force,
+                             init = init_save_some_metadata!)
 
 # # Run
 
 @info "Teaching simulation to run!..."
 
 run!(simulation)
-
-# # Load and plot turbulence statistics
-
-make_animation = args["animation"]
-
-function squeeze(A)
-    singleton_dims = tuple((d for d in 1:ndims(A) if size(A, d) == 1)...)
-    return dropdims(A, dims=singleton_dims)
-end
-
-if make_animation
-    ds_xy = NCDstack(joinpath(data_directory, "xy_slice.nc"))
-    ds_xz = NCDstack(joinpath(data_directory, "xz_slice.nc"))
-
-    times = ds_xy[:time]
-    Nt = length(times)
-
-    xc = ds_xy[:xC].data
-    xf = ds_xy[:xF].data
-    yc = ds_xy[:yC].data
-    yf = ds_xy[:yF].data
-    zc = ds_xz[:zC].data
-    zf = ds_xz[:zF].data
-
-    fig = Figure(resolution=(3000, 750))
-
-    u_max = max(maximum(abs, ds_xy[:u]), maximum(abs, ds_xz[:u]))
-    v_max = max(maximum(abs, ds_xy[:v]), maximum(abs, ds_xz[:v]))
-    w_max = max(maximum(abs, ds_xy[:w]), maximum(abs, ds_xz[:w]))
-    U_max = max(u_max, v_max, w_max)
-    U_lims = 0.5 .* (-U_max, +U_max)
-
-    frame = Node(1)
-
-    plot_title = @lift "LESbrary.jl three-layer constant fluxes $name: time = $(prettytime(times[$frame]))"
-
-    u_xy = @lift ds_xy[:u][Ti=$frame].data |> squeeze
-    v_xy = @lift ds_xy[:v][Ti=$frame].data |> squeeze
-    w_xy = @lift ds_xy[:w][Ti=$frame].data |> squeeze
-    T_xy = @lift ds_xy[:T][Ti=$frame].data |> squeeze
-    c₀_xy = @lift ds_xy[:c₀][Ti=$frame].data |> squeeze
-    c₁_xy = @lift ds_xy[:c₁][Ti=$frame].data |> squeeze
-    c₂_xy = @lift ds_xy[:c₂][Ti=$frame].data |> squeeze
-    e_xy = @lift ds_xy[:e][Ti=$frame].data |> squeeze .|> log10
-    ϵ_xy = @lift ds_xy[:ϵ][Ti=$frame].data |> squeeze .|> log10
-
-    u_xz = @lift ds_xz[:u][Ti=$frame].data |> squeeze
-    v_xz = @lift ds_xz[:v][Ti=$frame].data |> squeeze
-    w_xz = @lift ds_xz[:w][Ti=$frame].data |> squeeze
-    T_xz = @lift ds_xz[:T][Ti=$frame].data |> squeeze
-    c₀_xz = @lift ds_xz[:c₀][Ti=$frame].data |> squeeze
-    c₁_xz = @lift ds_xz[:c₁][Ti=$frame].data |> squeeze
-    c₂_xz = @lift ds_xz[:c₂][Ti=$frame].data |> squeeze
-    e_xz = @lift ds_xz[:e][Ti=$frame].data |> squeeze .|> log10
-    ϵ_xz = @lift ds_xz[:ϵ][Ti=$frame].data |> squeeze .|> log10
-
-    ax_u_xy = fig[1, 1] = Axis(fig, title="u-velocity")
-    hm_u_xy = heatmap!(ax_u_xy, xf, yc, u_xy, colormap=:balance, colorrange=U_lims)
-    hidedecorations!(ax_u_xy)
-
-    ax_v_xy = fig[1, 2] = Axis(fig, title="v-velocity")
-    hm_v_xy = heatmap!(ax_v_xy, xc, yf, v_xy, colormap=:balance, colorrange=U_lims)
-    hidedecorations!(ax_v_xy)
-
-    ax_w_xy = fig[1, 3] = Axis(fig, title="w-velocity")
-    hm_w_xy = heatmap!(ax_w_xy, xc, yc, w_xy, colormap=:balance, colorrange=U_lims)
-    hidedecorations!(ax_w_xy)
-
-    ax_T_xy = fig[1, 4] = Axis(fig, title="temperature")
-    hm_T_xy = heatmap!(ax_T_xy, xc, yc, T_xy, colormap=:thermal, colorrange=extrema(ds_xy[:T]))
-    hidedecorations!(ax_T_xy)
-
-    ax_c₀_xy = fig[1, 5] = Axis(fig, title="tracer 0")
-    hm_c₀_xy = heatmap!(ax_c₀_xy, xc, yc, c₀_xy, colormap=:ice, colorrange=extrema(ds_xy[:c₀]))
-    hidedecorations!(ax_c₀_xy)
-
-    ax_c₁_xy = fig[1, 6] = Axis(fig, title="tracer 1")
-    hm_c₁_xy = heatmap!(ax_c₁_xy, xc, yc, c₁_xy, colormap=:ice, colorrange=extrema(ds_xy[:c₁]))
-    hidedecorations!(ax_c₁_xy)
-
-    ax_c₂_xy = fig[1, 7] = Axis(fig, title="tracer 2")
-    hm_c₂_xy = heatmap!(ax_c₂_xy, xc, yc, c₂_xy, colormap=:ice, colorrange=extrema(ds_xy[:c₂]))
-    hidedecorations!(ax_c₂_xy)
-
-    ax_e_xy = fig[1, 8] = Axis(fig, title="log TKE")
-    hm_e_xy = heatmap!(ax_e_xy, xc, yc, e_xy, colormap=:deep, colorrange=(-5, -2))
-    hidedecorations!(ax_e_xy)
-
-    ax_ϵ_xy = fig[1, 9] = Axis(fig, title="log TKE dissipation")
-    hm_ϵ_xy = heatmap!(ax_ϵ_xy, xc, yc, ϵ_xy, colormap=:dense, colorrange=(-10, -5))
-    hidedecorations!(ax_ϵ_xy)
-
-    ax_u_xz = fig[2, 1] = Axis(fig)
-    hm_u_xz = heatmap!(ax_u_xz, xf, zc, u_xz, colormap=:balance, colorrange=U_lims)
-    hidedecorations!(ax_u_xz)
-
-    ax_v_xz = fig[2, 2] = Axis(fig)
-    hm_v_xz = heatmap!(ax_v_xz, xc, zc, v_xz, colormap=:balance, colorrange=U_lims)
-    hidedecorations!(ax_v_xz)
-
-    ax_w_xz = fig[2, 3] = Axis(fig)
-    hm_w_xz = heatmap!(ax_w_xz, xc, zf, w_xz, colormap=:balance, colorrange=U_lims)
-    hidedecorations!(ax_w_xz)
-
-    ax_T_xz = fig[2, 4] = Axis(fig)
-    hm_T_xz = heatmap!(ax_T_xz, xc, zc, T_xz, colormap=:thermal, colorrange=extrema(ds_xz[:T]))
-    hidedecorations!(ax_T_xz)
-
-    ax_c₀_xz = fig[2, 5] = Axis(fig)
-    hm_c₀_xz = heatmap!(ax_c₀_xz, xc, zc, c₀_xz, colormap=:ice, colorrange=extrema(ds_xz[:c₀]))
-    hidedecorations!(ax_c₀_xz)
-
-    ax_c₁_xz = fig[2, 6] = Axis(fig)
-    hm_c₁_xz = heatmap!(ax_c₁_xz, xc, zc, c₁_xz, colormap=:ice, colorrange=extrema(ds_xz[:c₁]))
-    hidedecorations!(ax_c₁_xz)
-
-    ax_c₂_xz = fig[2, 7] = Axis(fig)
-    hm_c₂_xz = heatmap!(ax_c₂_xz, xc, zc, c₂_xz, colormap=:ice, colorrange=extrema(ds_xz[:c₂]))
-    hidedecorations!(ax_c₂_xz)
-
-    ax_e_xz = fig[2, 8] = Axis(fig)
-    hm_e_xz = heatmap!(ax_e_xz, xc, zc, e_xz, colormap=:deep, colorrange=(-8, -2))
-    hidedecorations!(ax_e_xz)
-
-    ax_ϵ_xz = fig[2, 9] = Axis(fig)
-    hm_ϵ_xz = heatmap!(ax_ϵ_xz, xc, zc, ϵ_xz, colormap=:dense, colorrange=(-15, -5))
-    hidedecorations!(ax_ϵ_xz)
-
-    supertitle = fig[0, :] = Label(fig, plot_title, textsize=30)
-
-    filepath = joinpath(data_directory, "xy_xz_movie.mp4")
-    record(fig, filepath, 1:Nt, framerate=15) do n
-        @info "Animating xy/xz movie frame $n/$Nt..."
-        frame[] = n
-    end
-
-    @info "Movie saved: $filepath"
-end
-
-if make_animation
-    ds = NCDstack(joinpath(data_directory, "instantaneous_statistics.nc"))
-
-    times = ds[:time]
-    Nt = length(times)
-
-    zc = ds[:zC].data
-    zf = ds[:zF].data
-
-    fig = Figure(resolution=(3000, 2000))
-
-    frame = Node(1)
-
-    plot_title = @lift "LESbrary.jl three-layer constant fluxes $name: time = $(prettytime(times[$frame]))"
-
-    u = @lift ds[:u][Ti=$frame]
-    v = @lift ds[:v][Ti=$frame]
-    T = @lift ds[:T][Ti=$frame]
-    c₀ = @lift ds[:c₀][Ti=$frame]
-    c₁ = @lift ds[:c₁][Ti=$frame]
-    c₂ = @lift ds[:c₂][Ti=$frame]
-    uu = @lift ds[:uu][Ti=$frame]
-    vv = @lift ds[:vv][Ti=$frame]
-    ww = @lift ds[:ww][Ti=$frame]
-    uv = @lift ds[:uv][Ti=$frame]
-    wu = @lift ds[:wu][Ti=$frame]
-    wv = @lift ds[:wv][Ti=$frame]
-    uT = @lift ds[:uT][Ti=$frame]
-    vT = @lift ds[:vT][Ti=$frame]
-    wT = @lift ds[:wT][Ti=$frame]
-    Ri = @lift ds[:Ri][Ti=$frame]
-    νₑ_∂z_u = @lift ds[:νₑ_∂z_u][Ti=$frame]
-    νₑ_∂z_v = @lift ds[:νₑ_∂z_v][Ti=$frame]
-    νₑ_∂z_w = @lift ds[:νₑ_∂z_w][Ti=$frame]
-    κₑ_∂z_T = @lift ds[:κₑ_∂z_T][Ti=$frame]
-    κₑ_∂z_c₀ = @lift ds[:κₑ_∂z_c₀][Ti=$frame]
-    κₑ_∂z_c₁ = @lift ds[:κₑ_∂z_c₁][Ti=$frame]
-    κₑ_∂z_c₂ = @lift ds[:κₑ_∂z_c₂][Ti=$frame]
-    e = @lift ds[:e][Ti=$frame]
-    tke_dissipation = @lift ds[:tke_dissipation][Ti=$frame]
-    tke_advective_flux = @lift ds[:tke_advective_flux][Ti=$frame]
-    tke_buoyancy_flux = @lift ds[:tke_buoyancy_flux][Ti=$frame]
-    tke_pressure_flux = @lift ds[:tke_pressure_flux][Ti=$frame]
-    tke_shear_production = @lift ds[:tke_shear_production][Ti=$frame]
-
-    colors = ["dodgerblue2", "crimson", "forestgreen"]
-
-    ax_uv = fig[1, 1] = Axis(fig, xlabel="m/s", ylabel="z (m)")
-    line_u = lines!(ax_uv, u, zc, label="U", linewidth=3, color=colors[1])
-    line_v = lines!(ax_uv, v, zc, label="V", linewidth=3, color=colors[2])
-    axislegend(ax_uv, position=:rb, framevisible=false)
-    xlims!(ax_uv, extrema([extrema(ds[:u])..., extrema(ds[:v])...]))
-    ylims!(ax_uv, extrema(zf))
-
-    ax_T = fig[1, 2] = Axis(fig, xlabel="°C")
-    line_T = lines!(ax_T, T, zc, linewidth=3, color=colors[1])
-    xlims!(ax_T, extrema(ds[:T]))
-    ylims!(ax_T, extrema(zf))
-    hideydecorations!(ax_T, grid=false)
-
-    ax_c = fig[1, 3] = Axis(fig, xlabel="c")
-    line_c₀ = lines!(ax_c, c₀, zc, linewidth=3, label="c₀", color=colors[1])
-    line_c₁ = lines!(ax_c, c₁, zc, linewidth=3, label="c₁", color=colors[2])
-    line_c₂ = lines!(ax_c, c₂, zc, linewidth=3, label="c₂", color=colors[3])
-    axislegend(ax_c, position=:rb, framevisible=false)
-    xlims!(ax_c, extrema([extrema(ds[:c₀])..., extrema(ds[:c₁])..., extrema(ds[:c₂])...]))
-    ylims!(ax_c, extrema(zf))
-    hideydecorations!(ax_c, grid=false)
-
-    ax_ke = fig[1, 4] = Axis(fig, xlabel="m²/s²")
-    line_uu = lines!(ax_ke, uu, zc, linewidth=3, label="uu", color=colors[1])
-    line_vv = lines!(ax_ke, vv, zc, linewidth=3, label="vv", color=colors[2])
-    line_ww = lines!(ax_ke, ww, zf, linewidth=3, label="ww", color=colors[3])
-    axislegend(ax_ke, position=:rb, framevisible=false)
-    xlims!(ax_ke, extrema([extrema(ds[:c₀])..., extrema(ds[:c₁])..., extrema(ds[:c₂])...]))
-    ylims!(ax_ke, extrema(zf))
-    hideydecorations!(ax_ke, grid=false)
-
-    ax_UΣ = fig[1, 5] = Axis(fig, xlabel="m²/s²")
-    line_uv = lines!(ax_UΣ, uv, zc, linewidth=3, label="uv", color=colors[1])
-    line_wu = lines!(ax_UΣ, wu, zf, linewidth=3, label="wu", color=colors[2])
-    line_wv = lines!(ax_UΣ, wv, zf, linewidth=3, label="wv", color=colors[3])
-    axislegend(ax_UΣ, position=:rb, framevisible=false)
-    xlims!(ax_UΣ, extrema([extrema(ds[:uv])..., extrema(ds[:wu])..., extrema(ds[:wv])...]))
-    ylims!(ax_UΣ, extrema(zf))
-    hideydecorations!(ax_UΣ, grid=false)
-
-    ax_UT = fig[1, 6] = Axis(fig, xlabel="m·K/s")
-    line_uT = lines!(ax_UT, uT, zc, linewidth=3, label="uT", color=colors[1])
-    line_vT = lines!(ax_UT, vT, zc, linewidth=3, label="vT", color=colors[2])
-    line_wT = lines!(ax_UT, wT, zf, linewidth=3, label="wT", color=colors[3])
-    axislegend(ax_UT, position=:rb, framevisible=false)
-    xlims!(ax_UT, extrema([extrema(ds[:uT])..., extrema(ds[:vT])..., extrema(ds[:wT])...]))
-    ylims!(ax_UT, extrema(zf))
-    hideydecorations!(ax_UT, grid=false)
-
-    ax_νₑ = fig[1, 7] = Axis(fig, xlabel="m²/s²")
-    line_νₑ_∂z_u = lines!(ax_νₑ, νₑ_∂z_u, zf, linewidth=3, label="νₑ ∂z(u)", color=colors[1])
-    line_νₑ_∂z_v = lines!(ax_νₑ, νₑ_∂z_v, zf, linewidth=3, label="νₑ ∂z(v)", color=colors[2])
-    line_νₑ_∂z_w = lines!(ax_νₑ, νₑ_∂z_w, zc, linewidth=3, label="νₑ ∂z(w)", color=colors[3])
-    axislegend(ax_νₑ, position=:rb, framevisible=false)
-    xlims!(ax_νₑ, extrema([extrema(ds[:νₑ_∂z_u])..., extrema(ds[:νₑ_∂z_v])..., extrema(ds[:νₑ_∂z_w])...]))
-    ylims!(ax_νₑ, extrema(zf))
-    hideydecorations!(ax_νₑ, grid=false)
-
-    ax_κₑ∂zT = fig[1, 8] = Axis(fig, xlabel="m⋅K/s")
-    line_κₑ∂zT = lines!(ax_κₑ∂zT, κₑ_∂z_T, zf, label="κₑ ∂z(T)", linewidth=3, color=colors[1])
-    axislegend(ax_κₑ∂zT, position=:rb, framevisible=false)
-    xlims!(ax_κₑ∂zT, extrema(ds[:κₑ_∂z_T]))
-    ylims!(ax_κₑ∂zT, extrema(zf))
-    hideydecorations!(ax_κₑ∂zT, grid=false)
-
-    ax_κₑ∂zC = fig[2, 1] = Axis(fig, xlabel="m²/s²")
-    line_κₑ_∂z_c₀ = lines!(ax_κₑ∂zC, κₑ_∂z_c₀, zf, linewidth=3, label="κₑ ∂z(c₀)", color=colors[1])
-    line_κₑ_∂z_c₁ = lines!(ax_κₑ∂zC, κₑ_∂z_c₂, zf, linewidth=3, label="κₑ ∂z(c₁)", color=colors[2])
-    line_κₑ_∂z_c₂ = lines!(ax_κₑ∂zC, κₑ_∂z_c₂, zf, linewidth=3, label="κₑ ∂z(c₂)", color=colors[3])
-    axislegend(ax_κₑ∂zC, position=:rb, framevisible=false)
-    xlims!(ax_κₑ∂zC, extrema([extrema(ds[:κₑ_∂z_c₀])..., extrema(ds[:κₑ_∂z_c₂])..., extrema(ds[:κₑ_∂z_c₂])...]))
-    ylims!(ax_κₑ∂zC, extrema(zf))
-
-    ax_Ri = fig[2, 2] = Axis(fig, xlabel="Ri")
-    line_Ri = lines!(ax_Ri, Ri, zf, linewidth=3, color=colors[1])
-    xlims!(ax_Ri, (-0.5, 4))
-    ylims!(ax_Ri, extrema(zf))
-    hideydecorations!(ax_Ri, grid=false)
-
-    ax_e = fig[2, 3] = Axis(fig, xlabel="TKE")
-    line_e = lines!(ax_e, e, zc, linewidth=3, color=colors[1])
-    xlims!(ax_e, extrema(ds[:e]))
-    ylims!(ax_e, extrema(zf))
-    hideydecorations!(ax_e, grid=false)
-
-    ax_ϵ = fig[2, 4] = Axis(fig, xlabel="TKE dissipation")
-    line_ϵ = lines!(ax_ϵ, tke_dissipation, zc, linewidth=3, color=colors[1])
-    xlims!(ax_ϵ, extrema(ds[:tke_dissipation]))
-    ylims!(ax_ϵ, extrema(zf))
-    hideydecorations!(ax_ϵ, grid=false)
-
-    ax_tke_a = fig[2, 5] = Axis(fig, xlabel="TKE advective flux")
-    line_tke_a = lines!(ax_tke_a, tke_advective_flux, zf, linewidth=3, color=colors[1])
-    xlims!(ax_tke_a, extrema(ds[:tke_advective_flux]))
-    ylims!(ax_tke_a, extrema(zf))
-    hideydecorations!(ax_tke_a, grid=false)
-
-    ax_tke_b = fig[2, 6] = Axis(fig, xlabel="TKE buoyancy flux")
-    line_tke_b = lines!(ax_tke_b, tke_buoyancy_flux, zc, linewidth=3, color=colors[1])
-    xlims!(ax_tke_b, extrema(ds[:tke_buoyancy_flux]))
-    ylims!(ax_tke_b, extrema(zf))
-    hideydecorations!(ax_tke_b, grid=false)
-
-    ax_tke_p = fig[2, 7] = Axis(fig, xlabel="TKE pressure flux")
-    line_tke_p = lines!(ax_tke_p, tke_pressure_flux, zf, linewidth=3, color=colors[1])
-    xlims!(ax_tke_p, extrema(ds[:tke_pressure_flux]))
-    ylims!(ax_tke_p, extrema(zf))
-    hideydecorations!(ax_tke_p, grid=false)
-
-    ax_tke_sp = fig[2, 8] = Axis(fig, xlabel="TKE shear production")
-    line_tke_sp = lines!(ax_tke_sp, tke_shear_production, zc, linewidth=3, color=colors[1])
-    xlims!(ax_tke_sp, extrema(ds[:tke_shear_production]))
-    ylims!(ax_tke_sp, extrema(zf))
-    hideydecorations!(ax_tke_sp, grid=false)
-
-    supertitle = fig[0, :] = Label(fig, plot_title, textsize=30)
-
-    filepath = joinpath(data_directory, "instantaneous_statistics.mp4")
-    record(fig, filepath, 1:Nt, framerate=15) do n
-        @info "Animating instantaneous statistics movie frame $n/$Nt..."
-        frame[] = n
-    end
-
-    @info "Movie saved: $filepath"
-end
