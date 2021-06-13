@@ -33,7 +33,7 @@ using Oceananigans.Units
 using Oceananigans.Grids: Face, Center
 using Oceananigans.Fields: PressureField
 using Oceanostics.FlowDiagnostics: richardson_number_ccf!
-using Oceanostics.TurbulentKineticEnergyTerms: TurbulentKineticEnergy, ShearProduction_z
+using Oceanostics.TurbulentKineticEnergyTerms: TurbulentKineticEnergy, ZShearProduction
 
 using LESbrary.Utils: SimulationProgressMessenger, fit_cubic, poly
 using LESbrary.NearSurfaceTurbulenceModels: SurfaceEnhancedModelConstant
@@ -75,6 +75,12 @@ function parse_command_line_arguments()
                           buoyancy-flux = + 1e-8 corresponds to cooling at 21 W / m²
                           buoyancy-flux = - 1e-7 corresponds to heating at 208 W / m²"""
             default = 1e-8
+            arg_type = Float64
+
+        "--period-buoyancy-flux"
+            help = """The period of sinusoidal heating and cooling on the surface with a buoyancy flux amplitude of |--buoyancy-flux| in units of hours.
+                        Mathematically, momentum_flux = Qᵇ * sin(2π * t/T) where T is the period."""
+            default = 0.0
             arg_type = Float64
 
         "--momentum-flux"
@@ -178,9 +184,9 @@ averages_time_window = 15minutes
 slice_depth = 8.0
 
 ## Determine filepath prefix
-
-Qᵇ = args["buoyancy-flux"]
-Qᵘ = args["momentum-flux"]
+const Qᵇ = args["buoyancy-flux"]
+const Qᵘ = args["momentum-flux"]
+const Qᵇ_period = args["period-buoyancy-flux"]
 
 thermocline_type = args["thermocline"]
 
@@ -222,10 +228,16 @@ N²_deep = args["deep-buoyancy-gradient"]
 
 buoyancy = SeawaterBuoyancy(equation_of_state=LinearEquationOfState(α=2e-4), constant_salinity=35.0)
 
-α = buoyancy.equation_of_state.α
-g = buoyancy.gravitational_acceleration
+const α = buoyancy.equation_of_state.α
+const g = buoyancy.gravitational_acceleration
 
-Qᶿ = Qᵇ / (α * g)
+if Qᵇ_period != 0
+    @info "periodic flux"
+    @inline Qᶿ(x, y, t) = Qᵇ * sin(2π / (Qᵇ_period * 60 ^ 2) * t) / (α * g)
+else
+    Qᶿ = Qᵇ / (α * g)
+end
+
 dθdz_surface_layer = N²_surface_layer / (α * g)
 dθdz_thermocline   = N²_thermocline   / (α * g)
 dθdz_deep          = N²_deep          / (α * g)
@@ -399,7 +411,7 @@ V = primitive_statistics[:v]
 B = primitive_statistics[:b]
 
 e = TurbulentKineticEnergy(model, U=U, V=V)
-shear_production = ShearProduction_z(model, U=U, V=V)
+shear_production = ZShearProduction(model, U=U, V=V)
 dissipation = ViscousDissipation(model)
 
 tke_budget_statistics = turbulent_kinetic_energy_budget(model, b=b, p=p, U=U, V=V, e=e,
