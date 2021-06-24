@@ -1,15 +1,10 @@
 module Utils
 
-export
-    save_global!,
-    print_banner,
-    prefix_tuple_names,
-    select_device!,
-
-    # progress_messenger.jl
-    SimulationProgressMessenger,
-
-    fit_cubic
+export save_global!, print_banner, prefix_tuple_names, select_device!
+export SimulationProgressMessenger
+export fit_cubic
+export InterpolatedProfile, InterpolatedProfileTimeSeries, ∂z, ∂t
+export diagnose_buoyancy_flux
 
 using Printf
 
@@ -69,5 +64,7 @@ end
 
 include("progress_messenger.jl")
 include("fit_cubic.jl")
+include("interpolated_profiles.jl")
+include("diagnose_buoyancy_flux.jl")
 
 end # module
