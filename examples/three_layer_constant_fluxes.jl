@@ -32,8 +32,8 @@ using Oceananigans.Units
 
 using Oceananigans.Grids: Face, Center
 using Oceananigans.Fields: PressureField
-using Oceanostics.FlowDiagnostics: richardson_number_ccf!
-using Oceanostics.TurbulentKineticEnergyTerms: TurbulentKineticEnergy, ShearProduction_z
+using Oceanostics.FlowDiagnostics: RichardsonNumber
+using Oceanostics.TKEBudgetTerms: TurbulentKineticEnergy, ZShearProduction
 
 using LESbrary.Utils: SimulationProgressMessenger, fit_cubic, poly
 using LESbrary.NearSurfaceTurbulenceModels: SurfaceEnhancedModelConstant
@@ -230,10 +230,10 @@ dθdz_surface_layer = N²_surface_layer / (α * g)
 dθdz_thermocline   = N²_thermocline   / (α * g)
 dθdz_deep          = N²_deep          / (α * g)
 
-θ_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᶿ),
-                                       bottom = BoundaryCondition(Gradient, dθdz_deep))
+θ_bcs = FieldBoundaryConditions(top = BoundaryCondition(Flux, Qᶿ),
+                          bottom = BoundaryCondition(Gradient, dθdz_deep))
 
-u_bcs = UVelocityBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᵘ))
+u_bcs = FieldBoundaryConditions(top = BoundaryCondition(Flux, Qᵘ))
 
 # Tracer forcing
 
@@ -281,11 +281,11 @@ T_sponge = Relaxation(rate = 4/hour,
 
 Cᴬᴹᴰ = SurfaceEnhancedModelConstant(grid.Δz, C₀ = 1/12, enhancement = 7, decay_scale = 4 * grid.Δz)
 
-# # Instantiate Oceananigans.IncompressibleModel
+# # Instantiate the model
 
 @info "Framing the model..."
 
-model = IncompressibleModel(
+model = NonhydrostaticModel(
            architecture = GPU(),
             timestepper = :RungeKutta3,
               advection = WENO5(),
@@ -405,12 +405,7 @@ dissipation = ViscousDissipation(model)
 tke_budget_statistics = turbulent_kinetic_energy_budget(model, b=b, p=p, U=U, V=V, e=e,
                                                         shear_production=shear_production, dissipation=dissipation)
 
-# FIXME: This 3D kernel actually wastes a lot of computation since we just need a 1D kernel.
-# See: https://github.com/CliMA/LESbrary.jl/issues/114
-Ri_kcf = KernelComputedField(Center, Center, Face, richardson_number_ccf!, model,
-                               computed_dependencies=(U, V, B), parameters=(dUdz_bg=0, dVdz_bg=0, N2_bg=0))
-
-Ri = AveragedField(Ri_kcf, dims=(1, 2))
+Ri = AveragedField(RichardsonNumber(model), dims=(1, 2))
 
 dynamics_statistics = Dict(:Ri => Ri)
 
