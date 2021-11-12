@@ -43,6 +43,13 @@ using LESbrary.TurbulenceStatistics: first_through_second_order, turbulent_kinet
 
 Logging.global_logger(OceananigansLogger())
 
+# Dirty hack! DO NOT MERGE!
+
+using Oceananigans.Fields: ZeroField
+import Oceananigans.Architectures: architecture
+
+architecture(::ZeroField) = GPU()
+
 # To start, we ensure that all packages in the LESbrary environment are installed:
 
 Pkg.instantiate()
@@ -352,17 +359,15 @@ set!(model, T = initial_temperature)
 
 @info "Conjuring the simulation..."
 
-# Adaptive time-stepping
-wizard = TimeStepWizard(cfl=0.8, Δt=1.0, max_change=1.1, min_Δt=0.01, max_Δt=30.0)
-
 stop_time = stop_hours * hour
 
-simulation = Simulation(model,
-                    Δt = wizard,
-             stop_time = stop_time,
-    iteration_interval = 10,
-              progress = SimulationProgressMessenger(wizard)
-)
+simulation = Simulation(model, Δt = 1.0, stop_time = stop_time)
+
+# Adaptive time-stepping
+wizard = TimeStepWizard(cfl=0.8, max_change=1.1, min_Δt=0.01, max_Δt=30.0)
+simulation.callbacks[:wizard] = Callback(wizard, IterationInterval(10))
+
+simulation.callbacks[:progress] = Callback(SimulationProgressMessenger(wizard), IterationInterval(10))
 
 # # Prepare Output
 
@@ -399,13 +404,13 @@ V = primitive_statistics[:v]
 B = primitive_statistics[:b]
 
 e = TurbulentKineticEnergy(model, U=U, V=V)
-shear_production = ShearProduction_z(model, U=U, V=V)
+shear_production = ZShearProduction(model, U=U, V=V)
 dissipation = ViscousDissipation(model)
 
 tke_budget_statistics = turbulent_kinetic_energy_budget(model, b=b, p=p, U=U, V=V, e=e,
                                                         shear_production=shear_production, dissipation=dissipation)
 
-Ri = AveragedField(RichardsonNumber(model), dims=(1, 2))
+Ri = AveragedField(RichardsonNumber(model; b), dims=(1, 2))
 
 dynamics_statistics = Dict(:Ri => Ri)
 

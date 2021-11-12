@@ -652,7 +652,9 @@ version = "0.64.1"
 
 [[Oceanostics]]
 deps = ["Oceananigans", "Printf", "Test"]
-git-tree-sha1 = "2445c5c755f244412e2f6c60a970fe938b8c6e02"
+git-tree-sha1 = "f6147188abee8e850815eec872704a7091dcea22"
+repo-rev = "ali-ramadhan-patch-1"
+repo-url = "https://github.com/tomchor/Oceanostics.jl.git"
 uuid = "d0ccf422-c8fb-49b5-a76d-74acdde946ac"
 version = "0.6.1"
 

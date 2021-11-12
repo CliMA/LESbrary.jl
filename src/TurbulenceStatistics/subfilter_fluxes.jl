@@ -19,7 +19,7 @@ function subfilter_momentum_fluxes(model;
 
     u, v, w = model.velocities
 
-    νₑ = model.diffusivities.νₑ
+    νₑ = model.diffusivity_fields.νₑ
 
     averages = Dict(
                     :νₑ_∂z_u => AveragedField(∂z(u) * νₑ, dims=(1, 2)),
@@ -41,7 +41,7 @@ function subfilter_tracer_fluxes(model; w_scratch = ZFaceField(model.architectur
 
     for tracer in propertynames(model.tracers)
         c = getproperty(model.tracers, tracer)
-        κₑ = subfilter_diffusivity(model.closure, model.diffusivities, tracer)
+        κₑ = subfilter_diffusivity(model.closure, model.diffusivity_fields, tracer)
 
         name = Symbol(:κₑ_∂z_, tracer)
 
