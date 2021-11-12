@@ -367,7 +367,7 @@ simulation = Simulation(model, Δt = 1.0, stop_time = stop_time)
 wizard = TimeStepWizard(cfl=0.8, max_change=1.1, min_Δt=0.01, max_Δt=30.0)
 simulation.callbacks[:wizard] = Callback(wizard, IterationInterval(10))
 
-simulation.callbacks[:progress] = Callback(SimulationProgressMessenger(wizard), IterationInterval(10))
+simulation.callbacks[:progress] = Callback(SimulationProgressMessenger(), IterationInterval(10))
 
 # # Prepare Output
 
@@ -414,9 +414,9 @@ Ri = AveragedField(RichardsonNumber(model; b), dims=(1, 2))
 
 dynamics_statistics = Dict(:Ri => Ri)
 
-fields_to_output = merge(model.velocities, model.tracers, (e=e, ϵ=dissipation))
+fields_to_output = merge(model.velocities, model.tracers) # , (e=e, ϵ=dissipation))
 
-statistics_to_output = merge(primitive_statistics, subfilter_flux_statistics, tke_budget_statistics, dynamics_statistics)
+statistics_to_output = primitive_statistics # merge(primitive_statistics, subfilter_flux_statistics, tke_budget_statistics, dynamics_statistics)
 
 @info "Garnishing output writers..."
 
