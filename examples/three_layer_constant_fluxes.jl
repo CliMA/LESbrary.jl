@@ -385,7 +385,7 @@ V = primitive_statistics[:v]
 B = primitive_statistics[:b]
 
 e = TurbulentKineticEnergy(model, U=U, V=V)
-shear_production = ShearProduction_z(model, U=U, V=V)
+shear_production = ZShearProduction(model, U=U, V=V)
 dissipation = ViscousDissipation(model)
 
 tke_budget_statistics = turbulent_kinetic_energy_budget(model,
