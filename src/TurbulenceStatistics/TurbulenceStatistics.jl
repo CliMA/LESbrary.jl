@@ -10,7 +10,7 @@ using Oceananigans.Operators
 using Oceanostics
 
 ViscousDissipation(model; data=nothing) =
-    Oceanostics.IsotropicViscousDissipationRate(model, model.velocities..., model.diffusivities.νₑ)
+    Oceanostics.IsotropicViscousDissipationRate(model, model.velocities..., model.diffusivity_fields.νₑ)
 
 include("first_through_third_order.jl")
 include("subfilter_fluxes.jl")

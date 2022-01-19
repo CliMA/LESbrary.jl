@@ -32,7 +32,7 @@ function (pm::SimulationProgressMessenger)(simulation)
     u_max = maximum(abs, model.velocities.u)
     v_max = maximum(abs, model.velocities.v)
     w_max = maximum(abs, model.velocities.w)
-    ν_max = maximum(abs, model.diffusivities.νₑ)
+    ν_max = maximum(abs, model.diffusivity_fields.νₑ)
 
     @info @sprintf("[%06.2f%%] iteration: % 6d, time: % 10s, Δt: % 10s, wall time: % 8s (% 8s / time step)",
                     progress, i, prettytime(t), prettytime(get_Δt(pm.Δt)), prettytime(current_wall_time), prettytime(wall_time_per_step))

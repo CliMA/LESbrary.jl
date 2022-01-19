@@ -11,7 +11,7 @@ include("run_script.jl")
         ("size=(32, 32, 32)", "size=(1, 1, 1)"),
         ("TimeInterval(4hour)", "TimeInterval(2minute)"),
         ("AveragedTimeInterval(1hour, window=15minute)", "AveragedTimeInterval(2minute, window=1minute)"),
-        ("iteration_interval=100", "iteration_interval=1"),
+        ("IterationInterval(100)", "IterationInterval(1)"),
         ("stop_time=8hour", "stop_time=1")
     ]
 
@@ -30,7 +30,7 @@ include("run_script.jl")
         ("Pkg.instantiate()", ""),
         ("using Pkg", ""),
         ("default = [32, 32, 32]", "default = [1, 1, 1]"),
-        ("architecture = GPU()", "architecture = CPU()"),
+        ("GPU()", "CPU()"),
         ("if make_animation", "if false")
     ]
 

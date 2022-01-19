@@ -3,17 +3,13 @@
 # This script runs a simulation of convection driven by cooling at the
 # surface of an idealized, stratified, rotating ocean surface boundary layer.
 
-using LESbrary, Printf, Statistics
+using LESbrary, Printf, Statistics, Oceananigans, Oceananigans.Units
 
 # Domain
 
-using Oceananigans.Grids
-
-grid = RegularRectilinearGrid(size=(32, 32, 32), x=(0, 128), y=(0, 128), z=(-64, 0))
+grid = RectilinearGrid(CPU(), size=(32, 32, 32), x=(0, 128), y=(0, 128), z=(-64, 0))
 
 # Buoyancy and boundary conditions
-
-using Oceananigans.BuoyancyModels, Oceananigans.BoundaryConditions
 
 Qᵇ = 1e-7
 N² = 1e-5
@@ -27,8 +23,8 @@ g = buoyancy.gravitational_acceleration
 Qᵀ = Qᵇ / (α * g)
 dTdz = N² / (α * g)
 
-T_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᵀ),
-                                       bottom = BoundaryCondition(Gradient, dTdz))
+T_bcs = FieldBoundaryConditions(top = BoundaryCondition(Flux, Qᵀ),
+                                bottom = BoundaryCondition(Gradient, dTdz))
 
 # LES Model
 
@@ -38,39 +34,36 @@ using LESbrary.NearSurfaceTurbulenceModels: SurfaceEnhancedModelConstant
 
 Cᴬᴹᴰ = SurfaceEnhancedModelConstant(grid.Δz, C₀ = 1/12, enhancement = 7, decay_scale = 4 * grid.Δz)
 
-# Instantiate Oceananigans.IncompressibleModel
+# Instantiate Oceananigans.NonhydrostaticModel
 
 using Oceananigans
 using Oceananigans.Advection: WENO5
 
-model = IncompressibleModel(architecture = CPU(),
-                             timestepper = :RungeKutta3,
-                               advection = WENO5(),
-                                    grid = grid,
-                                 tracers = :T,
-                                buoyancy = buoyancy,
-                                coriolis = FPlane(f=1e-4),
-                                 closure = AnisotropicMinimumDissipation(C=Cᴬᴹᴰ),
-                     boundary_conditions = (T=T_bcs,))
+model = NonhydrostaticModel(; grid, buoyancy,
+                            timestepper = :RungeKutta3,
+                            advection = WENO5(),
+                            tracers = :T,
+                            coriolis = FPlane(f=1e-4),
+                            closure = AnisotropicMinimumDissipation(C=Cᴬᴹᴰ),
+                            boundary_conditions = (; T=T_bcs))
 
 # # Initial condition
 
 Ξ(z) = rand() * exp(z / 8)
-
 Tᵢ(x, y, z) = dTdz * z + 1e-6 * Ξ(z) * dTdz * grid.Lz
-
 set!(model, T=Tᵢ)
 
 # # Prepare the simulation
 
-using Oceananigans.Utils: hour, minute
 using LESbrary.Utils: SimulationProgressMessenger
 
 # Adaptive time-stepping
-wizard = TimeStepWizard(cfl=1.5, Δt=2.0, max_change=1.1, max_Δt=30.0)
 
-simulation = Simulation(model, Δt=wizard, stop_time=8hour, iteration_interval=100,
-                        progress=SimulationProgressMessenger(wizard))
+simulation = Simulation(model, Δt=2.0, stop_time=8hour)
+
+wizard = TimeStepWizard(cfl=1.5, Δt=2.0, max_change=1.1, max_Δt=30.0)
+simulation.callbacks[:wizard] = Callback(wizard, IterationInterval(100))
+simulation.callbacks[:progress] = Callback(SimulationProgressMessenger(wizard), IterationInterval(100))
 
 # Prepare Output
 
@@ -204,3 +197,4 @@ mixing_length = plot([ℓ_measured ℓ_estimated], zF[2:end-1], size = plot_size
                                                            label = ["measured" "estimated"])
 
 plot(temperature, variances, budget, mixing_length, layout=(1, 4))
+

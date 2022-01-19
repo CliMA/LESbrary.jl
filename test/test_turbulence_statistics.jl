@@ -13,6 +13,8 @@ using LESbrary.TurbulenceStatistics:
     subfilter_tracer_fluxes,
     turbulent_kinetic_energy_budget
 
+using Oceananigans.AbstractOperations: AveragedField
+
 function output_works(simulation, output, output_name="")
     model = simulation.model
     model.clock.time = 0
@@ -20,9 +22,9 @@ function output_works(simulation, output, output_name="")
     simulation.stop_iteration = 1
 
     simulation.output_writers[:test] = JLD2OutputWriter(model, output,
-                                                        schedule=IterationInterval(1),
+                                                        schedule = IterationInterval(1),
                                                         prefix = "test",
-                                                            dir = ".")
+                                                        dir = ".")
 
     success = try
         run!(simulation)
@@ -42,8 +44,9 @@ for arch in architectures
     @testset "Turbulence Statistics [$(typeof(arch))]" begin
         @info "Testing turbulence statistics [$(typeof(arch))]..."
 
-        model = IncompressibleModel(architecture = arch,
-                                    grid = RegularRectilinearGrid(size=(1, 1, 1), extent=(1, 1, 1)),
+        model = NonhydrostaticModel(grid = RectilinearGrid(arch, size=(1, 1, 1), extent=(1, 1, 1)),
+                                    tracers = :b,
+                                    buoyancy = BuoyancyTracer(),
                                     closure = AnisotropicMinimumDissipation())
 
         simulation = Simulation(model, Δt=1.0, stop_iteration=1)

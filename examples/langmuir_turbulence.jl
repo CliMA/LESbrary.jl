@@ -19,22 +19,10 @@ using Plots
 using ArgParse
 
 using Oceananigans
-using Oceananigans.Advection
-using Oceananigans.Grids
-using Oceananigans.Fields
-using Oceananigans.BuoyancyModels
-using Oceananigans.BoundaryConditions
-using Oceananigans.Diagnostics
-using Oceananigans.OutputWriters
 using Oceananigans.Utils
+using Oceananigans.BuoyancyModels: g_Earth
 
 using LESbrary
-
-using Oceananigans.BuoyancyModels: g_Earth
-using Oceananigans.Fields: PressureField
-using Oceananigans.BuoyancyModels: BuoyancyTracer
-using Oceananigans.SurfaceWaves: UniformStokesDrift
-
 using LESbrary.TurbulenceStatistics: TurbulentKineticEnergy, ShearProduction, ViscousDissipation
 using LESbrary.TurbulenceStatistics: first_through_second_order, turbulent_kinetic_energy_budget
 
@@ -121,16 +109,16 @@ uˢ(z) = Uˢ * exp(2wavenumber * z)
 ##### Grid
 #####
 
-grid = RegularRectilinearGrid(size=(Nh, Nh, Nz), extent=(Lh, Lh, Lz))
+grid = RectilinearGrid(CPU(), size=(Nh, Nh, Nz), extent=(Lh, Lh, Lz))
 
 #####
 ##### Boundary conditions
 #####
 
-u_bcs = UVelocityBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᵘ))
+u_bcs = FieldBoundaryConditions(top = BoundaryCondition(Flux, Qᵘ))
 
-b_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᵇ),
-                                       bottom = BoundaryCondition(Gradient, N²))
+b_bcs = FieldBoundaryConditions(top = BoundaryCondition(Flux, Qᵇ),
+                                bottom = BoundaryCondition(Gradient, N²))
 
 #####
 ##### Sponge layer
@@ -150,19 +138,15 @@ b_sponge = Relaxation(rate = 1/hour,
 
 advection = eval(args["advection-scheme"])()
 
-model = IncompressibleModel(
-           architecture = GPU(),
-            timestepper = :RungeKutta3,
-              advection = advection,
-                   grid = grid,
-                tracers = :b,
-               buoyancy = BuoyancyTracer(),
-               coriolis = FPlane(f=f),
-                closure = AnisotropicMinimumDissipation(),
-          surface_waves = UniformStokesDrift(∂z_uˢ=∂z_uˢ),
-    boundary_conditions = (u=u_bcs, b=b_bcs),
-                forcing = (u=u_sponge, v=v_sponge, w=w_sponge, b=b_sponge),
-)
+model = NonhydrostaticModel(; advection, grid,
+                            timestepper = :RungeKutta3,
+                            tracers = :b,
+                            buoyancy = BuoyancyTracer(),
+                            coriolis = FPlane(f=f),
+                            closure = AnisotropicMinimumDissipation(),
+                            surface_waves = UniformStokesDrift(∂z_uˢ=∂z_uˢ),
+                            boundary_conditions = (u=u_bcs, b=b_bcs),
+                            forcing = (u=u_sponge, v=v_sponge, w=w_sponge, b=b_sponge))
 
 #####
 ##### Initial conditions: Stokes drift + stratification + noise
@@ -182,22 +166,25 @@ set!(model, u=uᵢ, w=wᵢ, b=bᵢ)
 ##### Simulation setup
 #####
 
-wizard = TimeStepWizard(cfl=1.0, Δt=1.0, max_change=1.1, max_Δt=30.0)
+simulation = Simulation(model; Δt=1.0, stop_time)
 
-umax = FieldMaximum(abs, model.velocities.u)
-vmax = FieldMaximum(abs, model.velocities.v)
-wmax = FieldMaximum(abs, model.velocities.w)
+wizard = TimeStepWizard(cfl=1.0, max_change=1.1, max_Δt=30.0)
+simulation.callbacks[:wizard] = Callback(wizard, IterationInterval(10))
 
 wall_clock = [time_ns()]
 
 function print_progress(simulation)
     model = simulation.model
 
+    umax = maximum(abs, model.velocities.u)
+    vmax = maximum(abs, model.velocities.v)
+    wmax = maximum(abs, model.velocities.w)
+
     ## Print a progress message
     msg = @sprintf("i: %04d, t: %s, Δt: %s, umax = (%.1e, %.1e, %.1e) ms⁻¹, wall time: %s\n",
-                   model.clock.iteration,
-                   prettytime(model.clock.time),
-                   prettytime(wizard.Δt),
+                   iteration(simulation),
+                   prettytime(simulation),
+                   prettytime(simulation.Δt),
                    umax(), vmax(), wmax(),
                    prettytime(1e-9 * (time_ns() - wall_clock[1]))
                   )
@@ -209,10 +196,7 @@ function print_progress(simulation)
     return nothing
 end
 
-simulation = Simulation(model, iteration_interval = 10,
-                                               Δt = wizard,
-                                        stop_time = stop_time,
-                                         progress = print_progress)
+simulation.callbacks[:progress] = Callback(print_progress, IterationInterval(10))
 
 #####
 ##### Output setup
@@ -224,9 +208,9 @@ data_directory = joinpath(@__DIR__, "..", "data", prefix) # save data in /data/p
 # "Primitive" statistics
 
 b = BuoyancyField(model)
-p = PressureField(model)
-w_scratch = ZFaceField(model.architecture, model.grid)
-c_scratch = CenterField(model.architecture, model.grid)
+p = model.pressures.pHY′ + model.pressures.pNHS
+w_scratch = ZFaceField(model.grid)
+c_scratch = CenterField(model.grid)
 
 primitive_statistics = first_through_second_order(model, b=b, p=p, w_scratch=w_scratch, c_scratch=c_scratch)
 

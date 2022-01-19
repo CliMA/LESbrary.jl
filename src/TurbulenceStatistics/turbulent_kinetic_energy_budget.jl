@@ -1,12 +1,12 @@
 """
     turbulent_kinetic_energy_budget(model; b = BuoyancyField(model),
-                                           w_scratch = ZFaceField(model.architecture, model.grid),
-                                           c_scratch = CenterField(model.architecture, model.grid),
-                                           U = AveragedField(model.velocities.u, dims=(1, 2)),
-                                           V = AveragedField(model.velocities.v, dims=(1, 2)),
-                                           p = PressureField(model))
+                                           w_scratch = ZFaceField(model.grid),
+                                           c_scratch = CenterField(model.grid),
+                                           U = Field(Average(model.velocities.u, dims=(1, 2))),
+                                           V = Field(Average(model.velocities.v, dims=(1, 2))),
+                                           p = model.pressures.pHY′ + model.pressures.pNHS)
 
-Returns a `Dict` with `AveragedField`s correpsonding to terms in the turbulent kinetic energy budget.
+Returns a `Dict` with averaged `Field`s correpsonding to terms in the turbulent kinetic energy budget.
 The turbulent kinetic energy equation is
 
 `` ∂_t E = - ∂_z ⟨w′e′ + w′p′⟩ - ⟨w′u′⟩ ∂_z U - ⟨w′v′⟩ ∂_z V + ⟨w′b′⟩ - ϵ ``,
@@ -35,12 +35,12 @@ Note that these diagnostics do not compile on the GPU currently.
 """
 function turbulent_kinetic_energy_budget(model;
                                          with_flux_divergences = false,
-                                         w_scratch = ZFaceField(model.architecture, model.grid),
-                                         c_scratch = CenterField(model.architecture, model.grid),
+                                         w_scratch = ZFaceField(model.grid),
+                                         c_scratch = CenterField(model.grid),
                                          b = BuoyancyField(model),
-                                         p = PressureField(model),
-                                         U = AveragedField(model.velocities.u, dims=(1, 2)),
-                                         V = AveragedField(model.velocities.v, dims=(1, 2)),
+                                         p = model.pressures.pHY′ + model.pressures.pNHS,
+                                         U = Field(Average(model.velocities.u, dims=(1, 2))),
+                                         V = Field(Average(model.velocities.v, dims=(1, 2))),
                                          e = Oceanostics.TurbulentKineticEnergy(model, U=U, V=V),
                                          shear_production = Oceanostics.ShearProduction_z(model, U=U, V=V),
                                          dissipation = ViscousDissipation(model),
@@ -54,22 +54,22 @@ function turbulent_kinetic_energy_budget(model;
 
     turbulence_statistics = Dict()
 
-    turbulence_statistics[:e] = AveragedField(e, dims=(1, 2))
-    turbulence_statistics[:tke_shear_production] = AveragedField(shear_production, dims=(1, 2))
-    turbulence_statistics[:tke_advective_flux]   = AveragedField(advective_flux,   dims=(1, 2))
-    turbulence_statistics[:tke_pressure_flux]    = AveragedField(pressure_flux,    dims=(1, 2))
-    turbulence_statistics[:tke_dissipation]      = AveragedField(dissipation,      dims=(1, 2))
-    turbulence_statistics[:tke_buoyancy_flux]    = AveragedField(buoyancy_flux,    dims=(1, 2))
+    turbulence_statistics[:e] = Field(Average(e, dims=(1, 2)))
+    turbulence_statistics[:tke_shear_production] = Field(Average(shear_production, dims=(1, 2)))
+    turbulence_statistics[:tke_advective_flux]   = Field(Average(advective_flux,   dims=(1, 2)))
+    turbulence_statistics[:tke_pressure_flux]    = Field(Average(pressure_flux,    dims=(1, 2)))
+    turbulence_statistics[:tke_dissipation]      = Field(Average(dissipation,      dims=(1, 2)))
+    turbulence_statistics[:tke_buoyancy_flux]    = Field(Average(buoyancy_flux,    dims=(1, 2)))
 
     if with_flux_divergences
-        advective_flux_field = ComputedField(advective_flux)
-        pressure_flux_field = ComputedField(pressure_flux)
+        advective_flux_field = Field(advective_flux)
+        pressure_flux_field = Field(pressure_flux)
 
         advective_flux_divergence = ∂z(advective_flux_field)
         pressure_flux_divergence = ∂z(pressure_flux_field)
 
-        turbulence_statistics[:tke_advective_flux_divergence] = AveragedField(advective_flux_divergence, dims=(1, 2))
-        turbulence_statistics[:tke_pressure_flux_divergence]  = AveragedField(pressure_flux_divergence,  dims=(1, 2))
+        turbulence_statistics[:tke_advective_flux_divergence] = Field(Average(advective_flux_divergence, dims=(1, 2)))
+        turbulence_statistics[:tke_pressure_flux_divergence]  = Field(Average(pressure_flux_divergence,  dims=(1, 2)))
     end
 
     return turbulence_statistics
