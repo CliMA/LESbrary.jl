@@ -406,8 +406,9 @@ pressure_flux = statistics_file["timeseries/tke_pressure_flux/$last_iteration"][
 
 close(statistics_file)
 
-pressure_flux_divergence = @. (pressure_flux[2:end] - pressure_flux[1:end-1]) ./ grid.Δz
-advective_flux_divergence = @. (advective_flux[2:end] - advective_flux[1:end-1]) ./ grid.Δz
+Δz = grid.Δzᵃᵃᶜ
+pressure_flux_divergence = @. (pressure_flux[2:end] - pressure_flux[1:end-1]) ./ Δz
+advective_flux_divergence = @. (advective_flux[2:end] - advective_flux[1:end-1]) ./ Δz
 
 tendency = @. - pressure_flux_divergence - advective_flux_divergence + shear_production + buoyancy_flux - dissipation
 
