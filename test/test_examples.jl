@@ -30,7 +30,8 @@ include("run_script.jl")
     replace_strings = [
         ("Pkg.instantiate()", ""),
         ("using Pkg", ""),
-        ("default = [32, 32, 32]", "default = [1, 1, 1]"),
+        ("default = [32, 32, 32]", "default = [1, 1, 32]"),
+        ("stop_time = stop_hours * hour", "stop_time = 1.0"),
         ("if make_animation", "if false")
     ]
 
