@@ -19,12 +19,13 @@ using Plots
 using ArgParse
 
 using Oceananigans
-using Oceananigans.Utils
+using Oceananigans.Units
 using Oceananigans.BuoyancyModels: g_Earth
 
 using LESbrary
-using LESbrary.TurbulenceStatistics: TurbulentKineticEnergy, ShearProduction, ViscousDissipation
+using LESbrary.TurbulenceStatistics: TurbulentKineticEnergy, ViscousDissipation
 using LESbrary.TurbulenceStatistics: first_through_second_order, turbulent_kinetic_energy_budget
+using Oceanostics.TKEBudgetTerms: ZShearProduction
 
 "Returns a dictionary of command line arguments."
 function parse_command_line_arguments()
@@ -115,10 +116,10 @@ grid = RectilinearGrid(CPU(), size=(Nh, Nh, Nz), extent=(Lh, Lh, Lz))
 ##### Boundary conditions
 #####
 
-u_bcs = FieldBoundaryConditions(top = BoundaryCondition(Flux, Qᵘ))
+u_bcs = FieldBoundaryConditions(top = FluxBoundaryCondition(Qᵘ))
 
-b_bcs = FieldBoundaryConditions(top = BoundaryCondition(Flux, Qᵇ),
-                                bottom = BoundaryCondition(Gradient, N²))
+b_bcs = FieldBoundaryConditions(top = FluxBoundaryCondition(Qᵇ),
+                                bottom = GradientBoundaryCondition(N²))
 
 #####
 ##### Sponge layer
@@ -144,7 +145,7 @@ model = NonhydrostaticModel(; advection, grid,
                             buoyancy = BuoyancyTracer(),
                             coriolis = FPlane(f=f),
                             closure = AnisotropicMinimumDissipation(),
-                            surface_waves = UniformStokesDrift(∂z_uˢ=∂z_uˢ),
+                            stokes_drift = UniformStokesDrift(∂z_uˢ=∂z_uˢ),
                             boundary_conditions = (u=u_bcs, b=b_bcs),
                             forcing = (u=u_sponge, v=v_sponge, w=w_sponge, b=b_sponge))
 
@@ -185,7 +186,7 @@ function print_progress(simulation)
                    iteration(simulation),
                    prettytime(simulation),
                    prettytime(simulation.Δt),
-                   umax(), vmax(), wmax(),
+                   umax, vmax, wmax,
                    prettytime(1e-9 * (time_ns() - wall_clock[1]))
                   )
 
@@ -220,8 +221,8 @@ V = primitive_statistics[:v]
 # Turbulent kinetic energy budget terms
 
 e = TurbulentKineticEnergy(model, U=U, V=V)
-shear_production = ShearProduction(model, data=c_scratch.data, U=U, V=V)
-dissipation = ViscousDissipation(model, data=c_scratch.data)
+shear_production = ZShearProduction(model, U=U, V=V)
+dissipation = ViscousDissipation(model)
 
 tke_budget_statistics = turbulent_kinetic_energy_budget(model, b=b, p=p, U=U, V=V, e=e,
                                                         shear_production=shear_production, dissipation=dissipation)
@@ -229,14 +230,17 @@ tke_budget_statistics = turbulent_kinetic_energy_budget(model, b=b, p=p, U=U, V=
 statistics_to_output = merge(primitive_statistics, tke_budget_statistics)
 
 fields_to_output = merge(model.velocities, model.tracers,
-                         (νₑ=model.diffusivities.νₑ, e=e, sp=shear_production, ϵ=dissipation))
+                         (νₑ = model.diffusivity_fields.νₑ,
+                           e = Field(e),
+                          sp = Field(shear_production),
+                           ϵ = Field(dissipation)))
 
 # Output configured for pickup
 
 pickup = args["pickup"]
 force = pickup ? false : true
 
-k_xy_slice = searchsortedfirst(grid.zF[:], -slice_depth)
+k_xy_slice = searchsortedfirst(znodes(Face, grid), -slice_depth)
 
 simulation.output_writers[:checkpointer] =
     Checkpointer(model, schedule = TimeInterval(26hour), prefix = prefix * "_checkpointer", dir = data_directory)
