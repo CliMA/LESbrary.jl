@@ -23,7 +23,7 @@ using Oceanostics
 using Oceananigans
 using Oceananigans.Units
 
-using Oceanostics.TurbulentKineticEnergyTerms: TurbulentKineticEnergy, ZShearProduction
+using Oceanostics.TKEBudgetTerms: TurbulentKineticEnergy, ZShearProduction
 
 using LESbrary.Utils: SimulationProgressMessenger, fit_cubic, poly
 using LESbrary.NearSurfaceTurbulenceModels: SurfaceEnhancedModelConstant
@@ -197,7 +197,7 @@ end
 
 @info "Mapping grid..."
 
-grid = RectilinearGrid(GPU(), size=(Nx, Ny, Nz), x=(0, Lx), y=(0, Ly), z=(-Lz, 0))
+grid = RectilinearGrid(CPU(), size=(Nx, Ny, Nz), x=(0, Lx), y=(0, Ly), z=(-Lz, 0))
 
 # Buoyancy and boundary conditions
 
@@ -220,10 +220,10 @@ dθdz_surface_layer = N²_surface_layer / (α * g)
 dθdz_thermocline   = N²_thermocline   / (α * g)
 dθdz_deep          = N²_deep          / (α * g)
 
-θ_bcs = FieldBoundaryConditions(top = BoundaryCondition(Flux, Qᶿ),
-                                bottom = BoundaryCondition(Gradient, dθdz_deep))
+θ_bcs = FieldBoundaryConditions(top = FluxBoundaryCondition(Qᶿ),
+                                bottom = GradientBoundaryCondition(dθdz_deep))
 
-u_bcs = FieldBoundaryConditions(top = BoundaryCondition(Flux, Qᵘ))
+u_bcs = FieldBoundaryConditions(top = FluxBoundaryCondition(Qᵘ))
 
 # Tracer forcing
 
@@ -232,11 +232,12 @@ u_bcs = FieldBoundaryConditions(top = BoundaryCondition(Flux, Qᵘ))
 # # Initial condition and sponge layer
 
 ## Fiddle with indices to get a correct discrete profile
-k_transition = searchsortedfirst(grid.zC, -surface_layer_depth)
-k_deep = searchsortedfirst(grid.zC, -(surface_layer_depth + thermocline_width))
+z = znodes(Center, grid)
+k_transition = searchsortedfirst(z, -surface_layer_depth)
+k_deep = searchsortedfirst(z, -(surface_layer_depth + thermocline_width))
 
-z_transition = grid.zC[k_transition]
-z_deep = grid.zC[k_deep]
+z_transition = z[k_transition]
+z_deep = z[k_deep]
 
 θ_surface = args["surface-temperature"]
 θ_transition = θ_surface + z_transition * dθdz_surface_layer
@@ -269,7 +270,8 @@ T_sponge = Relaxation(rate = 4/hour,
 
 @info "Building the wall model..."
 
-Cᴬᴹᴰ = SurfaceEnhancedModelConstant(grid.Δz, C₀ = 1/12, enhancement = 7, decay_scale = 4 * grid.Δz)
+Δz = grid.Δzᵃᵃᶜ
+Cᴬᴹᴰ = SurfaceEnhancedModelConstant(Δz, C₀ = 1/12, enhancement = 7, decay_scale = 4Δz)
 
 # # Instantiate Oceananigans.IncompressibleModel
 
@@ -338,17 +340,13 @@ set!(model, T = initial_temperature)
 
 @info "Conjuring the simulation..."
 
-# Adaptive time-stepping
-wizard = TimeStepWizard(cfl=0.8, Δt=1.0, max_change=1.1, min_Δt=0.01, max_Δt=30.0)
-
 stop_time = stop_hours * hour
-
-simulation = Simulation(model,
-                    Δt = wizard,
-             stop_time = stop_time,
-    iteration_interval = 10,
-              progress = SimulationProgressMessenger(wizard)
-)
+simulation = Simulation(model; Δt=1.0, stop_time)
+                    
+# Adaptive time-stepping
+wizard = TimeStepWizard(cfl=0.8, max_change=1.1, min_Δt=0.01, max_Δt=30.0)
+simulation.callbacks[:wizard] = Callback(wizard, IterationInterval(10))
+simulation.callbacks[:progress] = Callback(SimulationProgressMessenger(wizard), IterationInterval(10))
 
 # # Prepare Output
 
@@ -363,7 +361,7 @@ simulation.output_writers[:checkpointer] =
 @info "Squeezing out statistics..."
 
 # Prepare turbulence statistics
-k_xy_slice = searchsortedfirst(grid.zF[:], -slice_depth)
+k_xy_slice = searchsortedfirst(znodes(Face, grid), -slice_depth)
 
 b = BuoyancyField(model)
 p = sum(model.pressures)
@@ -394,7 +392,7 @@ tke_budget_statistics = turbulent_kinetic_energy_budget(model,
                                                         dissipation=dissipation)
 
 dynamics_statistics = Dict(:Ri => Field(∂z(B) / (∂z(U)^2 + ∂z(V)^2)))
-fields_to_output = merge(model.velocities, model.tracers, (e=e, ϵ=dissipation))
+fields_to_output = merge(model.velocities, model.tracers, (e=Field(e), ϵ=Field(dissipation)))
 statistics_to_output = merge(primitive_statistics, subfilter_flux_statistics, tke_budget_statistics, dynamics_statistics)
 
 @info "Garnishing output writers..."
