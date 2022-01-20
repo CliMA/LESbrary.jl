@@ -23,8 +23,8 @@ g = buoyancy.gravitational_acceleration
 Qᵀ = Qᵇ / (α * g)
 dTdz = N² / (α * g)
 
-T_bcs = FieldBoundaryConditions(top = BoundaryCondition(Flux, Qᵀ),
-                                bottom = BoundaryCondition(Gradient, dTdz))
+T_bcs = FieldBoundaryConditions(top = FluxBoundaryCondition(Qᵀ),
+                                bottom = GradientBoundaryCondition(dTdz))
 
 # LES Model
 

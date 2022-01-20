@@ -1,3 +1,5 @@
+include("runtests_preamble.jl")
+
 using LESbrary.TurbulenceStatistics:
     horizontally_averaged_tracers,
     velocity_covariances,
@@ -13,7 +15,7 @@ using LESbrary.TurbulenceStatistics:
     subfilter_tracer_fluxes,
     turbulent_kinetic_energy_budget
 
-using Oceananigans.AbstractOperations: AveragedField
+using Oceananigans.Fields: XYReducedField
 
 function output_works(simulation, output, output_name="")
     model = simulation.model
@@ -69,21 +71,21 @@ for arch in architectures
 
         tke_budget = turbulent_kinetic_energy_budget(model)
 
-        @test all(ϕ isa AveragedField for ϕ in values( C     ))
-        @test all(ϕ isa AveragedField for ϕ in values( u²    ))
-        @test all(ϕ isa AveragedField for ϕ in values( c²    ))
-        @test all(ϕ isa AveragedField for ϕ in values( u³    ))
-        @test all(ϕ isa AveragedField for ϕ in values( u³    ))
+        @test all(ϕ isa XYReducedField for ϕ in values( C     ))
+        @test all(ϕ isa XYReducedField for ϕ in values( u²    ))
+        @test all(ϕ isa XYReducedField for ϕ in values( c²    ))
+        @test all(ϕ isa XYReducedField for ϕ in values( u³    ))
+        @test all(ϕ isa XYReducedField for ϕ in values( u³    ))
 
-        @test all(ϕ isa AveragedField for ϕ in values( ψ¹    ))
-        @test all(ϕ isa AveragedField for ϕ in values( ψ²    ))
-        @test all(ϕ isa AveragedField for ϕ in values( ψ³    ))
+        @test all(ϕ isa XYReducedField for ϕ in values( ψ¹    ))
+        @test all(ϕ isa XYReducedField for ϕ in values( ψ²    ))
+        @test all(ϕ isa XYReducedField for ϕ in values( ψ³    ))
 
-        @test all(ϕ isa AveragedField for ϕ in values( ψ¹_ψ² ))
-        @test all(ϕ isa AveragedField for ϕ in values( ψ¹_ψ³ ))
+        @test all(ϕ isa XYReducedField for ϕ in values( ψ¹_ψ² ))
+        @test all(ϕ isa XYReducedField for ϕ in values( ψ¹_ψ³ ))
 
-        @test all(ϕ isa AveragedField for ϕ in values( Qᵘ    ))
-        @test all(ϕ isa AveragedField for ϕ in values( Qᶜ    ))
+        @test all(ϕ isa XYReducedField for ϕ in values( Qᵘ    ))
+        @test all(ϕ isa XYReducedField for ϕ in values( Qᶜ    ))
 
         @test output_works(simulation, C, "Horizontally averaged tracers")
         @test output_works(simulation, u², "Velocity covariances")

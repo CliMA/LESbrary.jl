@@ -1,3 +1,4 @@
+include("runtests_preamble.jl")
 include("run_script.jl")
 
 @testset "Examples" begin
