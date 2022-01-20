@@ -31,7 +31,6 @@ include("run_script.jl")
         ("Pkg.instantiate()", ""),
         ("using Pkg", ""),
         ("default = [32, 32, 32]", "default = [1, 1, 1]"),
-        ("GPU()", "CPU()"),
         ("if make_animation", "if false")
     ]
 
