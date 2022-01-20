@@ -32,7 +32,8 @@ T_bcs = FieldBoundaryConditions(top = FluxBoundaryCondition(Qᵀ),
 # Necessary to obtain a smooth temperature distribution.
 using LESbrary.NearSurfaceTurbulenceModels: SurfaceEnhancedModelConstant
 
-Cᴬᴹᴰ = SurfaceEnhancedModelConstant(grid.Δz, C₀ = 1/12, enhancement = 7, decay_scale = 4 * grid.Δz)
+Δz = grid.Δzᵃᵃᶜ
+Cᴬᴹᴰ = SurfaceEnhancedModelConstant(Δz, C₀ = 1/12, enhancement = 7, decay_scale = 4Δz)
 
 # Instantiate Oceananigans.NonhydrostaticModel
 
@@ -61,7 +62,7 @@ using LESbrary.Utils: SimulationProgressMessenger
 
 simulation = Simulation(model, Δt=2.0, stop_time=8hour)
 
-wizard = TimeStepWizard(cfl=1.5, Δt=2.0, max_change=1.1, max_Δt=30.0)
+wizard = TimeStepWizard(cfl=1.5, max_change=1.1, max_Δt=30.0)
 simulation.callbacks[:wizard] = Callback(wizard, IterationInterval(100))
 simulation.callbacks[:progress] = Callback(SimulationProgressMessenger(wizard), IterationInterval(100))
 
@@ -79,20 +80,19 @@ mkpath(data_directory)
 cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
 
 simulation.output_writers[:fields] = JLD2OutputWriter(model, merge(model.velocities, model.tracers);
-                                                           schedule = TimeInterval(4hour),
-                                                             prefix = prefix * "_fields",
-                                                                dir = data_directory,
-                                                       max_filesize = 2GiB,
-                                                              force = true)
+                                                      schedule = TimeInterval(4hour),
+                                                      prefix = prefix * "_fields",
+                                                      dir = data_directory,
+                                                      max_filesize = 2GiB,
+                                                      force = true)
 
 simulation.output_writers[:slices] = JLD2OutputWriter(model, merge(model.velocities, model.tracers),
-                                                           schedule = AveragedTimeInterval(1hour, window=15minute),
-                                                             prefix = prefix * "_slices",
-                                                       field_slicer = FieldSlicer(j=floor(Int, grid.Ny/2)),
-                                                                dir = data_directory,
-                                                       max_filesize = 2GiB,
-                                                              force = true)
-
+                                                      schedule = AveragedTimeInterval(1hour, window=15minute),
+                                                      prefix = prefix * "_slices",
+                                                      field_slicer = FieldSlicer(j=floor(Int, grid.Ny/2)),
+                                                      dir = data_directory,
+                                                      max_filesize = 2GiB,
+                                                      force = true)
 
 # Horizontally-averaged turbulence statistics
 turbulence_statistics = LESbrary.TurbulenceStatistics.first_through_second_order(model)
@@ -101,9 +101,9 @@ tke_budget_statistics = LESbrary.TurbulenceStatistics.turbulent_kinetic_energy_b
 simulation.output_writers[:statistics] =
     JLD2OutputWriter(model, merge(turbulence_statistics, tke_budget_statistics),
                      schedule = AveragedTimeInterval(1hour, window=15minute),
-                       prefix = prefix * "_statistics",
-                          dir = data_directory,
-                        force = true)
+                     prefix = prefix * "_statistics",
+                     dir = data_directory,
+                     force = true)
 
 # # Run
 
@@ -144,7 +144,7 @@ advective_flux = - file["timeseries/tke_advective_flux/$iter"][1, 1, :]
 
 transport = zeros(grid.Nz)
 transport = (pressure_flux[2:end] .+ advective_flux[2:end]
-             .- pressure_flux[1:end-1] .- advective_flux[1:end-1]) / grid.Δz
+             .- pressure_flux[1:end-1] .- advective_flux[1:end-1]) / Δz
 
 ## For mixing length calculation
 wT = file["timeseries/wT/$iter"][1, 1, 2:end-1]
@@ -154,7 +154,7 @@ close(file)
 ## Post-process the data to determine the mixing length
 
 ## Mixing length, computed at cell interfaces and omitting boundaries
-Tz = @. (T[2:end] - T[1:end-1]) / grid.Δz
+Tz = @. (T[2:end] - T[1:end-1]) / Δz
 bz = @. α * g * Tz
 eᶠ = @. (e[1:end-1] + e[2:end]) / 2
 

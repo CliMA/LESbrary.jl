@@ -1,21 +1,14 @@
-mutable struct SimulationProgressMessenger{T, A, D, Δ} <: Function
+mutable struct SimulationProgressMessenger{T} <: Function
     wall_time₀ :: T  # Wall time at simulation start
-    wall_time⁻ :: T  # Wall time at previous calback
-       adv_cfl :: A
-       dif_cfl :: D
-            Δt :: Δ
+    wall_time⁻ :: T  # Wall time at previous callback
+    iteration⁻ :: Int  # Iteration at previous callback
 end
 
 SimulationProgressMessenger(Δt) =
     SimulationProgressMessenger(
                       1e-9 * time_ns(),
                       1e-9 * time_ns(),
-                      AdvectiveCFL(Δt),
-                      DiffusiveCFL(Δt),
-                      Δt)
-
-get_Δt(Δt) = Δt
-get_Δt(wizard::TimeStepWizard) = wizard.Δt
+                      0)
 
 function (pm::SimulationProgressMessenger)(simulation)
     model = simulation.model
@@ -26,8 +19,11 @@ function (pm::SimulationProgressMessenger)(simulation)
 
     current_wall_time = 1e-9 * time_ns() - pm.wall_time₀
     time_since_last_callback = 1e-9 * time_ns() - pm.wall_time⁻
-    wall_time_per_step = time_since_last_callback / simulation.iteration_interval
+    iterations_since_last_callback = i - pm.iteration⁻
+    wall_time_per_step = time_since_last_callback / iterations_since_last_callback
+
     pm.wall_time⁻ = 1e-9 * time_ns()
+    pm.iteration⁻ = i
 
     u_max = maximum(abs, model.velocities.u)
     v_max = maximum(abs, model.velocities.v)
@@ -35,10 +31,11 @@ function (pm::SimulationProgressMessenger)(simulation)
     ν_max = maximum(abs, model.diffusivity_fields.νₑ)
 
     @info @sprintf("[%06.2f%%] iteration: % 6d, time: % 10s, Δt: % 10s, wall time: % 8s (% 8s / time step)",
-                    progress, i, prettytime(t), prettytime(get_Δt(pm.Δt)), prettytime(current_wall_time), prettytime(wall_time_per_step))
+                    progress, i, prettytime(t), prettytime(simulation.Δt),
+                    prettytime(current_wall_time), prettytime(wall_time_per_step))
 
-    @info @sprintf("          └── u⃗_max: (%.2e, %.2e, %.2e) m/s, CFL: %.2e, ν_max: %.2e m²/s, νCFL: %.2e",
-                    u_max, v_max, w_max, pm.adv_cfl(model), ν_max, pm.dif_cfl(model))
+    @info @sprintf("          └── u⃗_max: (%.2e, %.2e, %.2e) m/s, ν_max: %.2e m²/s",
+                   u_max, v_max, w_max, ν_max)
 
     @info ""
 
