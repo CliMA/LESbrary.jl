@@ -1,3 +1,5 @@
+include("runtests_preamble.jl")
+
 using LESbrary.TurbulenceStatistics:
     horizontally_averaged_tracers,
     velocity_covariances,
@@ -13,6 +15,8 @@ using LESbrary.TurbulenceStatistics:
     subfilter_tracer_fluxes,
     turbulent_kinetic_energy_budget
 
+using Oceananigans.Fields: XYReducedField
+
 function output_works(simulation, output, output_name="")
     model = simulation.model
     model.clock.time = 0
@@ -20,9 +24,9 @@ function output_works(simulation, output, output_name="")
     simulation.stop_iteration = 1
 
     simulation.output_writers[:test] = JLD2OutputWriter(model, output,
-                                                        schedule=IterationInterval(1),
+                                                        schedule = IterationInterval(1),
                                                         prefix = "test",
-                                                            dir = ".")
+                                                        dir = ".")
 
     success = try
         run!(simulation)
@@ -42,8 +46,9 @@ for arch in architectures
     @testset "Turbulence Statistics [$(typeof(arch))]" begin
         @info "Testing turbulence statistics [$(typeof(arch))]..."
 
-        model = IncompressibleModel(architecture = arch,
-                                    grid = RegularRectilinearGrid(size=(1, 1, 1), extent=(1, 1, 1)),
+        model = NonhydrostaticModel(grid = RectilinearGrid(arch, size=(1, 1, 1), extent=(1, 1, 1)),
+                                    tracers = :b,
+                                    buoyancy = BuoyancyTracer(),
                                     closure = AnisotropicMinimumDissipation())
 
         simulation = Simulation(model, Δt=1.0, stop_iteration=1)
@@ -66,21 +71,21 @@ for arch in architectures
 
         tke_budget = turbulent_kinetic_energy_budget(model)
 
-        @test all(ϕ isa AveragedField for ϕ in values( C     ))
-        @test all(ϕ isa AveragedField for ϕ in values( u²    ))
-        @test all(ϕ isa AveragedField for ϕ in values( c²    ))
-        @test all(ϕ isa AveragedField for ϕ in values( u³    ))
-        @test all(ϕ isa AveragedField for ϕ in values( u³    ))
+        @test all(ϕ isa XYReducedField for ϕ in values( C     ))
+        @test all(ϕ isa XYReducedField for ϕ in values( u²    ))
+        @test all(ϕ isa XYReducedField for ϕ in values( c²    ))
+        @test all(ϕ isa XYReducedField for ϕ in values( u³    ))
+        @test all(ϕ isa XYReducedField for ϕ in values( u³    ))
 
-        @test all(ϕ isa AveragedField for ϕ in values( ψ¹    ))
-        @test all(ϕ isa AveragedField for ϕ in values( ψ²    ))
-        @test all(ϕ isa AveragedField for ϕ in values( ψ³    ))
+        @test all(ϕ isa XYReducedField for ϕ in values( ψ¹    ))
+        @test all(ϕ isa XYReducedField for ϕ in values( ψ²    ))
+        @test all(ϕ isa XYReducedField for ϕ in values( ψ³    ))
 
-        @test all(ϕ isa AveragedField for ϕ in values( ψ¹_ψ² ))
-        @test all(ϕ isa AveragedField for ϕ in values( ψ¹_ψ³ ))
+        @test all(ϕ isa XYReducedField for ϕ in values( ψ¹_ψ² ))
+        @test all(ϕ isa XYReducedField for ϕ in values( ψ¹_ψ³ ))
 
-        @test all(ϕ isa AveragedField for ϕ in values( Qᵘ    ))
-        @test all(ϕ isa AveragedField for ϕ in values( Qᶜ    ))
+        @test all(ϕ isa XYReducedField for ϕ in values( Qᵘ    ))
+        @test all(ϕ isa XYReducedField for ϕ in values( Qᶜ    ))
 
         @test output_works(simulation, C, "Horizontally averaged tracers")
         @test output_works(simulation, u², "Velocity covariances")

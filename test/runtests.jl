@@ -1,14 +1,4 @@
-using Test
-using Printf
-using Logging
-using Oceananigans
-using Oceananigans.Fields
-using Oceananigans.OutputWriters
-using LESbrary
-
-Logging.global_logger(OceananigansLogger())
-
-architectures = [CPU()]
+include("runtests_preamble.jl")
 
 @testset "LESbrary" begin
     include("test_fit_cubic.jl")

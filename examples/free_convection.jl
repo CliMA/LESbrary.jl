@@ -3,17 +3,13 @@
 # This script runs a simulation of convection driven by cooling at the
 # surface of an idealized, stratified, rotating ocean surface boundary layer.
 
-using LESbrary, Printf, Statistics
+using LESbrary, Printf, Statistics, Oceananigans, Oceananigans.Units
 
 # Domain
 
-using Oceananigans.Grids
-
-grid = RegularRectilinearGrid(size=(32, 32, 32), x=(0, 128), y=(0, 128), z=(-64, 0))
+grid = RectilinearGrid(CPU(), size=(32, 32, 32), x=(0, 128), y=(0, 128), z=(-64, 0))
 
 # Buoyancy and boundary conditions
-
-using Oceananigans.BuoyancyModels, Oceananigans.BoundaryConditions
 
 Qᵇ = 1e-7
 N² = 1e-5
@@ -27,8 +23,8 @@ g = buoyancy.gravitational_acceleration
 Qᵀ = Qᵇ / (α * g)
 dTdz = N² / (α * g)
 
-T_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᵀ),
-                                       bottom = BoundaryCondition(Gradient, dTdz))
+T_bcs = FieldBoundaryConditions(top = FluxBoundaryCondition(Qᵀ),
+                                bottom = GradientBoundaryCondition(dTdz))
 
 # LES Model
 
@@ -36,41 +32,39 @@ T_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᵀ),
 # Necessary to obtain a smooth temperature distribution.
 using LESbrary.NearSurfaceTurbulenceModels: SurfaceEnhancedModelConstant
 
-Cᴬᴹᴰ = SurfaceEnhancedModelConstant(grid.Δz, C₀ = 1/12, enhancement = 7, decay_scale = 4 * grid.Δz)
+Δz = grid.Δzᵃᵃᶜ
+Cᴬᴹᴰ = SurfaceEnhancedModelConstant(Δz, C₀ = 1/12, enhancement = 7, decay_scale = 4Δz)
 
-# Instantiate Oceananigans.IncompressibleModel
+# Instantiate Oceananigans.NonhydrostaticModel
 
 using Oceananigans
 using Oceananigans.Advection: WENO5
 
-model = IncompressibleModel(architecture = CPU(),
-                             timestepper = :RungeKutta3,
-                               advection = WENO5(),
-                                    grid = grid,
-                                 tracers = :T,
-                                buoyancy = buoyancy,
-                                coriolis = FPlane(f=1e-4),
-                                 closure = AnisotropicMinimumDissipation(C=Cᴬᴹᴰ),
-                     boundary_conditions = (T=T_bcs,))
+model = NonhydrostaticModel(; grid, buoyancy,
+                            timestepper = :RungeKutta3,
+                            advection = WENO5(),
+                            tracers = :T,
+                            coriolis = FPlane(f=1e-4),
+                            closure = AnisotropicMinimumDissipation(C=Cᴬᴹᴰ),
+                            boundary_conditions = (; T=T_bcs))
 
 # # Initial condition
 
 Ξ(z) = rand() * exp(z / 8)
-
 Tᵢ(x, y, z) = dTdz * z + 1e-6 * Ξ(z) * dTdz * grid.Lz
-
 set!(model, T=Tᵢ)
 
 # # Prepare the simulation
 
-using Oceananigans.Utils: hour, minute
 using LESbrary.Utils: SimulationProgressMessenger
 
 # Adaptive time-stepping
-wizard = TimeStepWizard(cfl=1.5, Δt=2.0, max_change=1.1, max_Δt=30.0)
 
-simulation = Simulation(model, Δt=wizard, stop_time=8hour, iteration_interval=100,
-                        progress=SimulationProgressMessenger(wizard))
+simulation = Simulation(model, Δt=2.0, stop_time=8hour)
+
+wizard = TimeStepWizard(cfl=1.5, max_change=1.1, max_Δt=30.0)
+simulation.callbacks[:wizard] = Callback(wizard, IterationInterval(100))
+simulation.callbacks[:progress] = Callback(SimulationProgressMessenger(wizard), IterationInterval(100))
 
 # Prepare Output
 
@@ -86,20 +80,19 @@ mkpath(data_directory)
 cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
 
 simulation.output_writers[:fields] = JLD2OutputWriter(model, merge(model.velocities, model.tracers);
-                                                           schedule = TimeInterval(4hour),
-                                                             prefix = prefix * "_fields",
-                                                                dir = data_directory,
-                                                       max_filesize = 2GiB,
-                                                              force = true)
+                                                      schedule = TimeInterval(4hour),
+                                                      prefix = prefix * "_fields",
+                                                      dir = data_directory,
+                                                      max_filesize = 2GiB,
+                                                      force = true)
 
 simulation.output_writers[:slices] = JLD2OutputWriter(model, merge(model.velocities, model.tracers),
-                                                           schedule = AveragedTimeInterval(1hour, window=15minute),
-                                                             prefix = prefix * "_slices",
-                                                       field_slicer = FieldSlicer(j=floor(Int, grid.Ny/2)),
-                                                                dir = data_directory,
-                                                       max_filesize = 2GiB,
-                                                              force = true)
-
+                                                      schedule = AveragedTimeInterval(1hour, window=15minute),
+                                                      prefix = prefix * "_slices",
+                                                      field_slicer = FieldSlicer(j=floor(Int, grid.Ny/2)),
+                                                      dir = data_directory,
+                                                      max_filesize = 2GiB,
+                                                      force = true)
 
 # Horizontally-averaged turbulence statistics
 turbulence_statistics = LESbrary.TurbulenceStatistics.first_through_second_order(model)
@@ -108,9 +101,9 @@ tke_budget_statistics = LESbrary.TurbulenceStatistics.turbulent_kinetic_energy_b
 simulation.output_writers[:statistics] =
     JLD2OutputWriter(model, merge(turbulence_statistics, tke_budget_statistics),
                      schedule = AveragedTimeInterval(1hour, window=15minute),
-                       prefix = prefix * "_statistics",
-                          dir = data_directory,
-                        force = true)
+                     prefix = prefix * "_statistics",
+                     dir = data_directory,
+                     force = true)
 
 # # Run
 
@@ -151,7 +144,7 @@ advective_flux = - file["timeseries/tke_advective_flux/$iter"][1, 1, :]
 
 transport = zeros(grid.Nz)
 transport = (pressure_flux[2:end] .+ advective_flux[2:end]
-             .- pressure_flux[1:end-1] .- advective_flux[1:end-1]) / grid.Δz
+             .- pressure_flux[1:end-1] .- advective_flux[1:end-1]) / Δz
 
 ## For mixing length calculation
 wT = file["timeseries/wT/$iter"][1, 1, 2:end-1]
@@ -161,7 +154,7 @@ close(file)
 ## Post-process the data to determine the mixing length
 
 ## Mixing length, computed at cell interfaces and omitting boundaries
-Tz = @. (T[2:end] - T[1:end-1]) / grid.Δz
+Tz = @. (T[2:end] - T[1:end-1]) / Δz
 bz = @. α * g * Tz
 eᶠ = @. (e[1:end-1] + e[2:end]) / 2
 
@@ -204,3 +197,4 @@ mixing_length = plot([ℓ_measured ℓ_estimated], zF[2:end-1], size = plot_size
                                                            label = ["measured" "estimated"])
 
 plot(temperature, variances, budget, mixing_length, layout=(1, 4))
+

@@ -19,24 +19,13 @@ using Plots
 using ArgParse
 
 using Oceananigans
-using Oceananigans.Advection
-using Oceananigans.Grids
-using Oceananigans.Fields
-using Oceananigans.BuoyancyModels
-using Oceananigans.BoundaryConditions
-using Oceananigans.Diagnostics
-using Oceananigans.OutputWriters
-using Oceananigans.Utils
+using Oceananigans.Units
+using Oceananigans.BuoyancyModels: g_Earth
 
 using LESbrary
-
-using Oceananigans.BuoyancyModels: g_Earth
-using Oceananigans.Fields: PressureField
-using Oceananigans.BuoyancyModels: BuoyancyTracer
-using Oceananigans.SurfaceWaves: UniformStokesDrift
-
-using LESbrary.TurbulenceStatistics: TurbulentKineticEnergy, ShearProduction, ViscousDissipation
+using LESbrary.TurbulenceStatistics: TurbulentKineticEnergy, ViscousDissipation
 using LESbrary.TurbulenceStatistics: first_through_second_order, turbulent_kinetic_energy_budget
+using Oceanostics.TKEBudgetTerms: ZShearProduction
 
 "Returns a dictionary of command line arguments."
 function parse_command_line_arguments()
@@ -121,16 +110,16 @@ uˢ(z) = Uˢ * exp(2wavenumber * z)
 ##### Grid
 #####
 
-grid = RegularRectilinearGrid(size=(Nh, Nh, Nz), extent=(Lh, Lh, Lz))
+grid = RectilinearGrid(CPU(), size=(Nh, Nh, Nz), extent=(Lh, Lh, Lz))
 
 #####
 ##### Boundary conditions
 #####
 
-u_bcs = UVelocityBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᵘ))
+u_bcs = FieldBoundaryConditions(top = FluxBoundaryCondition(Qᵘ))
 
-b_bcs = TracerBoundaryConditions(grid, top = BoundaryCondition(Flux, Qᵇ),
-                                       bottom = BoundaryCondition(Gradient, N²))
+b_bcs = FieldBoundaryConditions(top = FluxBoundaryCondition(Qᵇ),
+                                bottom = GradientBoundaryCondition(N²))
 
 #####
 ##### Sponge layer
@@ -150,19 +139,15 @@ b_sponge = Relaxation(rate = 1/hour,
 
 advection = eval(args["advection-scheme"])()
 
-model = IncompressibleModel(
-           architecture = GPU(),
-            timestepper = :RungeKutta3,
-              advection = advection,
-                   grid = grid,
-                tracers = :b,
-               buoyancy = BuoyancyTracer(),
-               coriolis = FPlane(f=f),
-                closure = AnisotropicMinimumDissipation(),
-          surface_waves = UniformStokesDrift(∂z_uˢ=∂z_uˢ),
-    boundary_conditions = (u=u_bcs, b=b_bcs),
-                forcing = (u=u_sponge, v=v_sponge, w=w_sponge, b=b_sponge),
-)
+model = NonhydrostaticModel(; advection, grid,
+                            timestepper = :RungeKutta3,
+                            tracers = :b,
+                            buoyancy = BuoyancyTracer(),
+                            coriolis = FPlane(f=f),
+                            closure = AnisotropicMinimumDissipation(),
+                            stokes_drift = UniformStokesDrift(∂z_uˢ=∂z_uˢ),
+                            boundary_conditions = (u=u_bcs, b=b_bcs),
+                            forcing = (u=u_sponge, v=v_sponge, w=w_sponge, b=b_sponge))
 
 #####
 ##### Initial conditions: Stokes drift + stratification + noise
@@ -182,23 +167,26 @@ set!(model, u=uᵢ, w=wᵢ, b=bᵢ)
 ##### Simulation setup
 #####
 
-wizard = TimeStepWizard(cfl=1.0, Δt=1.0, max_change=1.1, max_Δt=30.0)
+simulation = Simulation(model; Δt=1.0, stop_time)
 
-umax = FieldMaximum(abs, model.velocities.u)
-vmax = FieldMaximum(abs, model.velocities.v)
-wmax = FieldMaximum(abs, model.velocities.w)
+wizard = TimeStepWizard(cfl=1.0, max_change=1.1, max_Δt=30.0)
+simulation.callbacks[:wizard] = Callback(wizard, IterationInterval(10))
 
 wall_clock = [time_ns()]
 
 function print_progress(simulation)
     model = simulation.model
 
+    umax = maximum(abs, model.velocities.u)
+    vmax = maximum(abs, model.velocities.v)
+    wmax = maximum(abs, model.velocities.w)
+
     ## Print a progress message
     msg = @sprintf("i: %04d, t: %s, Δt: %s, umax = (%.1e, %.1e, %.1e) ms⁻¹, wall time: %s\n",
-                   model.clock.iteration,
-                   prettytime(model.clock.time),
-                   prettytime(wizard.Δt),
-                   umax(), vmax(), wmax(),
+                   iteration(simulation),
+                   prettytime(simulation),
+                   prettytime(simulation.Δt),
+                   umax, vmax, wmax,
                    prettytime(1e-9 * (time_ns() - wall_clock[1]))
                   )
 
@@ -209,10 +197,7 @@ function print_progress(simulation)
     return nothing
 end
 
-simulation = Simulation(model, iteration_interval = 10,
-                                               Δt = wizard,
-                                        stop_time = stop_time,
-                                         progress = print_progress)
+simulation.callbacks[:progress] = Callback(print_progress, IterationInterval(10))
 
 #####
 ##### Output setup
@@ -224,9 +209,9 @@ data_directory = joinpath(@__DIR__, "..", "data", prefix) # save data in /data/p
 # "Primitive" statistics
 
 b = BuoyancyField(model)
-p = PressureField(model)
-w_scratch = ZFaceField(model.architecture, model.grid)
-c_scratch = CenterField(model.architecture, model.grid)
+p = model.pressures.pHY′ + model.pressures.pNHS
+w_scratch = ZFaceField(model.grid)
+c_scratch = CenterField(model.grid)
 
 primitive_statistics = first_through_second_order(model, b=b, p=p, w_scratch=w_scratch, c_scratch=c_scratch)
 
@@ -236,8 +221,8 @@ V = primitive_statistics[:v]
 # Turbulent kinetic energy budget terms
 
 e = TurbulentKineticEnergy(model, U=U, V=V)
-shear_production = ShearProduction(model, data=c_scratch.data, U=U, V=V)
-dissipation = ViscousDissipation(model, data=c_scratch.data)
+shear_production = ZShearProduction(model, U=U, V=V)
+dissipation = ViscousDissipation(model)
 
 tke_budget_statistics = turbulent_kinetic_energy_budget(model, b=b, p=p, U=U, V=V, e=e,
                                                         shear_production=shear_production, dissipation=dissipation)
@@ -245,14 +230,17 @@ tke_budget_statistics = turbulent_kinetic_energy_budget(model, b=b, p=p, U=U, V=
 statistics_to_output = merge(primitive_statistics, tke_budget_statistics)
 
 fields_to_output = merge(model.velocities, model.tracers,
-                         (νₑ=model.diffusivities.νₑ, e=e, sp=shear_production, ϵ=dissipation))
+                         (νₑ = model.diffusivity_fields.νₑ,
+                           e = Field(e),
+                          sp = Field(shear_production),
+                           ϵ = Field(dissipation)))
 
 # Output configured for pickup
 
 pickup = args["pickup"]
 force = pickup ? false : true
 
-k_xy_slice = searchsortedfirst(grid.zF[:], -slice_depth)
+k_xy_slice = searchsortedfirst(znodes(Face, grid), -slice_depth)
 
 simulation.output_writers[:checkpointer] =
     Checkpointer(model, schedule = TimeInterval(26hour), prefix = prefix * "_checkpointer", dir = data_directory)
@@ -418,8 +406,9 @@ pressure_flux = statistics_file["timeseries/tke_pressure_flux/$last_iteration"][
 
 close(statistics_file)
 
-pressure_flux_divergence = @. (pressure_flux[2:end] - pressure_flux[1:end-1]) ./ grid.Δz
-advective_flux_divergence = @. (advective_flux[2:end] - advective_flux[1:end-1]) ./ grid.Δz
+Δz = grid.Δzᵃᵃᶜ
+pressure_flux_divergence = @. (pressure_flux[2:end] - pressure_flux[1:end-1]) ./ Δz
+advective_flux_divergence = @. (advective_flux[2:end] - advective_flux[1:end-1]) ./ Δz
 
 tendency = @. - pressure_flux_divergence - advective_flux_divergence + shear_production + buoyancy_flux - dissipation
 
