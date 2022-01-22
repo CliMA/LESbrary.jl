@@ -16,7 +16,7 @@ using ArgParse
 using JLD2
 using NCDatasets
 using GeoData
-using CairoMakie
+# using CairoMakie
 
 using LESbrary
 using Oceanostics
@@ -197,7 +197,7 @@ end
 
 @info "Mapping grid..."
 
-grid = RectilinearGrid(CPU(), size=(Nx, Ny, Nz), x=(0, Lx), y=(0, Ly), z=(-Lz, 0))
+grid = RectilinearGrid(GPU(), size=(Nx, Ny, Nz), x=(0, Lx), y=(0, Ly), z=(-Lz, 0))
 
 # Buoyancy and boundary conditions
 
