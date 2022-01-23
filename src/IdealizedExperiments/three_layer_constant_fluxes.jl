@@ -12,8 +12,11 @@ using Oceanostics.TKEBudgetTerms: TurbulentKineticEnergy, ZShearProduction
 
 using LESbrary.Utils: SimulationProgressMessenger, fit_cubic, poly
 using LESbrary.NearSurfaceTurbulenceModels: SurfaceEnhancedModelConstant
-using LESbrary.TurbulenceStatistics: first_through_second_order, turbulent_kinetic_energy_budget,
-                                     subfilter_momentum_fluxes, subfilter_tracer_fluxes,
+using LESbrary.TurbulenceStatistics: first_order_statistics,
+                                     first_through_second_order,
+                                     turbulent_kinetic_energy_budget,
+                                     subfilter_momentum_fluxes,
+                                     subfilter_tracer_fluxes,
                                      ViscousDissipation
 
 try
@@ -26,29 +29,41 @@ end
 
 Logging.global_logger(OceananigansLogger())
 
-function three_layer_constant_fluxes_simulation(;
-                                                name = "",
-                                                size = (32, 32, 32),
-                                                extent = (512meters, 512meters, 256meters),
-                                                architecture = CPU(),
-                                                stop_time = 0.1hours,
-                                                f = 1e-4,
-                                                buoyancy_flux = 1e-8,
-                                                momentum_flux = -1e-4,
-                                                thermocline_type = "linear",
-                                                surface_layer_depth = 48.0,
-                                                thermocline_width = 24.0,
-                                                surface_layer_buoyancy_gradient = 2e-6,
-                                                thermocline_buoyancy_gradient = 1e-5,
-                                                deep_buoyancy_gradient = 2e-6,
-                                                surface_temperature = 20.0,
-                                                pickup = false,
-                                                jld2_output = true,
-                                                netcdf_output = false,
-                                                snapshot_time_interval = 10minutes,
-                                                averages_time_interval = 3hours,
-                                                averages_time_window = 15minutes,
-                                                time_averaged_statistics = true)
+@inline passive_tracer_forcing(x, y, z, t, p) = p.μ⁺ * exp(-(z - p.z₀)^2 / (2 * p.λ^2)) - p.μ⁻
+
+# Code credit: https://discourse.julialang.org/t/collecting-all-output-from-shell-commands/15592
+function execute(cmd::Cmd)
+    out, err = Pipe(), Pipe()
+    process = run(pipeline(ignorestatus(cmd), stdout=out, stderr=err))
+    close(out.in)
+    close(err.in)
+    return (stdout = out |> read |> String, stderr = err |> read |> String, code = process.exitcode)
+end
+
+function run_three_layer_constant_fluxes_simulation(;
+    name = "",
+    size = (32, 32, 32),
+    extent = (512meters, 512meters, 256meters),
+    architecture = CPU(),
+    stop_time = 0.1hours,
+    f = 1e-4,
+    buoyancy_flux = 1e-8,
+    momentum_flux = -1e-4,
+    thermocline_type = "linear",
+    surface_layer_depth = 48.0,
+    thermocline_width = 24.0,
+    surface_layer_buoyancy_gradient = 2e-6,
+    thermocline_buoyancy_gradient = 1e-5,
+    deep_buoyancy_gradient = 2e-6,
+    surface_temperature = 20.0,
+    pickup = false,
+    jld2_output = true,
+    netcdf_output = false,
+    snapshot_time_interval = 10minutes,
+    averages_time_interval = 3hours,
+    averages_time_window = 15minutes,
+    time_averaged_statistics = false,
+    data_directory = joinpath(pwd(), "data"))
 
     Nx, Ny, Nz = size
     Lx, Ly, Lz = extent
@@ -61,17 +76,7 @@ function three_layer_constant_fluxes_simulation(;
     prefix = @sprintf("three_layer_constant_fluxes_%s_hr%d_Qu%.1e_Qb%.1e_f%.1e_Nh%d_Nz%d_",
                       thermocline_type, stop_hours, abs(Qᵘ), Qᵇ, f, Nx, Nz)
     
-    data_directory = joinpath(@__DIR__, "..", "data", prefix * name) # save data in /data/prefix
-    
-    # Copy this file into the directory with data
-    mkpath(data_directory)
-    cp(@__FILE__, joinpath(data_directory, basename(@__FILE__)), force=true)
-    
-    # Save command line arguments used to an executable bash script
-    open(joinpath(data_directory, "run_three_layer_constant_fluxes.sh"), "w") do io
-        write(io, "#!/bin/sh\n")
-        write(io, "julia " * basename(@__FILE__) * " " * join(ARGS, " ") * "\n")
-    end
+    data_directory = joinpath(data_directory, "data", prefix * name) # save data in /data/prefix
     
     @info "Mapping grid..."
     
@@ -119,8 +124,6 @@ function three_layer_constant_fluxes_simulation(;
     θ_surface = surface_temperature
     θ_transition = θ_surface + z_transition * dθdz_surface_layer
     θ_deep = θ_transition + (z_deep - z_transition) * dθdz_thermocline
-    
-    @inline passive_tracer_forcing(x, y, z, t, p) = p.μ⁺ * exp(-(z - p.z₀)^2 / (2 * p.λ^2)) - p.μ⁻
     
     λ = 4.0
     μ⁺ = 1 / 6hour
@@ -238,14 +241,15 @@ function three_layer_constant_fluxes_simulation(;
     k_xy_slice = searchsortedfirst(znodes(Face, grid), -slice_depth)
     
     b = BuoyancyField(model)
-    p = sum(model.pressures)
+    p = Field(sum(model.pressures))
     
     ccc_scratch = Field{Center, Center, Center}(model.grid)
     ccf_scratch = Field{Center, Center, Face}(model.grid)
     fcf_scratch = Field{Face, Center, Face}(model.grid)
     cff_scratch = Field{Center, Face, Face}(model.grid)
     
-    primitive_statistics = first_through_second_order(model, b=b, p=p, w_scratch=ccf_scratch, c_scratch=ccc_scratch)
+    #primitive_statistics = first_through_second_order(model, b=b, p=p, w_scratch=ccf_scratch, c_scratch=ccc_scratch)
+    primitive_statistics = first_order_statistics(model, b=b, p=p, w_scratch=ccf_scratch, c_scratch=ccc_scratch)
     
     subfilter_flux_statistics = merge(
         subfilter_momentum_fluxes(model, uz_scratch=ccf_scratch, vz_scratch=cff_scratch, c_scratch=ccc_scratch),
@@ -256,9 +260,9 @@ function three_layer_constant_fluxes_simulation(;
     V = primitive_statistics[:v]
     B = primitive_statistics[:b]
     
-    e = TurbulentKineticEnergy(model, U=U, V=V)
-    shear_production = ZShearProduction(model, U=U, V=V)
-    dissipation = ViscousDissipation(model)
+    e = Field(TurbulentKineticEnergy(model, U=U, V=V))
+    shear_production = Field(ZShearProduction(model, U=U, V=V))
+    dissipation = Field(ViscousDissipation(model))
     
     tke_budget_statistics = turbulent_kinetic_energy_budget(model,
                                                             b=b, p=p, U=U, V=V, e=e,
@@ -266,19 +270,17 @@ function three_layer_constant_fluxes_simulation(;
                                                             dissipation=dissipation)
     
     dynamics_statistics = Dict(:Ri => Field(∂z(B) / (∂z(U)^2 + ∂z(V)^2)))
-    fields_to_output = merge(model.velocities, model.tracers, (e=Field(e), ϵ=Field(dissipation)))
-    statistics_to_output = merge(primitive_statistics, subfilter_flux_statistics, tke_budget_statistics, dynamics_statistics)
-    
+    fields_to_output = merge(model.velocities, model.tracers, (e=e, ϵ=dissipation))
+
+                                 
+    statistics_to_output = merge(primitive_statistics,
+                                 subfilter_flux_statistics,
+                                 tke_budget_statistics,
+                                 dynamics_statistics)
+
+    #statistics_to_output = merge(subfilter_flux_statistics, tke_budget_statistics)
+
     @info "Garnishing output writers..."
-    
-    # Code credit: https://discourse.julialang.org/t/collecting-all-output-from-shell-commands/15592
-    function execute(cmd::Cmd)
-        out, err = Pipe(), Pipe()
-        process = run(pipeline(ignorestatus(cmd), stdout=out, stderr=err))
-        close(out.in)
-        close(err.in)
-        return (stdout = out |> read |> String, stderr = err |> read |> String, code = process.exitcode)
-    end
     
     global_attributes = (
         LESbrary_jl_commit_SHA1 = execute(`git rev-parse HEAD`).stdout |> strip,
@@ -323,51 +325,53 @@ function three_layer_constant_fluxes_simulation(;
     if jld2_output
         simulation.output_writers[Symbol(name, "_xy_jld2")] =
             JLD2OutputWriter(model, fields_to_output,
-                                      dir = data_directory,
-                                   prefix = name * "xy_slice",
-                                 schedule = TimeInterval(snapshot_time_interval),
+                             dir = data_directory,
+                             prefix = name * "_xy_slice",
+                             schedule = TimeInterval(snapshot_time_interval),
                              field_slicer = FieldSlicer(k=k_xy_slice, with_halos=true),
-                                    force = force,
-                                     init = init_save_some_metadata!)
+                             force = force,
+                             init = init_save_some_metadata!)
 
         simulation.output_writers[Symbol(name, "_xz_jld2")] =
             JLD2OutputWriter(model, fields_to_output,
-                                      dir = data_directory,
-                                   prefix = name * "xz_slice",
-                                 schedule = TimeInterval(snapshot_time_interval),
+                             dir = data_directory,
+                             prefix = name * "_xz_slice",
+                             schedule = TimeInterval(snapshot_time_interval),
                              field_slicer = FieldSlicer(j=1, with_halos=true),
-                                    force = force,
-                                     init = init_save_some_metadata!)
+                             force = force,
+                             init = init_save_some_metadata!)
 
         simulation.output_writers[Symbol(name, "_yz_jld2")] =
             JLD2OutputWriter(model, fields_to_output,
-                                      dir = data_directory,
-                                   prefix = name * "yz_slice",
-                                 schedule = TimeInterval(snapshot_time_interval),
+                             dir = data_directory,
+                             prefix = name * "_yz_slice",
+                             schedule = TimeInterval(snapshot_time_interval),
                              field_slicer = FieldSlicer(i=1, with_halos=true),
-                                    force = force,
-                                     init = init_save_some_metadata!)
+                             force = force,
+                             init = init_save_some_metadata!)
 
         simulation.output_writers[Symbol(name, "_stats_jld2")] =
             JLD2OutputWriter(model, statistics_to_output,
-                                      dir = data_directory,
-                                   prefix = name * "instantaneous_statistics",
-                                 schedule = TimeInterval(snapshot_time_interval),
-                             field_slicer = FieldSlicer(with_halos=true),
-                                    force = force,
-                                     init = init_save_some_metadata!)
+                             dir = data_directory,
+                             prefix = name * "_instantaneous_statistics",
+                             schedule = TimeInterval(snapshot_time_interval),
+                             field_slicer = nothing,
+                             force = force,
+                             init = init_save_some_metadata!)
 
+        #=
         if time_averaged_statistics
             simulation.output_writers[Symbol(name, "_averaged_stats_jld2")] =
                 JLD2OutputWriter(model, statistics_to_output,
-                                          dir = data_directory,
-                                       prefix = name * "time_averaged_statistics",
-                                     schedule = AveragedTimeInterval(averages_time_interval,
-                                                                     window = averages_time_window),
-                                 field_slicer = FieldSlicer(with_halos=true),
-                                        force = force,
-                                         init = init_save_some_metadata!)
+                                 dir = data_directory,
+                                 prefix = name * "_time_averaged_statistics",
+                                 schedule = AveragedTimeInterval(averages_time_interval,
+                                                                 window = averages_time_window),
+                                 field_slicer = nothing,
+                                 force = force,
+                                 init = init_save_some_metadata!)
         end
+        =#
     end
 
     if netcdf_output # Add NetCDF output writers
@@ -414,7 +418,9 @@ function three_layer_constant_fluxes_simulation(;
         end
     end
 
-    return simulation
+    run!(simulation)
+
+    return data_directory
 end
 
 function squeeze(A)
