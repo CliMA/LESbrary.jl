@@ -24,5 +24,6 @@ include("Utils/Utils.jl")
 include("FileManagement.jl")
 include("TurbulenceStatistics/TurbulenceStatistics.jl")
 include("NearSurfaceTurbulenceModels.jl")
+include("IdealizedExperiments/IdealizedExperiments.jl")
 
 end # module
