@@ -418,7 +418,7 @@ function three_layer_constant_fluxes_simulation(;
         end
     end
 
-    return simultion
+    return simulation
 end
 
 function squeeze(A)
