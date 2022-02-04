@@ -40,7 +40,7 @@ function execute(cmd::Cmd)
     return (stdout = out |> read |> String, stderr = err |> read |> String, code = process.exitcode)
 end
 
-function run_three_layer_constant_fluxes_simulation(;
+function three_layer_constant_fluxes_simulation(;
     name = "",
     size = (32, 32, 32),
     extent = (512meters, 512meters, 256meters),
@@ -418,9 +418,7 @@ function run_three_layer_constant_fluxes_simulation(;
         end
     end
 
-    run!(simulation)
-
-    return data_directory
+    return simultion
 end
 
 function squeeze(A)
