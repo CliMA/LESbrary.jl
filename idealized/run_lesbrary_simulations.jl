@@ -16,7 +16,8 @@ all_parameters = tuple(values(two_day_suite_parameters)...,
 
 for size in ((64, 64, 64), (128, 128, 128), (256, 256, 256))
     for parameters in all_parameters
-        run_three_layer_constant_fluxes_simulation(; architecture, size, parameters...)
+        simulation = three_layer_constant_fluxes_simulation(; architecture, size, parameters...)
+        run!(simulation)
     end
 end
     
