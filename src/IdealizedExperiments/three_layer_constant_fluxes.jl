@@ -59,7 +59,7 @@ function three_layer_constant_fluxes_simulation(;
     pickup = false,
     jld2_output = true,
     netcdf_output = false,
-    snapshot_time_interval = 10minutes,
+    snapshot_time_interval = 1minutes,
     averages_time_interval = 3hours,
     averages_time_window = 15minutes,
     time_averaged_statistics = false,
