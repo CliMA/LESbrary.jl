@@ -26,13 +26,13 @@ using LESbrary.IdealizedExperiments: six_day_suite_parameters
 #
 # In addition to selecting the architecture, size, and case to run, we can also tweak
 # certain parameters. Below we change the "snapshot_time_interval" (the interval over
-# which slices of the simulation is saved) from the default 10 minutes to 1 minute
+# which slices of the simulation is saved) from the default 2 minutes to 1 minute
 # (to make pretty movies), and we turn passive tracers off.
 
 architecture = GPU()
 size = (256, 256, 256)
 case = :strong_wind
-snapshot_time_interval = 1minutes
+snapshot_time_interval = 1minute
 passive_tracers = false
 
 simulation = three_layer_constant_fluxes_simulation(; architecture,
