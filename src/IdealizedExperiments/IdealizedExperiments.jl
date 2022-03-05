@@ -2,6 +2,7 @@ module IdealizedExperiments
 
 using Oceananigans.Units
 
+include("constant_wind_stokes_drift.jl")
 include("three_layer_constant_fluxes.jl")
 
 two_day_suite_parameters = Dict{Symbol, Any}(

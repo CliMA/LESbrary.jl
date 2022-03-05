@@ -9,7 +9,7 @@ import Oceananigans.StokesDrift: ∂t_uˢ, ∂t_vˢ, ∂t_wˢ,
                                  y_curl_Uˢ_cross_U,
                                  z_curl_Uˢ_cross_U
 
-struct StationaryStormStokesDrift{T, G, UZ, VZ, UT, VT}
+struct ConstantWindStokesDrift{T, G, UZ, VZ, UT, VT}
     Cᵝ :: T # Toba's constant
     Cʳ :: T # Transition wavenumber parameter
     Cⁱ :: T # Cutoff / isotropic wavenumber parameter
@@ -29,7 +29,7 @@ struct StationaryStormStokesDrift{T, G, UZ, VZ, UT, VT}
     ∂t_uˢ :: UT
 end
 
-Adapt.adapt_structure(to, sssd) = StationaryStormStokesDrift((nothing for i = 1:15)...,
+Adapt.adapt_structure(to, sssd) = ConstantWindStokesDrift((nothing for i = 1:15)...,
                                                              adapt(to, sssd.∂z_uˢ),
                                                              adapt(to, sssd.∂t_uˢ))
 
@@ -39,10 +39,10 @@ Adapt.adapt_structure(to, sssd) = StationaryStormStokesDrift((nothing for i = 1:
 
 # ρʷ τʷ = ρᵃ τᵃ
 air_friction_velocity(τʷ, ρʷ, ρᵃ) = sqrt(ρʷ * τʷ / ρᵃ)
-air_friction_velocity(sssd:StationaryStormStokesDrift) = air_friction_velocity(sssd.τʷ, sssd.ρʷ, sssd.ρᵃ)
+air_friction_velocity(sssd:ConstantWindStokesDrift) = air_friction_velocity(sssd.τʷ, sssd.ρʷ, sssd.ρᵃ)
 
 
-function StationaryStormStokesDrift(grid; gravitational_acceleration = g_Earth, # m s⁻²
+function ConstantWindStokesDrift(grid; gravitational_acceleration = g_Earth, # m s⁻²
                                     Cᵝ = 0.105,  # Toba's constant
                                     Cʳ = 9.7e-3, # Transition wavenumber parameter, Lenain and Pizzo 2020 eq 4
                                     Cⁱ = 0.072,  # Cutoff / isotropic wavenumber parameter
@@ -58,12 +58,12 @@ function StationaryStormStokesDrift(grid; gravitational_acceleration = g_Earth, 
     ∂z_uˢ = Field{Nothing, Nothing, Center}(grid)
     ∂t_uˢ = Field{Nothing, Nothing, Center}(grid)
 
-    return StationaryStormStokesDrift(Cᵝ, Cʳ, Cⁱ, Cᴮ, ρʷ, ρᵃ, τʷ, Cᵅ, Cᵡ, tᵢ, kⁿ, kⁱ,
+    return ConstantWindStokesDrift(Cᵝ, Cʳ, Cⁱ, Cᴮ, ρʷ, ρᵃ, τʷ, Cᵅ, Cᵡ, tᵢ, kⁿ, kⁱ,
                                       gravitational_acceleration, grid, uˢ, ∂z_uˢ, ∂t_uˢ)
 end
 
 
-const SSSD = StationaryStormStokesDrift
+const SSSD = ConstantWindStokesDrift
 
 @inline ∂t_uˢ(i, j, k, grid, sd::SSSD, time) = @inbounds sd.∂t_uˢ[1, 1, k]
 @inline ∂t_vˢ(i, j, k, grid, sd::SSSD, time) = zero(eltype(grid))
@@ -77,7 +77,7 @@ const SSSD = StationaryStormStokesDrift
 ##### Stokes drift computation...
 #####
 
-function peak_wavenumber(sssd::StationaryStormStokesDrift, t)
+function peak_wavenumber(sssd::ConstantWindStokesDrift, t)
     u★ = air_friction_velocity(sssd)
     tᵢ = sssd.tᵢ
     g = sssd.gravitational_acceleration
@@ -104,7 +104,7 @@ Lᵉ(kᵖ, kⁿ, z) = ℓᵉ(kⁿ, z) - ℓᵉ(kᵖ, z)
 ℓˢ(k, z) = 2 / √k * (exp(2k * z) + √(2π * k * abs(z)) * erf(√(2k*abs(z))))
 Lˢ(kⁿ, kⁱ, z) = ℓˢ(kⁿ, z) - ℓˢ(kⁱ, z)
 
-function compute_stokes_drift!(sssd::StationaryStormStokesDrift, t)
+function compute_stokes_drift!(sssd::ConstantWindStokesDrift, t)
     kᵖ = peak_wavenumber(sssd, t)
     ∂t_kᵖ = peak_wavenumber_tendency(sssd, t, kᵖ)
 
