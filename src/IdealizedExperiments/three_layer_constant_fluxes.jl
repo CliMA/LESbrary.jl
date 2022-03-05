@@ -19,14 +19,6 @@ using LESbrary.TurbulenceStatistics: first_order_statistics,
                                      subfilter_tracer_fluxes,
                                      ViscousDissipation
 
-try
-    using CairoMakie
-catch
-    using GLMakie
-finally
-    @warn "Could not load either CairoMakie or GLMakie; animations are not available."
-end
-
 Logging.global_logger(OceananigansLogger())
 
 @inline passive_tracer_forcing(x, y, z, t, p) = p.μ⁺ * exp(-(z - p.z₀)^2 / (2 * p.λ^2)) - p.μ⁻
@@ -56,6 +48,8 @@ function three_layer_constant_fluxes_simulation(;
     thermocline_buoyancy_gradient = 1e-5,
     deep_buoyancy_gradient = 2e-6,
     surface_temperature = 20.0,
+    stokes_drift = true, # will use ConstantFluxStokesDrift with stokes_drift_peak_wavenumber
+    stokes_drift_peak_wavenumber = 2π / 300, # severe approximation, it is what it is
     pickup = false,
     jld2_output = true,
     netcdf_output = false,
@@ -152,12 +146,19 @@ function three_layer_constant_fluxes_simulation(;
     
     Δz = grid.Δzᵃᵃᶜ
     Cᴬᴹᴰ = SurfaceEnhancedModelConstant(Δz, C₀ = 1/12, enhancement = 7, decay_scale = 4Δz)
+
+    # # Stokes drift
+    if stokes_drift
+        stokes_drift = ConstantFluxStokesDrift(grid, momentum_flux, stokes_drift_peak_wavenumber)
+    else
+        stokes_drift = nothing
+    end
     
     # # Instantiate Oceananigans.IncompressibleModel
     
     @info "Framing the model..."
     
-    model = NonhydrostaticModel(; grid, buoyancy,
+    model = NonhydrostaticModel(; grid, buoyancy, stokes_drift,
                                 timestepper = :RungeKutta3,
                                 advection = WENO5(),
                                 tracers = (:T, :c₀, :c₁, :c₂),
@@ -359,7 +360,6 @@ function three_layer_constant_fluxes_simulation(;
                              force = force,
                              init = init_save_some_metadata!)
 
-        #=
         if time_averaged_statistics
             simulation.output_writers[Symbol(name, "_averaged_stats_jld2")] =
                 JLD2OutputWriter(model, statistics_to_output,
@@ -371,7 +371,6 @@ function three_layer_constant_fluxes_simulation(;
                                  force = force,
                                  init = init_save_some_metadata!)
         end
-        =#
     end
 
     if netcdf_output # Add NetCDF output writers
@@ -421,6 +420,7 @@ function three_layer_constant_fluxes_simulation(;
     return simulation
 end
 
+#=
 function squeeze(A)
     singleton_dims = tuple((d for d in 1:ndims(A) if Base.size(A, d) == 1)...)
     return dropdims(A, dims=singleton_dims)
@@ -765,3 +765,4 @@ function three_layer_constant_fluxes_animate_statistics(;
 
     return filepath
 end
+=#
