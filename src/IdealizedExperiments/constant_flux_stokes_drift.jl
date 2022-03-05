@@ -63,8 +63,11 @@ function ConstantFluxStokesDrift(grid, water_kinematic_momentum_flux, peak_waven
                                  Cᴮ = 7e-3)   # Saturation constant
 
     # Calculate transition and isotropic wavenumber
+    water_kinematic_momentum_flux <= 0 ||
+        error(ArgumentError("Momentum flux is $water_kinematic_momentum_flux. Only negative values are allowed."))
+
     air_sea_momentum_flux = water_density * water_kinematic_momentum_flux
-    air_friction_velocity = a★ = sqrt(air_sea_momentum_flux / air_density)
+    air_friction_velocity = a★ = sqrt(abs(air_sea_momentum_flux) / air_density)
     kⁿ = Cʳ * gravitational_acceleration / a★^2 # Transition wavenumber
     kⁱ = Cⁱ * gravitational_acceleration / a★^2 # Isotropic wavenumber cutoff
 

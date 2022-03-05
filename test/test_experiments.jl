@@ -6,7 +6,7 @@ using LESbrary.IdealizedExperiments: ConstantFluxStokesDrift, ConstantFluxPeakWa
 
 @testset "ConstantFluxStokesDrift" begin
     grid = RectilinearGrid(size=256, z=(-64, 0), topology=(Flat, Flat, Bounded))
-    cfsd = ConstantFluxStokesDrift(grid, 1e-4, 2π/300)
+    cfsd = ConstantFluxStokesDrift(grid, -1e-4, 2π/300)
     @test cfsd isa ConstantFluxStokesDrift
     
     # Sort of a regression test
@@ -31,6 +31,7 @@ end
 
 
 @testset "Three layer constant flux simulation" begin
+    #=
     simulation = three_layer_constant_fluxes_simulation(size = (4, 4, 32),
                                                         stokes_drift = false,
                                                         stop_time = 2.0,
@@ -40,9 +41,11 @@ end
     run!(simulation)
 
     @test simulation.stop_time == 2.0
+    =#
 
     simulation = three_layer_constant_fluxes_simulation(size = (4, 4, 32),
                                                         stokes_drift_peak_wavenumber = 2π / 300,
+                                                        momentum_flux = -1e-4,
                                                         stop_time = 2.0,
                                                         snapshot_time_interval = 1.0,
                                                         averages_time_interval = 1.0,
@@ -50,5 +53,4 @@ end
     run!(simulation)
 
     @test simulation.stop_time == 2.0
-
 end

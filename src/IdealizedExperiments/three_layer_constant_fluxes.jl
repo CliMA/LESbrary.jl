@@ -130,7 +130,6 @@ function three_layer_constant_fluxes_simulation(;
     
     # Sponge layer for u, v, w, and T
     gaussian_mask = GaussianMask{:z}(center=-grid.Lz, width=grid.Lz/10)
-    
     u_sponge = v_sponge = w_sponge = Relaxation(rate=4/hour, mask=gaussian_mask)
     
     T_sponge = Relaxation(rate = 4/hour,
@@ -254,8 +253,7 @@ function three_layer_constant_fluxes_simulation(;
     
     subfilter_flux_statistics = merge(
         subfilter_momentum_fluxes(model, uz_scratch=ccf_scratch, vz_scratch=cff_scratch, c_scratch=ccc_scratch),
-        subfilter_tracer_fluxes(model, w_scratch=ccf_scratch),
-    )
+        subfilter_tracer_fluxes(model, w_scratch=ccf_scratch))
     
     U = primitive_statistics[:u]
     V = primitive_statistics[:v]
