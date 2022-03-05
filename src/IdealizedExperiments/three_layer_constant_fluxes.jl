@@ -35,6 +35,7 @@ end
 function three_layer_constant_fluxes_simulation(;
     name = "",
     size = (32, 32, 32),
+    passive_tracers = true,
     extent = (512meters, 512meters, 256meters),
     architecture = CPU(),
     stop_time = 0.1hours,
@@ -53,7 +54,7 @@ function three_layer_constant_fluxes_simulation(;
     pickup = false,
     jld2_output = true,
     netcdf_output = false,
-    snapshot_time_interval = 10minutes,
+    snapshot_time_interval = 2minutes,
     averages_time_interval = 3hours,
     averages_time_window = 15minutes,
     time_averaged_statistics = false,
@@ -156,11 +157,12 @@ function three_layer_constant_fluxes_simulation(;
     # # Instantiate Oceananigans.IncompressibleModel
     
     @info "Framing the model..."
+
+    tracers = passive_tracers ? (:T, :c₀, :c₁, :c₂) : :T
     
-    model = NonhydrostaticModel(; grid, buoyancy, stokes_drift,
+    model = NonhydrostaticModel(; grid, buoyancy, tracers, stokes_drift,
                                 timestepper = :RungeKutta3,
                                 advection = WENO5(),
-                                tracers = (:T, :c₀, :c₁, :c₂),
                                 coriolis = FPlane(f=f),
                                 closure = AnisotropicMinimumDissipation(),
                                 boundary_conditions = (T=θ_bcs, u=u_bcs),
