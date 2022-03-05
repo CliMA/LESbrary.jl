@@ -1,7 +1,7 @@
 using Oceananigans.Grids: AbstractGrid
 using Oceananigans.Fields: Face, Center
 using Oceananigans.BuoyancyModels: g_Earth
-using Oceananigans.Operators: ℑxzᶠᵃᶜ, ℑxzᶜᵃᶠ, ℑzᵃᵃᶠ
+using Oceananigans.Operators: ℑxzᶠᵃᶜ, ℑxzᶜᵃᶠ, ℑzᵃᵃᶠ, ℑzᵃᵃᶜ 
 using Oceananigans.Simulations: Simulation
 
 using CUDA
@@ -91,7 +91,7 @@ end
 
 const CFSD = ConstantFluxStokesDrift
 
-@inline ∂t_uˢ(i, j, k, grid, sd::CFSD, time) = @inbounds sd.∂t_uˢ[1, 1, k]
+@inline ∂t_uˢ(i, j, k, grid, sd::CFSD, time) = zero(eltype(grid))
 @inline ∂t_vˢ(i, j, k, grid, sd::CFSD, time) = zero(eltype(grid))
 @inline ∂t_wˢ(i, j, k, grid::AbstractGrid{FT}, ::CFSD, time) where FT = zero(FT)
 
