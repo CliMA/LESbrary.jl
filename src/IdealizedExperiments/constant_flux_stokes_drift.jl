@@ -44,8 +44,8 @@ end
 function Adapt.adapt_structure(to, cfsd::ConstantFluxStokesDrift)
     names = propertynames(cfsd)
     Nnames = length(names)
-    return ConstantFluxStokesDrift((nothing for i = 1:Nnames-1)...,
-                                    adapt(to, cfsd.∂z_uˢ))
+    return ConstantFluxStokesDrift{Nothing}((nothing for i = 1:Nnames-1)...,
+                                            adapt(to, cfsd.∂z_uˢ))
 end
 
 #####

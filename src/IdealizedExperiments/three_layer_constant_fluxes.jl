@@ -54,6 +54,7 @@ function three_layer_constant_fluxes_simulation(;
     pickup = false,
     jld2_output = true,
     netcdf_output = false,
+    statistics = "first_order", # or "second_order"
     snapshot_time_interval = 2minutes,
     averages_time_interval = 3hours,
     averages_time_window = 15minutes,
@@ -71,7 +72,7 @@ function three_layer_constant_fluxes_simulation(;
     prefix = @sprintf("three_layer_constant_fluxes_%s_hr%d_Qu%.1e_Qb%.1e_f%.1e_Nh%d_Nz%d_",
                       thermocline_type, stop_hours, abs(Qᵘ), Qᵇ, f, Nx, Nz)
     
-    data_directory = joinpath(data_directory, "data", prefix * name) # save data in /data/prefix
+    data_directory = joinpath(data_directory, prefix * name) # save data in /data/prefix
     
     @info "Mapping grid..."
     
@@ -84,12 +85,13 @@ function three_layer_constant_fluxes_simulation(;
     
     @info "Enforcing boundary conditions..."
     
-    buoyancy = SeawaterBuoyancy(equation_of_state=LinearEquationOfState(α=2e-4), constant_salinity=35.0)
+    equation_of_state=LinearEquationOfState(thermal_expansion=2e-4)
+    buoyancy = SeawaterBuoyancy(; equation_of_state, constant_salinity=35.0)
 
     N²_surface_layer = surface_layer_buoyancy_gradient
     N²_thermocline   = thermocline_buoyancy_gradient
     N²_deep          = deep_buoyancy_gradient
-    α = buoyancy.equation_of_state.α
+    α = buoyancy.equation_of_state.thermal_expansion
     g = buoyancy.gravitational_acceleration
     
     Qᶿ = Qᵇ / (α * g)
@@ -231,8 +233,7 @@ function three_layer_constant_fluxes_simulation(;
     
     @info "Strapping on checkpointer..."
     
-    pickup = pickup
-    force = pickup ? false : true
+    force = !pickup
     
     simulation.output_writers[:checkpointer] =
         Checkpointer(model, schedule = TimeInterval(stop_time/3), prefix = prefix * "_checkpointer", dir = data_directory)
@@ -250,8 +251,11 @@ function three_layer_constant_fluxes_simulation(;
     fcf_scratch = Field{Face, Center, Face}(model.grid)
     cff_scratch = Field{Center, Face, Face}(model.grid)
     
-    #primitive_statistics = first_through_second_order(model, b=b, p=p, w_scratch=ccf_scratch, c_scratch=ccc_scratch)
-    primitive_statistics = first_order_statistics(model, b=b, p=p, w_scratch=ccf_scratch, c_scratch=ccc_scratch)
+    if statistics == "first_order"
+        primitive_statistics = first_through_second_order(model, b=b, p=p, w_scratch=ccf_scratch, c_scratch=ccc_scratch)
+    elseif statistics == "second_order"
+        primitive_statistics = first_order_statistics(model, b=b, p=p, w_scratch=ccf_scratch, c_scratch=ccc_scratch)
+    end
     
     subfilter_flux_statistics = merge(
         subfilter_momentum_fluxes(model, uz_scratch=ccf_scratch, vz_scratch=cff_scratch, c_scratch=ccc_scratch),
@@ -271,15 +275,15 @@ function three_layer_constant_fluxes_simulation(;
                                                             dissipation=dissipation)
     
     dynamics_statistics = Dict(:Ri => Field(∂z(B) / (∂z(U)^2 + ∂z(V)^2)))
-    fields_to_output = merge(model.velocities, model.tracers, (e=e, ϵ=dissipation))
+    #fields_to_output = merge(model.velocities, model.tracers, (e=e, ϵ=dissipation))
+    fields_to_output = merge(model.velocities, model.tracers, (; e=e))
 
-                                 
     statistics_to_output = merge(primitive_statistics,
                                  subfilter_flux_statistics,
                                  tke_budget_statistics,
                                  dynamics_statistics)
 
-    #statistics_to_output = merge(subfilter_flux_statistics, tke_budget_statistics)
+    pop!(statistics_to_output, :tke_dissipation)
 
     @info "Garnishing output writers..."
     
@@ -324,7 +328,7 @@ function three_layer_constant_fluxes_simulation(;
     ## Add JLD2 output writers
     
     if jld2_output
-        simulation.output_writers[Symbol(name, "_xy_jld2")] =
+        simulation.output_writers[:xy] =
             JLD2OutputWriter(model, fields_to_output,
                              dir = data_directory,
                              prefix = name * "_xy_slice",
@@ -333,7 +337,7 @@ function three_layer_constant_fluxes_simulation(;
                              force = force,
                              init = init_save_some_metadata!)
 
-        simulation.output_writers[Symbol(name, "_xz_jld2")] =
+        simulation.output_writers[:xz] =
             JLD2OutputWriter(model, fields_to_output,
                              dir = data_directory,
                              prefix = name * "_xz_slice",
@@ -342,7 +346,7 @@ function three_layer_constant_fluxes_simulation(;
                              force = force,
                              init = init_save_some_metadata!)
 
-        simulation.output_writers[Symbol(name, "_yz_jld2")] =
+        simulation.output_writers[:yz] =
             JLD2OutputWriter(model, fields_to_output,
                              dir = data_directory,
                              prefix = name * "_yz_slice",
@@ -351,7 +355,7 @@ function three_layer_constant_fluxes_simulation(;
                              force = force,
                              init = init_save_some_metadata!)
 
-        simulation.output_writers[Symbol(name, "_stats_jld2")] =
+        simulation.output_writers[:statistics] =
             JLD2OutputWriter(model, statistics_to_output,
                              dir = data_directory,
                              prefix = name * "_instantaneous_statistics",
@@ -361,7 +365,7 @@ function three_layer_constant_fluxes_simulation(;
                              init = init_save_some_metadata!)
 
         if time_averaged_statistics
-            simulation.output_writers[Symbol(name, "_averaged_stats_jld2")] =
+            simulation.output_writers[:time_averaged_statistics] =
                 JLD2OutputWriter(model, statistics_to_output,
                                  dir = data_directory,
                                  prefix = name * "_time_averaged_statistics",
