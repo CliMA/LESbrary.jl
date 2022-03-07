@@ -7,6 +7,7 @@ using GeoData
 using Oceanostics
 using Oceananigans
 using Oceananigans.Units
+using Oceananigans.Operators: Δzᶜᶜᶜ
 
 using Oceanostics.TKEBudgetTerms: TurbulentKineticEnergy, ZShearProduction
 
@@ -33,33 +34,34 @@ function execute(cmd::Cmd)
 end
 
 function three_layer_constant_fluxes_simulation(;
-    name = "",
-    size = (32, 32, 32),
-    passive_tracers = true,
-    extent = (512meters, 512meters, 256meters),
-    architecture = CPU(),
-    stop_time = 0.1hours,
-    f = 1e-4,
-    buoyancy_flux = 1e-8,
-    momentum_flux = -1e-4,
-    thermocline_type = "linear",
-    surface_layer_depth = 48.0,
-    thermocline_width = 24.0,
+    name                            = "",
+    size                            = (32, 32, 32),
+    passive_tracers                 = true,
+    extent                          = (512meters, 512meters, 256meters),
+    architecture                    = CPU(),
+    stop_time                       = 0.1hours,
+    f                               = 1e-4,
+    buoyancy_flux                   = 1e-8,
+    momentum_flux                   = -1e-4,
+    thermocline_type                = "linear",
+    surface_layer_depth             = 48.0,
+    thermocline_width               = 24.0,
     surface_layer_buoyancy_gradient = 2e-6,
-    thermocline_buoyancy_gradient = 1e-5,
-    deep_buoyancy_gradient = 2e-6,
-    surface_temperature = 20.0,
-    stokes_drift = true, # will use ConstantFluxStokesDrift with stokes_drift_peak_wavenumber
-    stokes_drift_peak_wavenumber = 2π / 300, # severe approximation, it is what it is
-    pickup = false,
-    jld2_output = true,
-    netcdf_output = false,
-    statistics = "first_order", # or "second_order"
-    snapshot_time_interval = 2minutes,
-    averages_time_interval = 3hours,
-    averages_time_window = 15minutes,
-    time_averaged_statistics = false,
-    data_directory = joinpath(pwd(), "data"))
+    thermocline_buoyancy_gradient   = 1e-5,
+    deep_buoyancy_gradient          = 2e-6,
+    surface_temperature             = 20.0,
+    stokes_drift                    = true, # will use ConstantFluxStokesDrift with stokes_drift_peak_wavenumber
+    stokes_drift_peak_wavenumber    = 2π / 300, # severe approximation, it is what it is
+    pickup                          = false,
+    jld2_output                     = true,
+    netcdf_output                   = false,
+    statistics                      = "first_order", # or "second_order"
+    snapshot_time_interval          = 2minutes,
+    averages_time_interval          = 3hours,
+    averages_time_window            = 15minutes,
+    time_averaged_statistics        = false,
+    data_directory                  = joinpath(pwd(), "data")
+    )
 
     Nx, Ny, Nz = size
     Lx, Ly, Lz = extent
@@ -75,17 +77,38 @@ function three_layer_constant_fluxes_simulation(;
     data_directory = joinpath(data_directory, prefix * name) # save data in /data/prefix
     
     @info "Mapping grid..."
+
+    refinement = 1.3
+    stretching = 10
+    Nz = size[3]
+    Lz = extent[3]
+
+    # Normalized height ranging from 0 to 1
+    h(k) = (k - 1) / Nz
+
+    # Linear near-surface generator
+    ζ₀(k) = 1 + (h(k) - 1) / refinement
+
+    # Bottom-intensified stretching function
+    Σ(k) = (1 - exp(-stretching * h(k))) / (1 - exp(-stretching))
+
+    # Generating function
+    z_faces(k) = Lz * (ζ₀(k) * Σ(k) - 1)
+
+    grid = RectilinearGrid(architecture;
+                           size,
+                           halo = (3, 3, 3),
+                           x = (0, extent[1]),
+                           y = (0, extent[2]),
+                           z = z_faces)
     
-    grid = RectilinearGrid(architecture,
-                           size=(Nx, Ny, Nz),
-                           x=(0, Lx), y=(0, Ly), z=(-Lz, 0),
-                           halo=(3, 3, 3))
-    
+    @show grid
+        
     # Buoyancy and boundary conditions
     
     @info "Enforcing boundary conditions..."
     
-    equation_of_state=LinearEquationOfState(thermal_expansion=2e-4)
+    equation_of_state = LinearEquationOfState(thermal_expansion=2e-4)
     buoyancy = SeawaterBuoyancy(; equation_of_state, constant_salinity=35.0)
 
     N²_surface_layer = surface_layer_buoyancy_gradient
@@ -111,7 +134,7 @@ function three_layer_constant_fluxes_simulation(;
     # # Initial condition and sponge layer
     
     ## Fiddle with indices to get a correct discrete profile
-    z = znodes(Center, grid)
+    z = CUDA.@allowscalar Array(znodes(Center, grid))
     k_transition = searchsortedfirst(z, -surface_layer_depth)
     k_deep = searchsortedfirst(z, -(surface_layer_depth + thermocline_width))
     
@@ -122,6 +145,7 @@ function three_layer_constant_fluxes_simulation(;
     θ_transition = θ_surface + z_transition * dθdz_surface_layer
     θ_deep = θ_transition + (z_deep - z_transition) * dθdz_thermocline
     
+    # Passive tracer parameters
     λ = 4.0
     μ⁺ = 1 / 6hour
     μ₀ = √(2π) * λ / grid.Lz * μ⁺ / 2
@@ -139,24 +163,16 @@ function three_layer_constant_fluxes_simulation(;
                           target = LinearTarget{:z}(intercept = θ_deep - z_deep*dθdz_deep, gradient = dθdz_deep),
                           mask = gaussian_mask)
     
-    # # LES Model
-    
-    # Wall-aware AMD model constant which is 'enhanced' near the upper boundary.
-    # Necessary to obtain a smooth temperature distribution.
-    
-    @info "Building the wall model..."
-    
-    Δz = grid.Δzᵃᵃᶜ
-    Cᴬᴹᴰ = SurfaceEnhancedModelConstant(Δz, C₀ = 1/12, enhancement = 7, decay_scale = 4Δz)
+    if stokes_drift && momentum_flux != 0.0
+        @info "Whipping up the Stokes drift..."
 
-    # # Stokes drift
-    if stokes_drift
         stokes_drift = ConstantFluxStokesDrift(grid, momentum_flux, stokes_drift_peak_wavenumber)
+        uˢ₀ = CUDA.@allowscalar stokes_drift.uˢ[1, 1, grid.Nz]
+        a★ = stokes_drift.air_friction_velocity
+        @printf "Air u★: %.4f, Surface Stokes drift: %.4f m s⁻¹\n" a★ uˢ₀
     else
         stokes_drift = nothing
     end
-    
-    # # Instantiate Oceananigans.IncompressibleModel
     
     @info "Framing the model..."
 
@@ -164,7 +180,7 @@ function three_layer_constant_fluxes_simulation(;
     
     model = NonhydrostaticModel(; grid, buoyancy, tracers, stokes_drift,
                                 timestepper = :RungeKutta3,
-                                advection = WENO5(),
+                                advection = WENO5(; grid),
                                 coriolis = FPlane(f=f),
                                 closure = AnisotropicMinimumDissipation(),
                                 boundary_conditions = (T=θ_bcs, u=u_bcs),
@@ -227,7 +243,7 @@ function three_layer_constant_fluxes_simulation(;
     # Adaptive time-stepping
     wizard = TimeStepWizard(cfl=0.8, max_change=1.1, min_Δt=0.01, max_Δt=30.0)
     simulation.callbacks[:wizard] = Callback(wizard, IterationInterval(10))
-    simulation.callbacks[:progress] = Callback(SimulationProgressMessenger(wizard), IterationInterval(10))
+    simulation.callbacks[:progress] = Callback(SimulationProgressMessenger(wizard), IterationInterval(100))
     
     # # Prepare Output
     
@@ -241,7 +257,8 @@ function three_layer_constant_fluxes_simulation(;
     @info "Squeezing out statistics..."
     
     # Prepare turbulence statistics
-    k_xy_slice = searchsortedfirst(znodes(Face, grid), -slice_depth)
+    zF = CUDA.@allowscalar Array(znodes(Face, grid))
+    k_xy_slice = searchsortedfirst(zF, -slice_depth)
     
     b = BuoyancyField(model)
     p = Field(sum(model.pressures))
@@ -264,11 +281,11 @@ function three_layer_constant_fluxes_simulation(;
     U = primitive_statistics[:u]
     V = primitive_statistics[:v]
     B = primitive_statistics[:b]
-    
+    e = Field(Average(TurbulentKineticEnergy(model, U=U, V=V), dims=(1, 2)))
+
     e = Field(TurbulentKineticEnergy(model, U=U, V=V))
     shear_production = Field(ZShearProduction(model, U=U, V=V))
     dissipation = Field(ViscousDissipation(model))
-    
     tke_budget_statistics = turbulent_kinetic_energy_budget(model,
                                                             b=b, p=p, U=U, V=V, e=e,
                                                             shear_production=shear_production,
