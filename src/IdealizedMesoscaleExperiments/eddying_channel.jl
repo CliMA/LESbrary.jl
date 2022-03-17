@@ -39,7 +39,7 @@ Logging.global_logger(OceananigansLogger())
 #     close(err.in)
 #     return (stdout = out |> read |> String, stderr = err |> read |> String, code = process.exitcode)
 # end
-
+#
 function eddying_channel_simulation(; τ = 0.2, β = 1e-11, ridge_height = 0.0)
     filepath = "tau_" * string(τ) * "_beta_" * string(β) * "_ridge_height_" * string(ridge_height)
     filename = filepath
