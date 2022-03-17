@@ -31,14 +31,14 @@ Logging.global_logger(OceananigansLogger())
 
 @inline passive_tracer_forcing(x, y, z, t, p) = p.μ⁺ * exp(-(z - p.z₀)^2 / (2 * p.λ^2)) - p.μ⁻
 
-# Code credit: https://discourse.julialang.org/t/collecting-all-output-from-shell-commands/15592
-function execute(cmd::Cmd)
-    out, err = Pipe(), Pipe()
-    process = run(pipeline(ignorestatus(cmd), stdout=out, stderr=err))
-    close(out.in)
-    close(err.in)
-    return (stdout = out |> read |> String, stderr = err |> read |> String, code = process.exitcode)
-end
+# # Code credit: https://discourse.julialang.org/t/collecting-all-output-from-shell-commands/15592
+# function execute(cmd::Cmd)
+#     out, err = Pipe(), Pipe()
+#     process = run(pipeline(ignorestatus(cmd), stdout=out, stderr=err))
+#     close(out.in)
+#     close(err.in)
+#     return (stdout = out |> read |> String, stderr = err |> read |> String, code = process.exitcode)
+# end
 
 function eddying_channel_simulation(; τ = 0.2, β = 1e-11, ridge_height = 0.0)
     filepath = "tau_" * string(τ) * "_beta_" * string(β) * "_ridge_height_" * string(ridge_height)

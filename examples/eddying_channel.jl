@@ -7,27 +7,27 @@ using Oceananigans.Units
 using Oceananigans.OutputReaders: FieldTimeSeries
 using Oceananigans.Grids: xnode, ynode, znode
 using Oceananigans.TurbulenceClosures: VerticallyImplicitTimeDiscretization
-using Oceananigans.TurbulenceClosures.CATKEVerticalDiffusivities: CATKEVerticalDiffusivity
+#using Oceananigans.TurbulenceClosures.CATKEVerticalDiffusivities: CATKEVerticalDiffusivity
 
 using Random
 Random.seed!(1234)
 
 arch = CPU()
 
-filename = "eddying_channel_catke"
+filename = "eddying_channel"
 
 # Domain
-const Lx = 2000kilometers # zonal domain length [m]
+const Lx = 4000kilometers # zonal domain length [m]
 const Ly = 2000kilometers # meridional domain length [m]
-const Lz = 2kilometers    # depth [m]
+const Lz = 3kilometers    # depth [m]
 
 # number of grid points
-Nx = 64
-Ny = 64
+Nx = 80
+Ny = 40
 Nz = 30
 
-save_fields_interval = 7days
-stop_time = 20years + 1day
+save_fields_interval = 50years
+stop_time = 200years + 1day
 Δt₀ = 5minutes
 
 # stretched grid
@@ -39,24 +39,21 @@ stop_time = 20years + 1day
 
 # Given Lz and stretching factor σ > 1 the top cell height is Δzₜₒₚ = Lz * (σ - 1) / σ^(Nz - 1)
 
-σ = 1.04 # linear stretching factor
-Δz_center_linear(k) = Lz * (σ - 1) * σ^(Nz - k) / (σ^Nz - 1) # k=1 is the bottom-most cell, k=Nz is the top cell
-linearly_spaced_faces(k) = k==1 ? -Lz : - Lz + sum(Δz_center_linear.(1:k-1))
+# σ = 1.04 # linear stretching factor
+# Δz_center_linear(k) = Lz * (σ - 1) * σ^(Nz - k) / (σ^Nz - 1) # k=1 is the bottom-most cell, k=Nz is the top cell
+# linearly_spaced_faces(k) = k==1 ? -Lz : - Lz + sum(Δz_center_linear.(1:k-1))
+# refinement = 2 # controls spacing near surface (higher means finer spaced)
+# stretching = 4  # controls rate of stretching at bottom
+# # Normalized height ranging from 0 to 1
+# h(k) = (k - 1) / Nz
+# # Linear near-surface generator
+# ζ₀(k) = 1 + (h(k) - 1) / refinement
+# # Bottom-intensified stretching function
+# Σ(k) = (1 - exp(-stretching * h(k))) / (1 - exp(-stretching))
+# # Generating function
+# z_faces(k) = Lz * (ζ₀(k) * Σ(k) - 1)
 
-refinement = 2 # controls spacing near surface (higher means finer spaced)
-stretching = 4  # controls rate of stretching at bottom
 
-# Normalized height ranging from 0 to 1
-h(k) = (k - 1) / Nz
-
-# Linear near-surface generator
-ζ₀(k) = 1 + (h(k) - 1) / refinement
-
-# Bottom-intensified stretching function
-Σ(k) = (1 - exp(-stretching * h(k))) / (1 - exp(-stretching))
-
-# Generating function
-z_faces(k) = Lz * (ζ₀(k) * Σ(k) - 1)
 
 grid = RectilinearGrid(arch;
                        topology = (Periodic, Bounded, Bounded),
@@ -88,20 +85,31 @@ parameters = (Ly = Ly,
               Qᵇ = 10 / (ρ * cᵖ) * α * g,          # buoyancy flux magnitude [m² s⁻³]
               y_shutoff = 5/6 * Ly,                # shutoff location for buoyancy flux [m]
               τ = 0.15/ρ,                          # surface kinematic wind stress [m² s⁻²]
-              μ = 1 / 30days,                      # bottom drag damping time-scale [s⁻¹]
+              μ = 2e-3,                            # quadratic bottom drag coefficient []
               ΔB = 8 * α * g,                      # surface vertical buoyancy gradient [s⁻²]
               H = Lz,                              # domain depth [m]
               h = 1000.0,                          # exponential decay scale of stable stratification [m]
               y_sponge = 19/20 * Ly,               # southern boundary of sponge layer [m]
-              λt = 7days                           # relaxation time scale [s]
-)
+              λt = 7days,                          # relaxation time scale for the northen sponge [s]
+              λs = 7days,                          # relaxation time scale for the surface [s]
+              )
 
-@inline function buoyancy_flux(i, j, grid, clock, model_fields, p)
-    y = ynode(Center(), j, grid)
-    return ifelse(y < p.y_shutoff, p.Qᵇ * cos(3π * y / p.Ly), 0.0)
-end
+# @inline function buoyancy_flux(i, j, grid, clock, model_fields, p)
+#     y = ynode(Center(), j, grid)
+#     return ifelse(y < p.y_shutoff, p.Qᵇ * cos(3π * y / p.Ly), 0.0)
+# end
 
-buoyancy_flux_bc = FluxBoundaryCondition(buoyancy_flux, discrete_form=true, parameters=parameters)
+# buoyancy_flux_bc = FluxBoundaryCondition(buoyancy_flux, discrete_form=true, parameters=parameters)
+
+
+ @inline relaxation_profile(y, p) = p.ΔB * (y/ p.Ly)
+ @inline function buoyancy_flux(i, j, grid, clock, model_fields, p)
+     y = ynode(Center(), j, grid)
+     return @inbounds p.λs * ( model_fields.b[i, j, grid.Nz] - relaxation_profile(y, p))
+ end
+
+ buoyancy_flux_bc = FluxBoundaryCondition(buoyancy_flux, discrete_form=true, parameters=parameters)
+
 
 @inline function u_stress(i, j, grid, clock, model_fields, p)
     y = ynode(Center(), j, grid)
@@ -110,8 +118,8 @@ end
 
 u_stress_bc = FluxBoundaryCondition(u_stress, discrete_form=true, parameters=parameters)
 
-@inline u_drag(i, j, grid, clock, model_fields, p) = @inbounds - p.μ * p.Lz * model_fields.u[i, j, 1]
-@inline v_drag(i, j, grid, clock, model_fields, p) = @inbounds - p.μ * p.Lz * model_fields.v[i, j, 1]
+@inline u_drag(i, j, grid, clock, model_fields, p) = @inbounds - p.μ * model_fields.u[i, j, 1] * sqrt(model_fields.u[i, j, 1]^2 + model_fields.v[i, j, 1]^2)
+@inline v_drag(i, j, grid, clock, model_fields, p) = @inbounds - p.μ * model_fields.v[i, j, 1] * sqrt(model_fields.u[i, j, 1]^2 + model_fields.v[i, j, 1]^2)
 
 u_drag_bc = FluxBoundaryCondition(u_drag, discrete_form=true, parameters=parameters)
 v_drag_bc = FluxBoundaryCondition(v_drag, discrete_form=true, parameters=parameters)
@@ -136,7 +144,7 @@ coriolis = BetaPlane(f₀ = f, β = β)
 @inline initial_buoyancy(z, p) = p.ΔB * (exp(z / p.h) - exp(-p.Lz / p.h)) / (1 - exp(-p.Lz / p.h))
 @inline mask(y, p) = max(0.0, y - p.y_sponge) / (Ly - p.y_sponge)
 
-@inline function buoyancy_relaxation(i, j, k, grid, clock, model_fields, p)
+@inline function buoyancy_sponge(i, j, k, grid, clock, model_fields, p)
     timescale = p.λt
     y = ynode(Center(), j, grid)
     z = znode(Center(), k, grid)
@@ -145,7 +153,7 @@ coriolis = BetaPlane(f₀ = f, β = β)
     return - 1 / timescale  * mask(y, p) * (b - target_b)
 end
 
-Fb = Forcing(buoyancy_relaxation, discrete_form = true, parameters = parameters)
+Fb = Forcing(buoyancy_sponge, discrete_form = true, parameters = parameters)
 
 # Turbulence closures
 
@@ -161,7 +169,7 @@ horizontal_diffusive_closure = HorizontalScalarDiffusivity(ν = νh, κ = κh)
 convective_adjustment = ConvectiveAdjustmentVerticalDiffusivity(convective_κz = 1.0,
                                                                 convective_νz = 0.0)
 
-catke = CATKEVerticalDiffusivity()
+# catke = CATKEVerticalDiffusivity()
 
 #####
 ##### Model building
@@ -175,7 +183,7 @@ model = HydrostaticFreeSurfaceModel(grid = grid,
                                     tracer_advection = WENO5(),
                                     buoyancy = BuoyancyTracer(),
                                     coriolis = coriolis,
-                                    closure = (horizontal_diffusive_closure, vertical_diffusive_closure, catke, convective_adjustment),
+                                    closure = (horizontal_diffusive_closure, vertical_diffusive_closure, convective_adjustment),
                                     tracers = (:b, :c, :e),
                                     boundary_conditions = (b=b_bcs, u=u_bcs, v=v_bcs),
                                     forcing = (; b=Fb))
