@@ -12,7 +12,7 @@ using Oceananigans.TurbulenceClosures: VerticallyImplicitTimeDiscretization
 using Random
 Random.seed!(1234)
 
-arch = CPU()
+arch = GPU()
 
 filename = "eddying_channel"
 
@@ -22,13 +22,13 @@ const Ly = 2000kilometers # meridional domain length [m]
 const Lz = 3kilometers    # depth [m]
 
 # number of grid points
-Nx = 80
-Ny = 40
+Nx = 32*4
+Ny = 32*4
 Nz = 30
 
 save_fields_interval = 50years
-stop_time = 200years + 1day
-Δt₀ = 5minutes
+stop_time = 365days #200years + 1day
+Δt₀ = 20minutes
 
 # stretched grid
 
@@ -91,7 +91,7 @@ parameters = (Ly = Ly,
               h = 1000.0,                          # exponential decay scale of stable stratification [m]
               y_sponge = 19/20 * Ly,               # southern boundary of sponge layer [m]
               λt = 7days,                          # relaxation time scale for the northen sponge [s]
-              λs = 7days,                          # relaxation time scale for the surface [s]
+              λs = 2e-4,                          # relaxation time scale for the surface [s]
               )
 
 # @inline function buoyancy_flux(i, j, grid, clock, model_fields, p)
@@ -215,8 +215,8 @@ set!(model, b=bᵢ, u=uᵢ, v=vᵢ, w=wᵢ, c=cᵢ)
 simulation = Simulation(model, Δt=Δt₀, stop_time=stop_time)
 
 # add timestep wizard callback
-wizard = TimeStepWizard(cfl=0.1, max_change=1.1, max_Δt=20minutes)
-simulation.callbacks[:wizard] = Callback(wizard, IterationInterval(20))
+# wizard = TimeStepWizard(cfl=0.1, max_change=1.1, max_Δt=20minutes)
+# simulation.callbacks[:wizard] = Callback(wizard, IterationInterval(20))
 
 # add progress callback
 wall_clock = [time_ns()]
@@ -237,7 +237,7 @@ function print_progress(sim)
     return nothing
 end
 
-simulation.callbacks[:print_progress] = Callback(print_progress, IterationInterval(20))
+simulation.callbacks[:print_progress] = Callback(print_progress, IterationInterval(100))
 
 
 #####
