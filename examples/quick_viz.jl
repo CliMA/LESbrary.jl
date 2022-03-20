@@ -25,3 +25,19 @@ top_bfield = jlfts["timeseries"]["b"][t_keys[end]][:, :, 1]
 fig2 = Figure()
 ax2 = Axis(fig2[1, 1])
 heatmap!(ax2, top_bfield, interpolate=true, colormap=:thermometer)
+
+##
+using NCDatasets
+ds = Dataset("eddying_channel_check_output_zonal_time_averaged_statistics.nc")
+
+keys(ds)
+b_field = ds["b"][:, :, end]
+field = ds["vb"][:, :, end]
+
+fig = Figure()
+ax = Axis(fig[1, 1])
+
+clims = quantile.(Ref(field[:]), (0.05, 0.95))
+println("clims are ", clims)
+heatmap1 = heatmap!(ax, 0 .. 1e6, -3000 .. 0, field, interpolate=true, colormap=:balance, colorrange=clims)
+contour!(ax, 0 .. 1e6, -3000 .. 0, b_field, levels=20, linewidth=4, color=:black, alpha=0.5)

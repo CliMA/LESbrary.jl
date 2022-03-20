@@ -22,13 +22,13 @@ const Ly = 2000kilometers # meridional domain length [m]
 const Lz = 3kilometers    # depth [m]
 
 # number of grid points
-Nx = 32*4
-Ny = 32*4
+Nx = 400
+Ny = 200
 Nz = 30
 
 save_fields_interval = 50years
-stop_time = 365days #200years + 1day
-Δt₀ = 20minutes
+stop_time = 200years + 1day
+Δt₀ = 7.5minutes * 2
 
 # stretched grid
 
@@ -56,12 +56,12 @@ stop_time = 365days #200years + 1day
 
 
 grid = RectilinearGrid(arch;
-                       topology = (Periodic, Bounded, Bounded),
-                       size = (Nx, Ny, Nz),
-                       halo = (3, 3, 3),
-                       x = (0, Lx),
-                       y = (0, Ly),
-                       z = (-Lz, 0)) # z_faces)
+    topology=(Periodic, Bounded, Bounded),
+    size=(Nx, Ny, Nz),
+    halo=(3, 3, 3),
+    x=(0, Lx),
+    y=(0, Ly),
+    z=(-Lz, 0)) # z_faces)
 
 # The vertical spacing versus depth for the prescribed grid
 # using GLMakie
@@ -75,24 +75,24 @@ grid = RectilinearGrid(arch;
 ##### Boundary conditions
 #####
 
-α  = 2e-4     # [K⁻¹] thermal expansion coefficient
-g  = 9.8061   # [m s⁻²] gravitational constant
+α = 2e-4     # [K⁻¹] thermal expansion coefficient
+g = 9.8061   # [m s⁻²] gravitational constant
 cᵖ = 3994.0   # [J K⁻¹] heat capacity
-ρ  = 1024.0   # [kg m⁻³] reference density
+ρ = 1024.0   # [kg m⁻³] reference density
 
-parameters = (Ly = Ly,
-              Lz = Lz,
-              Qᵇ = 10 / (ρ * cᵖ) * α * g,          # buoyancy flux magnitude [m² s⁻³]
-              y_shutoff = 5/6 * Ly,                # shutoff location for buoyancy flux [m]
-              τ = 0.15/ρ,                          # surface kinematic wind stress [m² s⁻²]
-              μ = 2e-3,                            # quadratic bottom drag coefficient []
-              ΔB = 8 * α * g,                      # surface vertical buoyancy gradient [s⁻²]
-              H = Lz,                              # domain depth [m]
-              h = 1000.0,                          # exponential decay scale of stable stratification [m]
-              y_sponge = 19/20 * Ly,               # southern boundary of sponge layer [m]
-              λt = 7days,                          # relaxation time scale for the northen sponge [s]
-              λs = 2e-4,                          # relaxation time scale for the surface [s]
-              )
+parameters = (Ly=Ly,
+    Lz=Lz,
+    Qᵇ=10 / (ρ * cᵖ) * α * g,          # buoyancy flux magnitude [m² s⁻³]
+    y_shutoff=5 / 6 * Ly,                # shutoff location for buoyancy flux [m]
+    τ=0.15 / ρ,                          # surface kinematic wind stress [m² s⁻²]
+    μ=2e-3,                            # quadratic bottom drag coefficient []
+    ΔB=8 * α * g,                      # surface vertical buoyancy gradient [s⁻²]
+    H=Lz,                              # domain depth [m]
+    h=1000.0,                          # exponential decay scale of stable stratification [m]
+    y_sponge=19 / 20 * Ly,               # southern boundary of sponge layer [m]
+    λt=7days,                          # relaxation time scale for the northen sponge [s]
+    λs=2e-4,                          # relaxation time scale for the surface [s]
+)
 
 # @inline function buoyancy_flux(i, j, grid, clock, model_fields, p)
 #     y = ynode(Center(), j, grid)
@@ -102,40 +102,40 @@ parameters = (Ly = Ly,
 # buoyancy_flux_bc = FluxBoundaryCondition(buoyancy_flux, discrete_form=true, parameters=parameters)
 
 
- @inline relaxation_profile(y, p) = p.ΔB * (y/ p.Ly)
- @inline function buoyancy_flux(i, j, grid, clock, model_fields, p)
-     y = ynode(Center(), j, grid)
-     return @inbounds p.λs * ( model_fields.b[i, j, grid.Nz] - relaxation_profile(y, p))
- end
+@inline relaxation_profile(y, p) = p.ΔB * (y / p.Ly)
+@inline function buoyancy_flux(i, j, grid, clock, model_fields, p)
+    y = ynode(Center(), j, grid)
+    return @inbounds p.λs * (model_fields.b[i, j, grid.Nz] - relaxation_profile(y, p))
+end
 
- buoyancy_flux_bc = FluxBoundaryCondition(buoyancy_flux, discrete_form=true, parameters=parameters)
+buoyancy_flux_bc = FluxBoundaryCondition(buoyancy_flux, discrete_form=true, parameters=parameters)
 
 
 @inline function u_stress(i, j, grid, clock, model_fields, p)
     y = ynode(Center(), j, grid)
-    return - p.τ * sin(π * y / p.Ly)
+    return -p.τ * sin(π * y / p.Ly)
 end
 
 u_stress_bc = FluxBoundaryCondition(u_stress, discrete_form=true, parameters=parameters)
 
-@inline u_drag(i, j, grid, clock, model_fields, p) = @inbounds - p.μ * model_fields.u[i, j, 1] * sqrt(model_fields.u[i, j, 1]^2 + model_fields.v[i, j, 1]^2)
-@inline v_drag(i, j, grid, clock, model_fields, p) = @inbounds - p.μ * model_fields.v[i, j, 1] * sqrt(model_fields.u[i, j, 1]^2 + model_fields.v[i, j, 1]^2)
+@inline u_drag(i, j, grid, clock, model_fields, p) = @inbounds -p.μ * model_fields.u[i, j, 1] * sqrt(model_fields.u[i, j, 1]^2 + model_fields.v[i, j, 1]^2)
+@inline v_drag(i, j, grid, clock, model_fields, p) = @inbounds -p.μ * model_fields.v[i, j, 1] * sqrt(model_fields.u[i, j, 1]^2 + model_fields.v[i, j, 1]^2)
 
 u_drag_bc = FluxBoundaryCondition(u_drag, discrete_form=true, parameters=parameters)
 v_drag_bc = FluxBoundaryCondition(v_drag, discrete_form=true, parameters=parameters)
 
-b_bcs = FieldBoundaryConditions(top = buoyancy_flux_bc)
+b_bcs = FieldBoundaryConditions(top=buoyancy_flux_bc)
 
-u_bcs = FieldBoundaryConditions(top = u_stress_bc, bottom = u_drag_bc)
-v_bcs = FieldBoundaryConditions(bottom = v_drag_bc)
+u_bcs = FieldBoundaryConditions(top=u_stress_bc, bottom=u_drag_bc)
+v_bcs = FieldBoundaryConditions(bottom=v_drag_bc)
 
 #####
 ##### Coriolis
 #####
 
 const f = -1e-4     # [s⁻¹]
-const β =  1e-11    # [m⁻¹ s⁻¹]
-coriolis = BetaPlane(f₀ = f, β = β)
+const β = 1e-11    # [m⁻¹ s⁻¹]
+coriolis = BetaPlane(f₀=f, β=β)
 
 #####
 ##### Forcing and initial condition
@@ -150,10 +150,10 @@ coriolis = BetaPlane(f₀ = f, β = β)
     z = znode(Center(), k, grid)
     target_b = initial_buoyancy(z, p)
     b = @inbounds model_fields.b[i, j, k]
-    return - 1 / timescale  * mask(y, p) * (b - target_b)
+    return -1 / timescale * mask(y, p) * (b - target_b)
 end
 
-Fb = Forcing(buoyancy_sponge, discrete_form = true, parameters = parameters)
+Fb = Forcing(buoyancy_sponge, discrete_form=true, parameters=parameters)
 
 # Turbulence closures
 
@@ -162,12 +162,12 @@ Fb = Forcing(buoyancy_sponge, discrete_form = true, parameters = parameters)
 κz = 0.5e-5 # [m²/s] vertical diffusivity
 νz = 3e-4   # [m²/s] vertical viscocity
 
-vertical_diffusive_closure = VerticalScalarDiffusivity(VerticallyImplicitTimeDiscretization(), ν = νz, κ = κz)
+vertical_diffusive_closure = VerticalScalarDiffusivity(VerticallyImplicitTimeDiscretization(), ν=νz, κ=κz)
 
-horizontal_diffusive_closure = HorizontalScalarDiffusivity(ν = νh, κ = κh)
+horizontal_diffusive_closure = HorizontalScalarDiffusivity(ν=νh, κ=κh)
 
-convective_adjustment = ConvectiveAdjustmentVerticalDiffusivity(convective_κz = 1.0,
-                                                                convective_νz = 0.0)
+convective_adjustment = ConvectiveAdjustmentVerticalDiffusivity(convective_κz=1.0,
+    convective_νz=0.0)
 
 # catke = CATKEVerticalDiffusivity()
 
@@ -177,16 +177,16 @@ convective_adjustment = ConvectiveAdjustmentVerticalDiffusivity(convective_κz =
 
 @info "Building a model..."
 
-model = HydrostaticFreeSurfaceModel(grid = grid,
-                                    free_surface = ImplicitFreeSurface(),
-                                    momentum_advection = WENO5(),
-                                    tracer_advection = WENO5(),
-                                    buoyancy = BuoyancyTracer(),
-                                    coriolis = coriolis,
-                                    closure = (horizontal_diffusive_closure, vertical_diffusive_closure, convective_adjustment),
-                                    tracers = (:b, :c, :e),
-                                    boundary_conditions = (b=b_bcs, u=u_bcs, v=v_bcs),
-                                    forcing = (; b=Fb))
+model = HydrostaticFreeSurfaceModel(grid=grid,
+    free_surface=ImplicitFreeSurface(),
+    momentum_advection=WENO5(),
+    tracer_advection=WENO5(),
+    buoyancy=BuoyancyTracer(),
+    coriolis=coriolis,
+    closure=(horizontal_diffusive_closure, vertical_diffusive_closure, convective_adjustment),
+    tracers=(:b, :c, :e),
+    boundary_conditions=(b=b_bcs, u=u_bcs, v=v_bcs),
+    forcing=(; b=Fb))
 
 @info "Built $model."
 
@@ -196,7 +196,7 @@ model = HydrostaticFreeSurfaceModel(grid = grid,
 
 # resting initial condition
 ε(σ) = σ * randn()
-bᵢ(x, y, z) = parameters.ΔB * ( exp(z / parameters.h) - exp(-Lz / parameters.h) ) / (1 - exp(-Lz / parameters.h)) + ε(1e-8)
+bᵢ(x, y, z) = parameters.ΔB * (exp(z / parameters.h) - exp(-Lz / parameters.h)) / (1 - exp(-Lz / parameters.h)) + ε(1e-8)
 uᵢ(x, y, z) = ε(1e-8)
 vᵢ(x, y, z) = ε(1e-8)
 wᵢ(x, y, z) = ε(1e-8)
@@ -204,7 +204,7 @@ wᵢ(x, y, z) = ε(1e-8)
 Δy = 100kilometers
 Δz = 100
 Δc = 2Δy
-cᵢ(x, y, z) = exp(-(y - Ly/2)^2 / 2Δc^2) * exp(-(z + Lz/4)^2 / 2Δz^2)
+cᵢ(x, y, z) = exp(-(y - Ly / 2)^2 / 2Δc^2) * exp(-(z + Lz / 4)^2 / 2Δz^2)
 
 set!(model, b=bᵢ, u=uᵢ, v=vᵢ, w=wᵢ, c=cᵢ)
 
@@ -223,14 +223,14 @@ wall_clock = [time_ns()]
 
 function print_progress(sim)
     @printf("[%05.2f%%] i: %d, t: %s, wall time: %s, max(u): (%6.3e, %6.3e, %6.3e) m/s, next Δt: %s\n",
-            100 * (sim.model.clock.time / sim.stop_time),
-            sim.model.clock.iteration,
-            prettytime(sim.model.clock.time),
-            prettytime(1e-9 * (time_ns() - wall_clock[1])),
-            maximum(abs, sim.model.velocities.u),
-            maximum(abs, sim.model.velocities.v),
-            maximum(abs, sim.model.velocities.w),
-            prettytime(sim.Δt))
+        100 * (sim.model.clock.time / sim.stop_time),
+        sim.model.clock.iteration,
+        prettytime(sim.model.clock.time),
+        prettytime(1e-9 * (time_ns() - wall_clock[1])),
+        maximum(abs, sim.model.velocities.u),
+        maximum(abs, sim.model.velocities.v),
+        maximum(abs, sim.model.velocities.w),
+        prettytime(sim.Δt))
 
     wall_clock[1] = time_ns()
 
@@ -257,62 +257,75 @@ U = Field(Average(u, dims=1))
 V = Field(Average(v, dims=1))
 W = Field(Average(w, dims=1))
 
-b′ = b - B
-u′ = u - U
-v′ = v - V
-w′ = w - W
-c′ = c - C
+uu_op = @at (Center, Center, Center) u * u
+vv_op = @at (Center, Center, Center) v * v
+ww_op = @at (Center, Center, Center) w * w
 
-tke_op = @at (Center, Center, Center) (u′ * u′ + v′ * v′ + w′ * w′) / 2
-tke = Field(Average(tke_op, dims=1))
+uv_op = @at (Center, Center, Center) u * v
+vw_op = @at (Center, Center, Center) v * w
+uw_op = @at (Center, Center, Center) u * w
 
-uv_op = @at (Center, Center, Center) u′ * v′
-vw_op = @at (Center, Center, Center) v′ * w′
-uw_op = @at (Center, Center, Center) u′ * w′
+uu = Field(Average(uu_op, dims=1))
+vv = Field(Average(vv_op, dims=1))
+ww = Field(Average(ww_op, dims=1))
 
-u′v′ = Field(Average(uv_op, dims=1))
-v′w′ = Field(Average(vw_op, dims=1))
-u′w′ = Field(Average(uw_op, dims=1))
+uv = Field(Average(uv_op, dims=1))
+vw = Field(Average(vw_op, dims=1))
+uw = Field(Average(uw_op, dims=1))
 
-b′b′ = Field(Average(b′ * b′, dims=1))
-v′b′ = Field(Average(b′ * v′ , dims=1))
-w′b′ = Field(Average(b′ * w′ , dims=1))
+bb = Field(Average(b * b, dims=1))
+vb = Field(Average(b * v, dims=1))
+wb = Field(Average(b * w, dims=1))
 
-c′c′ = Field(Average(c′ * c′, dims=1))
-v′c′ = Field(Average(c′ * v′, dims=1))
-w′c′ = Field(Average(c′ * w′, dims=1))
+cc = Field(Average(c * c, dims=1))
+vc = Field(Average(c * v, dims=1))
+wc = Field(Average(c * w, dims=1))
 
 outputs = (; b, c, ζ, u, v, w)
 
-zonally_averaged_outputs = (b=B, u=U, v=V, w=W, c=C, η=η̄,
-                            vb=v′b′, wb=w′b′, vc=v′c′, wc=w′c′, bb=b′b′,
-                            tke=tke, uv=u′v′, vw=v′w′, uw=u′w′, cc=c′c′)
-
+zonally_averaged_outputs = (b=B, u=U, v=V, w=W, c=C, η=η̄, uu=uu, vv=vv, ww=ww, uv=uv, vw=vw, uw=uw, bb=bb, vb=vb, wb=wb, cc=cc, vc=vc, wc=wc)
+#=
+ vb=v′b′, wb=w′b′, vc=v′c′, wc=w′c′, bb=b′b′,
+    tke=tke, uv=u′v′, vw=v′w′, uw=u′w′, cc=c′c′
+=#
 #####
 ##### Build checkpointer and output writer
 #####
 
 simulation.output_writers[:checkpointer] = Checkpointer(model,
-                                                        schedule = TimeInterval(10years),
-                                                        prefix = filename,
-                                                        force = true)
+    schedule=TimeInterval(10years),
+    prefix=filename,
+    force=true)
 
-slicers = (west = (1, :, :),
-           east = (grid.Nx, :, :),
-           south = (:, 1, :),
-           north = (:, grid.Ny, :),
-           bottom = (:, :, 1),
-           top = (:, :, grid.Nz))
+slicers = (west=(1, :, :),
+    east=(grid.Nx, :, :),
+    south=(:, 1, :),
+    north=(:, grid.Ny, :),
+    bottom=(:, :, 1),
+    top=(:, :, grid.Nz))
 
 for side in keys(slicers)
     indices = slicers[side]
 
     simulation.output_writers[side] = JLD2OutputWriter(model, outputs;
-                                                       schedule = TimeInterval(save_fields_interval),
-                                                       indices,
-                                                       prefix = filename * "_$(side)_slice",
-                                                       force = true)
+        schedule=TimeInterval(save_fields_interval),
+        indices,
+        prefix=filename * "_$(side)_slice",
+        force=true)
 end
+
+
+simulation.output_writers[:zonal] = JLD2OutputWriter(model, zonally_averaged_outputs,
+    schedule=AveragedTimeInterval(10 * 365days, window=10 * 365days, stride=10),
+    prefix=filename * "_zonal_time_average",
+    force=true)
+
+simulation.output_writers[:averaged_stats_nc] =
+    NetCDFOutputWriter(model, zonally_averaged_outputs,
+        mode="c",
+        filepath=filename * "_zonal_time_averaged_statistics.nc",
+        schedule=AveragedTimeInterval(10 * 365days, window=10 * 365days, stride=10),
+        )
 
 #=
 simulation.output_writers[:zonal] = JLD2OutputWriter(model, zonally_averaged_outputs;
@@ -333,6 +346,7 @@ simulation.output_writers[:averages] = JLD2OutputWriter(model, averaged_outputs,
 @info "Running the simulation..."
 
 run!(simulation, pickup=false)
+
 
 # simulation.stop_time += 61days
 # run!(simulation, pickup=true)
