@@ -41,7 +41,34 @@ end
     return -1 / timescale * mask(y, p) * (b - target_b)
 end
 
+#####
+##### Util
+#####
+
+wall_clock = Ref(time_ns())
+
+function print_progress(sim)
+    @printf("[%05.2f%%] i: %d, t: %s, wall time: %s, max(u): (%6.3e, %6.3e, %6.3e) m/s, next Δt: %s\n",
+            100 * (sim.model.clock.time / sim.stop_time),
+            sim.model.clock.iteration,
+            prettytime(sim.model.clock.time),
+            prettytime(1e-9 * (time_ns() - wall_clock[])),
+            maximum(abs, sim.model.velocities.u),
+            maximum(abs, sim.model.velocities.v),
+            maximum(abs, sim.model.velocities.w),
+            prettytime(sim.Δt))
+
+    wall_clock[] = time_ns()
+
+    return nothing
+end
+
+##### 
+##### The business
+#####
+
 function eddying_channel_simulation(;
+    name                              = "",
     architecture                      = CPU(),
     size                              = (80, 40, 30),
     extent                            = (4000kilometers, 2000kilometers, 3kilometers),
@@ -65,7 +92,7 @@ function eddying_channel_simulation(;
     pickup                            = false,
     )
 
-    filepath = "tau_" * string(max_momentum_flux) * "_beta_" * string(β) * "_ridge_height_" * string(ridge_height)
+    filepath = name * "eddying_channel_tau_" * string(max_momentum_flux) * "_beta_" * string(β) * "_ridge_height_" * string(ridge_height)
     filename = filepath
 
     # Domain
@@ -141,7 +168,7 @@ function eddying_channel_simulation(;
                                         momentum_advection = WENO5(),
                                         tracer_advection = WENO5(),
                                         buoyancy = BuoyancyTracer(),
-                                        tracers = :b,
+                                        tracers = (:b, :c),
                                         boundary_conditions = (b = b_bcs, u = u_bcs, v = v_bcs),
                                         forcing = (; b = Fb))
 
@@ -160,8 +187,10 @@ function eddying_channel_simulation(;
 
     Δy = 100kilometers
     Δz = 100
+    Δc = 2Δy
+    cᵢ(x, y, z) = exp(-(y - Ly/2)^2 / 2Δc^2) * exp(-(z + Lz/4)^2 / 2Δz^2)
 
-    set!(model, b = bᵢ, u = uᵢ, v = vᵢ, w = wᵢ)
+    set!(model, b = bᵢ, u = uᵢ, v = vᵢ, w = wᵢ, c = cᵢ)
 
     #####
     ##### Simulation building
@@ -173,27 +202,8 @@ function eddying_channel_simulation(;
     wizard = TimeStepWizard(cfl = 0.1, max_change = 1.1, max_Δt = 20minutes)
     simulation.callbacks[:wizard] = Callback(wizard, IterationInterval(20))
 
-    # add progress callback
-    wall_clock = [time_ns()]
-
-    function print_progress(sim)
-        @printf("[%05.2f%%] i: %d, t: %s, wall time: %s, max(u): (%6.3e, %6.3e, %6.3e) m/s, next Δt: %s\n",
-            100 * (sim.model.clock.time / sim.stop_time),
-            sim.model.clock.iteration,
-            prettytime(sim.model.clock.time),
-            prettytime(1e-9 * (time_ns() - wall_clock[1])),
-            maximum(abs, sim.model.velocities.u),
-            maximum(abs, sim.model.velocities.v),
-            maximum(abs, sim.model.velocities.w),
-            prettytime(sim.Δt))
-
-        wall_clock[1] = time_ns()
-
-        return nothing
-    end
-
-    simulation.callbacks[:print_progress] = Callback(print_progress, IterationInterval(20))
-
+    wall_clock[] = time_ns()
+    simulation.callbacks[:print_progress] = Callback(print_progress, IterationInterval(100))
 
     #####
     ##### Diagnostics
@@ -216,8 +226,8 @@ function eddying_channel_simulation(;
     v′ = v - V
     w′ = w - W
 
-    eke_op = @at (Center, Center, Center) (u′ * u′ + v′ * v′ + w′ * w′) / 2
-    eke = Field(Average(eke_op, dims = 1))
+    eke_op = @at (Center, Center, Center) 0.5 * (u′ * u′ + v′ * v′ + w′ * w′)
+    eke = Average(Field(eke_op), dims=1)
 
     uv_op = @at (Center, Center, Center) u′ * v′
     vw_op = @at (Center, Center, Center) v′ * w′
@@ -250,12 +260,14 @@ function eddying_channel_simulation(;
     #####
     ##### Build checkpointer and output writer
     #####
-   
-    simulation.output_writers[:zonal] =
-        JLD2OutputWriter(model, zonally_averaged_outputs;
-                         schedule = TimeInterval(zonal_averages_save_interval),
-                         prefix = filename * "_zonal_averages",
-                         force = true)
+    
+    if !isnothing(zonal_averages_save_interval)
+        simulation.output_writers[:zonal] =
+            JLD2OutputWriter(model, zonally_averaged_outputs;
+                             schedule = TimeInterval(zonal_averages_save_interval),
+                             prefix = filename * "_zonal_averages",
+                             force = true)
+    end
 
     if !isnothing(time_averages_interval)
         schedule = AveragedTimeInterval(time_averages_interval, window=time_averages_window),
@@ -292,3 +304,4 @@ function eddying_channel_simulation(;
 
     return simulation
 end
+
