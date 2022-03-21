@@ -3,7 +3,7 @@ using Oceananigans
 using Oceananigans.Units
 using LESbrary.IdealizedExperiments: eddying_channel_simulation
 
-simulation = eddying_channel_simulation(architecture=GPU(), stop_time=1year)
+simulation = eddying_channel_simulation(architecture=GPU(), stop_time=2years)
  
 run!(simulation)
 

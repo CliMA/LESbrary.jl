@@ -18,7 +18,7 @@ default_boundary_layer_closure = ConvectiveAdjustmentVerticalDiffusivity(convect
 
 @inline function buoyancy_flux(i, j, grid, clock, model_fields, p)
     y = ynode(Center(), j, grid)
-    return @inbounds p.λs * (model_fields.b[i, j, grid.Nz] - relaxation_profile(y, p))
+    return @inbounds p.q★ * (model_fields.b[i, j, grid.Nz] - relaxation_profile(y, p))
 end
 
 @inline function u_stress(i, j, grid, clock, model_fields, p)
@@ -33,7 +33,7 @@ end
 @inline mask(y, p) = max(0.0, y - p.y_sponge) / (p.Ly - p.y_sponge)
 
 @inline function buoyancy_relaxation(i, j, k, grid, clock, model_fields, p)
-    timescale = p.λt
+    timescale = p.λᵇ
     y = ynode(Center(), j, grid)
     z = znode(Center(), k, grid)
     target_b = initial_buoyancy(z, p)
@@ -77,10 +77,12 @@ function eddying_channel_simulation(;
     f₀                                = - 1e-4,
     β                                 = 1e-11,
     buoyancy_differential             = 0.02,
-    background_horizontal_diffusivity = 0.5e-5, # [m²/s] horizontal diffusivity
-    background_horizontal_viscosity   = 30.0,   # [m²/s] horizontal viscocity
-    background_vertical_diffusivity   = 0.5e-5, # [m²/s] vertical diffusivity
-    background_vertical_viscosity     = 3e-4,   # [m²/s] vertical viscocity
+    background_horizontal_diffusivity = 0.5e-5, # [m² s⁻¹] horizontal diffusivity
+    background_horizontal_viscosity   = 30.0,   # [m² s⁻¹] horizontal viscocity
+    background_vertical_diffusivity   = 0.5e-5, # [m² s⁻¹] vertical diffusivity
+    background_vertical_viscosity     = 3e-4,   # [m² s⁻¹] vertical viscocity
+    buoyancy_piston_velocity          = 2e-4,   # [m s⁻¹] piston velocity for surface buoyancy flux / relaxation
+    buoyancy_restoring_time_scale     = 7days,  # [s] Timescale for internal buoyancy restoring
     ridge_height                      = 0.0,
     boundary_layer_closure            = default_boundary_layer_closure,
     slice_save_interval               = 7days,
@@ -109,13 +111,13 @@ function eddying_channel_simulation(;
     #####
 
     parameters = (; Ly, Lz,
-        τ = peak_momentum_flux,       # surface kinematic wind stress [m² s⁻²]
-        Cᵈ = bottom_drag_coefficient, # quadratic bottom drag coefficient []
-        ΔB = buoyancy_differential,   # surface horizontal buoyancy gradient [s⁻²]
-        h = 1000.0,                   # exponential decay scale of stable stratification [m]
-        y_sponge = 19 / 20 * Ly,      # southern boundary of sponge layer [m]
-        λt = 7days,                   # relaxation time scale [s]
-        λs = 2e-4,                    # surface relaxation flux velocity [m/s]
+        τ        = peak_momentum_flux,       # surface kinematic wind stress [m² s⁻²]
+        Cᵈ       = bottom_drag_coefficient,  # quadratic bottom drag coefficient []
+        ΔB       = buoyancy_differential,    # surface horizontal buoyancy gradient [s⁻²]
+        h        = 1000.0,                   # exponential decay scale of stable stratification [m]
+        y_sponge = 19 / 20 * Ly,             # southern boundary of sponge layer [m]
+        λᵇ       = 7days,                    # internal buoyancy restoring time scale [s]
+        q★       = buoyancy_piston_velocity, # surface buoyancy relaxation flux velocity [m/s]
     )
 
     u_drag_bc = FluxBoundaryCondition(u_drag, discrete_form = true, parameters = parameters)
