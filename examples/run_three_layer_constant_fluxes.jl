@@ -25,46 +25,34 @@ using LESbrary.IdealizedExperiments: six_day_suite_parameters
 # * :strong_wind_no_rotation
 #
 # In addition to selecting the architecture, size, and case to run, we can also tweak
-# certain parameters. Below we change the "snapshot_time_interval" (the interval over
-# which slices of the simulation is saved) from the default 2 minutes to 1 minute
-# (to make pretty movies), and we turn passive tracers off.
+# certain parameters below.
 
 configuration = (;
     architecture = GPU(),
-    size = (64, 64, 64),
-    snapshot_time_interval = 1minute,
-    passive_tracers = false,
+    size = (128, 128, 128),
+    snapshot_time_interval = 2minute,
+    passive_tracers = true,
     time_averaged_statistics = false,
-    stokes_drift = true,
-    stokes_drift_peak_wavenumber = 2π / 300 # m⁻¹
 )
 
-case = :weak_wind_strong_cooling
+#parameters = (name="free_convection",          momentum_flux=0.0,   buoyancy_flux=9e-8, f=1e-4, stop_time=3days, stokes_drift=true)
+#parameters = (name="strong_wind_no_rotation",  momentum_flux=-1e-4, buoyancy_flux=0.0,  f=0.0,  stop_time=3days, stokes_drift=true)
+#parameters = (name="strong_wind",              momentum_flux=-2e-4, buoyancy_flux=0.0,  f=1e-4, stop_time=3days, stokes_drift=true)
+#parameters = (name="strong_wind_weak_cooling", momentum_flux=-1e-4, buoyancy_flux=3e-8, f=1e-4, stop_time=3days, stokes_drift=true)
+#parameters = (name="med_wind_med_cooling",     momentum_flux=-3e-4, buoyancy_flux=9e-8, f=1e-4, stop_time=3days, stokes_drift=true)
+#parameters = (name="weak_wind_strong_cooling", momentum_flux=-1e-5, buoyancy_flux=4e-8, f=1e-4, stop_time=3days, stokes_drift=true)
 
-parameters = Dict(
-    :name => "very_weak_wind_very_strong_cooling",
-    :momentum_flux => -1e-4,
-    :buoyancy_flux => 1e-7,
-    :f => 1e-4,
-    :stop_time => 2days,
-)
+#parameters = (name="strong_wind_no_rotation",  momentum_flux=-1e-4, buoyancy_flux=0.0,  f=0.0,  stop_time=4days, stokes_drift=true)
+#parameters = (name="strong_wind",              momentum_flux=-2e-4, buoyancy_flux=0.0,  f=1e-4, stop_time=4days, stokes_drift=true)
+#parameters = (name="strong_wind_weak_cooling", momentum_flux=-1e-4, buoyancy_flux=1e-8, f=1e-4, stop_time=4days, stokes_drift=true)
+parameters = (name="med_wind_med_cooling",     momentum_flux=-5e-5, buoyancy_flux=3e-8, f=1e-4, stop_time=4days, stokes_drift=true)
+#parameters = (name="free_convection",          momentum_flux=0.0,   buoyancy_flux=7e-8, f=1e-4, stop_time=4days, stokes_drift=true)
+#parameters = (name="weak_wind_strong_cooling", momentum_flux=-1e-5, buoyancy_flux=5e-8, f=1e-4, stop_time=4days, stokes_drift=false)
 
-#=
-two_day_suite_parameters = Dict{Symbol, Any}(
-    :free_convection          => Dict{Symbol, Any}(:momentum_flux => 0.0,     :buoyancy_flux => 1.2e-7, :f => 1e-4),
-    :strong_wind              => Dict{Symbol, Any}(:momentum_flux => -1e-3,   :buoyancy_flux => 0.0,    :f => 1e-4),
-    :strong_wind_weak_cooling => Dict{Symbol, Any}(:momentum_flux => -7e-4,   :buoyancy_flux => 6e-8,   :f => 1e-4),
-    :weak_wind_strong_cooling => Dict{Symbol, Any}(:momentum_flux => -3.3e-4, :buoyancy_flux => 1.1e-7, :f => 1e-4),
-    :strong_wind_weak_heating => Dict{Symbol, Any}(:momentum_flux => -1e-3,   :buoyancy_flux => -4e-8,  :f => 1e-4),
-    :strong_wind_no_rotation  => Dict{Symbol, Any}(:momentum_flux => -2e-4,   :buoyancy_flux => 0.0,    :f => 0.0),
-)
-=#
-
+@show "Running with $parameters..."
 simulation = three_layer_constant_fluxes_simulation(; configuration..., parameters...)
-
 run!(simulation)
 
-#=
 using CairoMakie
 using ElectronDisplay
 
@@ -78,9 +66,9 @@ e = FieldTimeSeries(filepath, "e", architecture=CPU())
 z = znodes(u)
 
 fig = Figure(resolution=(1800, 600))
-ax_T = Axis(fig[1, 1])
-ax_u = Axis(fig[1, 2])
-ax_e = Axis(fig[1, 3])
+ax_T = Axis(fig[1, 1], xlabel="Temperature (ᵒC)", ylabel="z (m)", title=parameters[:name])
+ax_u = Axis(fig[1, 2], xlabel="Velocity (cm s⁻¹)", ylabel="z (m)", title=parameters[:name])
+ax_e = Axis(fig[1, 3], xlabel="Turbulent kinetic energy (cm² s⁻²)", ylabel="z (m)", title=parameters[:name])
 
 n = length(u.times)
 
@@ -89,11 +77,21 @@ un = interior(u[n])[1, 1, :]
 vn = interior(v[n])[1, 1, :]
 en = interior(e[n])[1, 1, :]
 
+@show Tmin = minimum(Tn)
+@show Tmax = maximum(Tn)
+hlines!(ax_T, -128, xmin=Tmin, xmax=Tmax, color=:gray23)
 lines!(ax_T, Tn, z)
-lines!(ax_u, un, z)
-lines!(ax_u, vn, z)
-lines!(ax_e, en, z)
+
+@show umin = min(minimum(1e2 * un), minimum(1e2 * vn))
+@show umax = max(maximum(1e2 * un), maximum(1e2 * vn))
+hlines!(ax_u, -128, xmin=umin, xmax=umax, color=:gray23)
+lines!(ax_u, 1e2 * un, z)
+lines!(ax_u, 1e2 * vn, z)
+
+emin = minimum(1e4 * en)
+emax = maximum(1e4 * en)
+hlines!(ax_e, -128, xmin=emin, xmax=emax, color=:gray23)
+lines!(ax_e, 1e4 * en, z)
 
 display(fig)
-=#
 
