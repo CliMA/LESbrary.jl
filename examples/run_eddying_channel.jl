@@ -3,11 +3,22 @@ using Oceananigans
 using Oceananigans.Units
 using LESbrary.IdealizedExperiments: eddying_channel_simulation
 
+using Oceananigans.TurbulenceClosures.CATKEVerticalDiffusivities:
+    CATKEVerticalDiffusivity,
+    SurfaceTKEFlux
+
 #####
 ##### Setup and run the simulation
 #####
 
-simulation = eddying_channel_simulation(architecture=GPU(), size=(160, 80, 40), stop_time=1years)
+surface_TKE_flux = SurfaceTKEFlux(CᵂwΔ=4.56, Cᵂu★=4.46)
+boundary_layer_closure = CATKEVerticalDiffusivity(; surface_TKE_flux, Cᴰ=0.215) 
+
+simulation = eddying_channel_simulation(; architecture = GPU(),
+                                        size = (160, 80, 70),
+                                        stop_time = 1years,
+                                        Δt = 5minute,
+                                        boundary_layer_closure)
  
 wall_time = time_ns()
 
