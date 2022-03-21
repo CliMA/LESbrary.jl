@@ -213,49 +213,25 @@ function eddying_channel_simulation(;
     b = model.tracers.b
     η = model.free_surface.η
 
-    ζ = Field(∂x(v) - ∂y(u))
-
-    B = Field(Average(b, dims = 1))
-    U = Field(Average(u, dims = 1))
-    η̄ = Field(Average(η, dims = 1))
-    V = Field(Average(v, dims = 1))
-    W = Field(Average(w, dims = 1))
-
-    b′ = b - B
-    u′ = u - U
-    v′ = v - V
-    w′ = w - W
-
-    eke_op = @at (Center, Center, Center) 0.5 * (u′ * u′ + v′ * v′ + w′ * w′)
-    eke = Average(Field(eke_op), dims=1)
-
-    uv_op = @at (Center, Center, Center) u′ * v′
-    vw_op = @at (Center, Center, Center) v′ * w′
-    uw_op = @at (Center, Center, Center) u′ * w′
-
-    u′v′ = Field(Average(uv_op, dims = 1))
-    v′w′ = Field(Average(vw_op, dims = 1))
-    u′w′ = Field(Average(uw_op, dims = 1))
-
-    b′b′ = Field(Average(b′ * b′, dims = 1))
-    v′b′ = Field(Average(b′ * v′, dims = 1))
-    w′b′ = Field(Average(b′ * w′, dims = 1))
+    ζ = ∂x(v) - ∂y(u)
 
     outputs = (; b, ζ, u, v, w)
 
     zonally_averaged_outputs = (
-        b   = B,
-        u   = U,
-        v   = V,
-        w   = W,
-        η   = η̄,
-        vb  = v′b′,
-        wb  = w′b′,
-        bb  = b′b′,
-        eke = eke,
-        uv  = u′v′,
-        uw  = u′w′,
-        vw  = v′w′)
+        b   = Average(b,     dims=1),
+        u   = Average(u,     dims=1),
+        v   = Average(v,     dims=1),
+        w   = Average(w,     dims=1),
+        η   = Average(η,     dims=1),
+        vb  = Average(v * b, dims=1),
+        wb  = Average(w * b, dims=1),
+        bb  = Average(b * b, dims=1),
+        eke = Average(eke,   dims=1),
+        uv  = Average(v * v, dims=1),
+        uw  = Average(u * w, dims=1),
+        vw  = Average(v * w, dims=1),
+        ζ²  = Average(ζ^2,   dims=1),
+    )
 
     #####
     ##### Build checkpointer and output writer
