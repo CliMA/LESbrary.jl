@@ -72,10 +72,12 @@ function eddying_channel_simulation(;
     architecture                      = CPU(),
     size                              = (80, 40, 30),
     extent                            = (4000kilometers, 2000kilometers, 3kilometers),
+    vertically_stretched              = true,
     peak_momentum_flux                = 1.5e-4,
     bottom_drag_coefficient           = 2e-3,
     f₀                                = - 1e-4,
     β                                 = 1e-11,
+    Δt                                = 20minutes,
     buoyancy_differential             = 0.02,
     background_horizontal_diffusivity = 0.5e-5, # [m² s⁻¹] horizontal diffusivity
     background_horizontal_viscosity   = 30.0,   # [m² s⁻¹] horizontal viscocity
@@ -98,11 +100,20 @@ function eddying_channel_simulation(;
     # Domain
     Lx, Ly, Lz = extent
     Nx, Ny, Nz = size
-    Δt₀ = 5minutes
 
-    grid = RectilinearGrid(architecture; size, extent,
+    if vertically_stretched
+        σ = 1.05 # linear stretching factor
+        Δz_center_linear(k) = Lz * (σ - 1) * σ^(Nz - k) / (σ^Nz - 1) # k=1 is the bottom-most cell, k=Nz is the top cell
+        z(k) = k==1 ? -Lz : - Lz + sum(Δz_center_linear.(1:k-1))
+    else
+        z = (-Lz, 0)
+    end
+
+    grid = RectilinearGrid(architecture; size, z,
                            topology = (Periodic, Bounded, Bounded),
-                           halo = (3, 3, 3))
+                           halo = (3, 3, 3),
+                           x = (0, Lx),
+                           y = (0, Ly))
 
     @info "Built a grid: $grid."
 
@@ -166,7 +177,7 @@ function eddying_channel_simulation(;
                                         momentum_advection = WENO5(),
                                         tracer_advection = WENO5(),
                                         buoyancy = BuoyancyTracer(),
-                                        tracers = (:b, :c),
+                                        tracers = (:b, :c, :e),
                                         boundary_conditions = (b = b_bcs, u = u_bcs, v = v_bcs),
                                         forcing = (; b = Fb))
 
@@ -194,10 +205,10 @@ function eddying_channel_simulation(;
     ##### Simulation building
     #####
 
-    simulation = Simulation(model; Δt = Δt₀, stop_time)
+    simulation = Simulation(model; Δt, stop_time)
 
     # add timestep wizard callback
-    wizard = TimeStepWizard(cfl = 0.1, max_change = 1.1, max_Δt = 20minutes)
+    wizard = TimeStepWizard(cfl = 0.1, max_change = 1.1, max_Δt = Δt)
     simulation.callbacks[:wizard] = Callback(wizard, IterationInterval(20))
 
     wall_clock[] = time_ns()
