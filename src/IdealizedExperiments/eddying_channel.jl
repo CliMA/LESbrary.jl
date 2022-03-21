@@ -87,7 +87,7 @@ function eddying_channel_simulation(;
     zonal_averages_interval           = nothing,
     time_averages_interval            = nothing,
     time_averages_window              = time_averages_interval,
-    stop_time                         = 1year,
+    stop_time                         = 2year,
     pickup                            = false)
 
     filepath = name * "eddying_channel_tau_" * string(peak_momentum_flux) * "_beta_" * string(β) * "_ridge_height_" * string(ridge_height)
