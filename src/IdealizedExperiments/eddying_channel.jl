@@ -226,10 +226,12 @@ function eddying_channel_simulation(;
         vb  = Average(v * b, dims=1),
         wb  = Average(w * b, dims=1),
         bb  = Average(b * b, dims=1),
-        eke = Average(eke,   dims=1),
-        uv  = Average(v * v, dims=1),
+        uv  = Average(u * v, dims=1),
         uw  = Average(u * w, dims=1),
         vw  = Average(v * w, dims=1),
+        uu  = Average(u * u, dims=1),
+        vv  = Average(v * v, dims=1),
+        ww  = Average(w * w, dims=1),
         ζ²  = Average(ζ^2,   dims=1),
     )
 
