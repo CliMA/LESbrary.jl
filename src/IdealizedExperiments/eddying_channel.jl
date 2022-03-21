@@ -105,8 +105,12 @@ function eddying_channel_simulation(;
         σ = 1.05 # linear stretching factor
         Δz_center_linear(k) = Lz * (σ - 1) * σ^(Nz - k) / (σ^Nz - 1) # k=1 is the bottom-most cell, k=Nz is the top cell
         z(k) = k==1 ? -Lz : - Lz + sum(Δz_center_linear.(1:k-1))
+        momentum_advection = WENO5(; grid),
+        tracer_advection = WENO5(; grid),
     else
         z = (-Lz, 0)
+        momentum_advection = WENO5(),
+        tracer_advection = WENO5(),
     end
 
     grid = RectilinearGrid(architecture; size, z,
@@ -172,10 +176,8 @@ function eddying_channel_simulation(;
 
     @info "Building a model..."
 
-    model = HydrostaticFreeSurfaceModel(; grid, closure, coriolis,
+    model = HydrostaticFreeSurfaceModel(; grid, closure, coriolis, momentum_advection, tracer_advection,
                                         free_surface = ImplicitFreeSurface(),
-                                        momentum_advection = WENO5(),
-                                        tracer_advection = WENO5(),
                                         buoyancy = BuoyancyTracer(),
                                         tracers = (:b, :c, :e),
                                         boundary_conditions = (b = b_bcs, u = u_bcs, v = v_bcs),
