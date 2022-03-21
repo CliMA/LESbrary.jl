@@ -9,14 +9,15 @@ two_day_suite_parameters = Dict{Symbol, Any}(
     :free_convection          => Dict{Symbol, Any}(:momentum_flux => 0.0,     :buoyancy_flux => 1.1e-7, :f => 1e-4),
     :weak_wind_strong_cooling => Dict{Symbol, Any}(:momentum_flux => -2.0e-4, :buoyancy_flux => 1.0e-7, :f => 1e-4),
     :med_wind_med_cooling     => Dict{Symbol, Any}(:momentum_flux => -3.0e-4, :buoyancy_flux => 9.0e-8, :f => 1e-4),
-    :strong_wind_weak_cooling => Dict{Symbol, Any}(:momentum_flux => -5.0e-4, :buoyancy_flux => 2.0e-8, :f => 1e-4),
-    :strong_wind              => Dict{Symbol, Any}(:momentum_flux => -6.0e-4, :buoyancy_flux => 0.0,    :f => 1e-4),
-    :strong_wind_no_rotation  => Dict{Symbol, Any}(:momentum_flux => -2e-4,   :buoyancy_flux => 0.0,    :f => 0.0),
+    :strong_wind_weak_cooling => Dict{Symbol, Any}(:momentum_flux => -4.0e-4, :buoyancy_flux => 2.0e-8, :f => 1e-4),
+    :strong_wind              => Dict{Symbol, Any}(:momentum_flux => -5.0e-4, :buoyancy_flux => 0.0,    :f => 1e-4),
+    :strong_wind_no_rotation  => Dict{Symbol, Any}(:momentum_flux => -2.0e-4, :buoyancy_flux => 0.0,    :f => 0.0),
 )
 
 for (name, set) in two_day_suite_parameters
     set[:name] = string(name)
     set[:stop_time] = 2days
+    set[:stokes_drift] = true
 end
 
 four_day_suite_parameters = Dict{Symbol, Any}(
@@ -30,6 +31,7 @@ four_day_suite_parameters = Dict{Symbol, Any}(
 for (name, set) in four_day_suite_parameters
     set[:name] = string(name)
     set[:stop_time] = 4days
+    set[:stokes_drift] = true
 end
 
 six_day_suite_parameters = Dict{Symbol, Any}(

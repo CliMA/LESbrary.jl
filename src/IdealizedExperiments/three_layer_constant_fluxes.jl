@@ -33,6 +33,13 @@ function execute(cmd::Cmd)
     return (stdout = out |> read |> String, stderr = err |> read |> String, code = process.exitcode)
 end
 
+"""
+    three_layer_constant_fluxes_simulation(; kw...)
+
+Build a ocean boundary large eddy simulation. The boundary layer is
+initially quiescent with a "three layer" stratification structure, and forced
+by constant momentum and buoyancy fluxes.
+"""
 function three_layer_constant_fluxes_simulation(;
     name                            = "",
     size                            = (32, 32, 32),
@@ -40,6 +47,7 @@ function three_layer_constant_fluxes_simulation(;
     extent                          = (512meters, 512meters, 256meters),
     architecture                    = CPU(),
     stop_time                       = 0.1hours,
+    initial_Δt                      = 1.0,
     f                               = 1e-4,
     buoyancy_flux                   = 1e-8,
     momentum_flux                   = -1e-4,
@@ -51,7 +59,7 @@ function three_layer_constant_fluxes_simulation(;
     deep_buoyancy_gradient          = 2e-6,
     surface_temperature             = 20.0,
     stokes_drift                    = true, # will use ConstantFluxStokesDrift with stokes_drift_peak_wavenumber
-    stokes_drift_peak_wavenumber    = 2π / 300, # severe approximation, it is what it is
+    stokes_drift_peak_wavenumber    = 1e-6 * 9.81 / abs(momentum_flux), # severe approximation, it is what it is
     pickup                          = false,
     jld2_output                     = true,
     netcdf_output                   = false,
@@ -60,8 +68,8 @@ function three_layer_constant_fluxes_simulation(;
     averages_time_interval          = 3hours,
     averages_time_window            = 15minutes,
     time_averaged_statistics        = false,
-    data_directory                  = joinpath(pwd(), "data")
-    )
+    data_directory                  = joinpath(pwd(), "data"))
+    # End kwargs
 
     Nx, Ny, Nz = size
     Lx, Ly, Lz = extent
@@ -95,9 +103,7 @@ function three_layer_constant_fluxes_simulation(;
     # Generating function
     z_faces(k) = Lz * (ζ₀(k) * Σ(k) - 1)
 
-    grid = RectilinearGrid(architecture;
-                           size,
-                           halo = (3, 3, 3),
+    grid = RectilinearGrid(architecture; size, halo = (3, 3, 3),
                            x = (0, extent[1]),
                            y = (0, extent[2]),
                            z = z_faces)
@@ -168,8 +174,12 @@ function three_layer_constant_fluxes_simulation(;
 
         stokes_drift = ConstantFluxStokesDrift(grid, momentum_flux, stokes_drift_peak_wavenumber)
         uˢ₀ = CUDA.@allowscalar stokes_drift.uˢ[1, 1, grid.Nz]
+        kᵖ = stokes_drift_peak_wavenumber
         a★ = stokes_drift.air_friction_velocity
-        @printf "Air u★: %.4f, Surface Stokes drift: %.4f m s⁻¹\n" a★ uˢ₀
+        ρʷ = stokes_drift.water_density
+        ρᵃ = stokes_drift.air_density
+        u★ = a★ * sqrt(ρᵃ / ρʷ)
+        @printf "Air u★: %.4f, water u★: %.4f, λᵖ: %.4f, Surface Stokes drift: %.4f m s⁻¹\n" a★ u★ 2π/kᵖ uˢ₀
     else
         stokes_drift = nothing
     end
@@ -238,7 +248,7 @@ function three_layer_constant_fluxes_simulation(;
     
     @info "Conjuring the simulation..."
     
-    simulation = Simulation(model; Δt=1.0, stop_time)
+    simulation = Simulation(model; Δt=initial_Δt, stop_time)
                         
     # Adaptive time-stepping
     wizard = TimeStepWizard(cfl=0.8, max_change=1.1, min_Δt=0.01, max_Δt=30.0)
