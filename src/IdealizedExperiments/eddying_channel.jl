@@ -87,7 +87,7 @@ function eddying_channel_simulation(;
     zonal_averages_interval           = nothing,
     time_averages_interval            = nothing,
     time_averages_window              = time_averages_interval,
-    stop_time                         = 2year,
+    stop_time                         = 2years,
     pickup                            = false)
 
     filepath = name * "eddying_channel_tau_" * string(peak_momentum_flux) * "_beta_" * string(β) * "_ridge_height_" * string(ridge_height)
@@ -109,14 +109,13 @@ function eddying_channel_simulation(;
     #####
 
     parameters = (; Ly, Lz,
-        y_shutoff = 5 / 6 * Ly,      # shutoff location for buoyancy flux [m]
         τ = peak_momentum_flux,       # surface kinematic wind stress [m² s⁻²]
-        Cᵈ = bottom_drag_coefficient,       # quadratic bottom drag coefficient []
-        ΔB = buoyancy_differential, # surface horizontal buoyancy gradient [s⁻²]
-        h = 1000.0,                  # exponential decay scale of stable stratification [m]
-        y_sponge = 19 / 20 * Ly,     # southern boundary of sponge layer [m]
-        λt = 7days,                  # relaxation time scale [s]
-        λs = 2e-4,                   # surface relaxation flux velocity [m/s]
+        Cᵈ = bottom_drag_coefficient, # quadratic bottom drag coefficient []
+        ΔB = buoyancy_differential,   # surface horizontal buoyancy gradient [s⁻²]
+        h = 1000.0,                   # exponential decay scale of stable stratification [m]
+        y_sponge = 19 / 20 * Ly,      # southern boundary of sponge layer [m]
+        λt = 7days,                   # relaxation time scale [s]
+        λs = 2e-4,                    # surface relaxation flux velocity [m/s]
     )
 
     u_drag_bc = FluxBoundaryCondition(u_drag, discrete_form = true, parameters = parameters)
