@@ -57,7 +57,12 @@ function eddying_channel_simulation(;
     β                                 = 1e-11,
     ridge_height                      = 0.0,
     boundary_layer_closure            = default_boundary_layer_closure,
-    save_fields_interval              = 7days
+    slice_save_interval               = 7days,
+    zonal_averages_save_interval      = 7days,
+    time_averages_interval            = nothing,
+    time_averages_window              = time_averages_interval,
+    stop_time                         = 20years + 1day,
+    pickup                            = false,
     )
 
     filepath = "tau_" * string(max_momentum_flux) * "_beta_" * string(β) * "_ridge_height_" * string(ridge_height)
@@ -66,7 +71,6 @@ function eddying_channel_simulation(;
     # Domain
     Lx, Ly, Lz = extent
     Nx, Ny, Nz = size
-    stop_time = 20years + 1day
     Δt₀ = 5minutes
 
     grid = RectilinearGrid(architecture; size, extent,
@@ -163,7 +167,7 @@ function eddying_channel_simulation(;
     ##### Simulation building
     #####
 
-    simulation = Simulation(model, Δt = Δt₀, stop_time = stop_time)
+    simulation = Simulation(model; Δt = Δt₀, stop_time)
 
     # add timestep wizard callback
     wizard = TimeStepWizard(cfl = 0.1, max_change = 1.1, max_Δt = 20minutes)
@@ -212,8 +216,8 @@ function eddying_channel_simulation(;
     v′ = v - V
     w′ = w - W
 
-    tke_op = @at (Center, Center, Center) (u′ * u′ + v′ * v′ + w′ * w′) / 2
-    tke = Field(Average(tke_op, dims = 1))
+    eke_op = @at (Center, Center, Center) (u′ * u′ + v′ * v′ + w′ * w′) / 2
+    eke = Field(Average(eke_op, dims = 1))
 
     uv_op = @at (Center, Center, Center) u′ * v′
     vw_op = @at (Center, Center, Center) v′ * w′
@@ -229,42 +233,62 @@ function eddying_channel_simulation(;
 
     outputs = (; b, ζ, u, v, w)
 
-    zonally_averaged_outputs = (b = B, u = U, v = V, w = W, η = η̄,
-        vb = v′b′, wb = w′b′, bb = b′b′,
-        tke = tke, uv = u′v′, vw = v′w′, uw = u′w′)
+    zonally_averaged_outputs = (
+        b   = B,
+        u   = U,
+        v   = V,
+        w   = W,
+        η   = η̄,
+        vb  = v′b′,
+        wb  = w′b′,
+        bb  = b′b′,
+        eke = eke,
+        uv  = u′v′,
+        uw  = u′w′,
+        vw  = v′w′)
 
     #####
     ##### Build checkpointer and output writer
     #####
+   
+    simulation.output_writers[:zonal] =
+        JLD2OutputWriter(model, zonally_averaged_outputs;
+                         schedule = TimeInterval(zonal_averages_save_interval),
+                         prefix = filename * "_zonal_averages",
+                         force = true)
+
+    if !isnothing(time_averages_interval)
+        schedule = AveragedTimeInterval(time_averages_interval, window=time_averages_window),
+        simulation.output_writers[:time] =
+            JLD2OutputWriter(model, zonally_averaged_outputs;
+                             schedule = AveragedTimeInterval(zonal_averages_save_interval),
+                             prefix = filename * "_zonal_time_averages",
+                             force = true)
+    end
+
+    slice_indices = (;
+        west   = (1,       :,       :      ),
+        east   = (grid.Nx, :,       :      ),
+        south  = (:,       1,       :      ),
+        north  = (:,       grid.Ny, :      ),
+        bottom = (:,       :,       1      ),
+        top    = (:,       :,       grid.Nz)
+    )
+
+    for side in keys(slice_indices)
+        indices = slice_indices[side]
+
+        simulation.output_writers[side] =
+            JLD2OutputWriter(model, outputs; indices,
+                             schedule = TimeInterval(slice_save_interval),
+                             prefix = filename * "_$(side)_slice",
+                             force = true)
+    end
 
     simulation.output_writers[:checkpointer] = Checkpointer(model,
         schedule = TimeInterval(10years),
         prefix = filename,
         force = true)
 
-    slice_indices = (;
-        west   = (1, :, :),
-        east   = (grid.Nx, :, :),
-        south  = (:, 1, :),
-        north  = (:, grid.Ny, :),
-        bottom = (:, :, 1),
-        top    = (:, :, grid.Nz))
-
-    for side in keys(slice_indices)
-        indices = slice_indices[side]
-
-        simulation.output_writers[side] = JLD2OutputWriter(model, outputs;
-            schedule = TimeInterval(save_fields_interval),
-            indices,
-            prefix = filename * "_$(side)_slice",
-            force = true)
-    end
-
-    @info "Running the simulation..."
-
-    run!(simulation, pickup = false)
-
-    @info "Simulation completed in " * prettytime(simulation.runjulia_wall_time)
-
-    return filepath
+    return simulation
 end
