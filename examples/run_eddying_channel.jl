@@ -15,9 +15,9 @@ surface_TKE_flux = SurfaceTKEFlux(CᵂwΔ=4.56, Cᵂu★=4.46)
 boundary_layer_closure = CATKEVerticalDiffusivity(; surface_TKE_flux, Cᴰ=0.215) 
 
 simulation = eddying_channel_simulation(; architecture = GPU(),
-                                        size = (160, 80, 70),
+                                        size = (80, 40, 60),
                                         stop_time = 1years,
-                                        Δt = 5minute,
+                                        Δt = 5minutes,
                                         boundary_layer_closure)
  
 wall_time = time_ns()

@@ -174,8 +174,8 @@ function eddying_channel_simulation(;
 
     model = HydrostaticFreeSurfaceModel(; grid, closure, coriolis,
                                         free_surface = ImplicitFreeSurface(),
-                                        momentum_advection = WENO5(),
-                                        tracer_advection = WENO5(),
+                                        momentum_advection = WENO5(; grid),
+                                        tracer_advection = WENO5(; grid),
                                         buoyancy = BuoyancyTracer(),
                                         tracers = (:b, :c, :e),
                                         boundary_conditions = (b = b_bcs, u = u_bcs, v = v_bcs),
