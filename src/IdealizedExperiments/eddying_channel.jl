@@ -14,7 +14,7 @@ default_boundary_layer_closure = ConvectiveAdjustmentVerticalDiffusivity(convect
 ##### Boundary conditions and forcing functions
 #####
 
-@inline relaxation_profile(y, p) = p.ΔB * (y / p.Ly)
+@inline relaxation_profile(y, p) = p.ΔB * y / p.Ly
 
 @inline function buoyancy_flux(i, j, grid, clock, model_fields, p)
     y = ynode(Center(), j, grid)
@@ -72,27 +72,25 @@ function eddying_channel_simulation(;
     architecture                      = CPU(),
     size                              = (80, 40, 30),
     extent                            = (4000kilometers, 2000kilometers, 3kilometers),
-    max_momentum_flux                 = 1.5e-4,
-    max_buoyancy_flux                 = 5e-9,
-    drag_coefficient                  = 2e-3,
-    vertical_buoyancy_jump            = 0.02,
+    peak_momentum_flux                = 1.5e-4,
+    bottom_drag_coefficient           = 2e-3,
+    f₀                                = - 1e-4,
+    β                                 = 1e-11,
+    buoyancy_differential             = 0.02,
     background_horizontal_diffusivity = 0.5e-5, # [m²/s] horizontal diffusivity
     background_horizontal_viscosity   = 30.0,   # [m²/s] horizontal viscocity
     background_vertical_diffusivity   = 0.5e-5, # [m²/s] vertical diffusivity
     background_vertical_viscosity     = 3e-4,   # [m²/s] vertical viscocity
-    f₀                                = - 1e-4,
-    β                                 = 1e-11,
     ridge_height                      = 0.0,
     boundary_layer_closure            = default_boundary_layer_closure,
     slice_save_interval               = 7days,
-    zonal_averages_save_interval      = 7days,
+    zonal_averages_interval           = nothing,
     time_averages_interval            = nothing,
     time_averages_window              = time_averages_interval,
-    stop_time                         = 20years + 1day,
-    pickup                            = false,
-    )
+    stop_time                         = 1year,
+    pickup                            = false)
 
-    filepath = name * "eddying_channel_tau_" * string(max_momentum_flux) * "_beta_" * string(β) * "_ridge_height_" * string(ridge_height)
+    filepath = name * "eddying_channel_tau_" * string(peak_momentum_flux) * "_beta_" * string(β) * "_ridge_height_" * string(ridge_height)
     filename = filepath
 
     # Domain
@@ -111,11 +109,10 @@ function eddying_channel_simulation(;
     #####
 
     parameters = (; Ly, Lz,
-        Qᵇ = max_buoyancy_flux,      # buoyancy flux magnitude [m² s⁻³]
         y_shutoff = 5 / 6 * Ly,      # shutoff location for buoyancy flux [m]
-        τ = max_momentum_flux,       # surface kinematic wind stress [m² s⁻²]
-        Cᵈ = drag_coefficient,       # quadratic bottom drag coefficient []
-        ΔB = vertical_buoyancy_jump, # surface horizontal buoyancy gradient [s⁻²]
+        τ = peak_momentum_flux,       # surface kinematic wind stress [m² s⁻²]
+        Cᵈ = bottom_drag_coefficient,       # quadratic bottom drag coefficient []
+        ΔB = buoyancy_differential, # surface horizontal buoyancy gradient [s⁻²]
         h = 1000.0,                  # exponential decay scale of stable stratification [m]
         y_sponge = 19 / 20 * Ly,     # southern boundary of sponge layer [m]
         λt = 7days,                  # relaxation time scale [s]
@@ -239,10 +236,10 @@ function eddying_channel_simulation(;
     ##### Build checkpointer and output writer
     #####
     
-    if !isnothing(zonal_averages_save_interval)
+    if !isnothing(zonal_averages_interval)
         simulation.output_writers[:zonal] =
             JLD2OutputWriter(model, zonally_averaged_outputs;
-                             schedule = TimeInterval(zonal_averages_save_interval),
+                             schedule = TimeInterval(zonal_averages_interval),
                              prefix = filename * "_zonal_averages",
                              force = true)
     end
@@ -251,7 +248,7 @@ function eddying_channel_simulation(;
         schedule = AveragedTimeInterval(time_averages_interval, window=time_averages_window),
         simulation.output_writers[:time] =
             JLD2OutputWriter(model, zonally_averaged_outputs;
-                             schedule = AveragedTimeInterval(zonal_averages_save_interval),
+                             schedule = AveragedTimeInterval(zonal_averages_interval),
                              prefix = filename * "_zonal_time_averages",
                              force = true)
     end
