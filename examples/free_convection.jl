@@ -14,9 +14,9 @@ grid = RectilinearGrid(CPU(), size=(32, 32, 32), x=(0, 128), y=(0, 128), z=(-64,
 Qᵇ = 1e-7
 N² = 1e-5
 
-buoyancy = SeawaterBuoyancy(equation_of_state=LinearEquationOfState(α=2e-4), constant_salinity=35.0)
+buoyancy = SeawaterBuoyancy(equation_of_state=LinearEquationOfState(thermal_expansion=2e-4), constant_salinity=35.0)
 
-α = buoyancy.equation_of_state.α
+α = buoyancy.equation_of_state.thermal_expansion
 g = buoyancy.gravitational_acceleration
 
 ## Compute temperature flux and gradient from buoyancy flux and gradient
@@ -29,7 +29,6 @@ T_bcs = FieldBoundaryConditions(top = FluxBoundaryCondition(Qᵀ),
 # LES Model
 
 # Wall-aware AMD model constant which is 'enhanced' near the upper boundary.
-# Necessary to obtain a smooth temperature distribution.
 using LESbrary.NearSurfaceTurbulenceModels: SurfaceEnhancedModelConstant
 
 Δz = grid.Δzᵃᵃᶜ
@@ -89,7 +88,7 @@ simulation.output_writers[:fields] = JLD2OutputWriter(model, merge(model.velocit
 simulation.output_writers[:slices] = JLD2OutputWriter(model, merge(model.velocities, model.tracers),
                                                       schedule = AveragedTimeInterval(1hour, window=15minute),
                                                       prefix = prefix * "_slices",
-                                                      field_slicer = FieldSlicer(j=floor(Int, grid.Ny/2)),
+                                                      indices = (:, floor(Int, grid.Ny/2), :),
                                                       dir = data_directory,
                                                       max_filesize = 2GiB,
                                                       force = true)
