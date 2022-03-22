@@ -5,8 +5,6 @@ using Oceananigans.Units
 
 using LESbrary.IdealizedExperiments: three_layer_constant_fluxes_simulation
 using LESbrary.IdealizedExperiments: two_day_suite_parameters
-using LESbrary.IdealizedExperiments: four_day_suite_parameters
-using LESbrary.IdealizedExperiments: six_day_suite_parameters
 
 # LESbrary parameters
 # ===================
@@ -35,24 +33,13 @@ configuration = (;
     time_averaged_statistics = false,
 )
 
-#parameters = (name="free_convection",          momentum_flux=0.0,   buoyancy_flux=9e-8, f=1e-4, stop_time=3days, stokes_drift=true)
-#parameters = (name="strong_wind_no_rotation",  momentum_flux=-1e-4, buoyancy_flux=0.0,  f=0.0,  stop_time=3days, stokes_drift=true)
-#parameters = (name="strong_wind",              momentum_flux=-2e-4, buoyancy_flux=0.0,  f=1e-4, stop_time=3days, stokes_drift=true)
-#parameters = (name="strong_wind_weak_cooling", momentum_flux=-1e-4, buoyancy_flux=3e-8, f=1e-4, stop_time=3days, stokes_drift=true)
-#parameters = (name="med_wind_med_cooling",     momentum_flux=-3e-4, buoyancy_flux=9e-8, f=1e-4, stop_time=3days, stokes_drift=true)
-#parameters = (name="weak_wind_strong_cooling", momentum_flux=-1e-5, buoyancy_flux=4e-8, f=1e-4, stop_time=3days, stokes_drift=true)
+for parameters in values(two_day_suite_parameters)
+    @show "Running with $parameters..."
+    simulation = three_layer_constant_fluxes_simulation(; configuration..., parameters...)
+    run!(simulation)
+end
 
-#parameters = (name="strong_wind_no_rotation",  momentum_flux=-1e-4, buoyancy_flux=0.0,  f=0.0,  stop_time=4days, stokes_drift=true)
-#parameters = (name="strong_wind",              momentum_flux=-2e-4, buoyancy_flux=0.0,  f=1e-4, stop_time=4days, stokes_drift=true)
-#parameters = (name="strong_wind_weak_cooling", momentum_flux=-1e-4, buoyancy_flux=1e-8, f=1e-4, stop_time=4days, stokes_drift=true)
-parameters = (name="med_wind_med_cooling",     momentum_flux=-5e-5, buoyancy_flux=3e-8, f=1e-4, stop_time=4days, stokes_drift=true)
-#parameters = (name="free_convection",          momentum_flux=0.0,   buoyancy_flux=7e-8, f=1e-4, stop_time=4days, stokes_drift=true)
-#parameters = (name="weak_wind_strong_cooling", momentum_flux=-1e-5, buoyancy_flux=5e-8, f=1e-4, stop_time=4days, stokes_drift=false)
-
-@show "Running with $parameters..."
-simulation = three_layer_constant_fluxes_simulation(; configuration..., parameters...)
-run!(simulation)
-
+#=
 using CairoMakie
 using ElectronDisplay
 
@@ -94,4 +81,4 @@ hlines!(ax_e, -128, xmin=emin, xmax=emax, color=:gray23)
 lines!(ax_e, 1e4 * en, z)
 
 display(fig)
-
+=#
