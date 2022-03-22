@@ -9,7 +9,7 @@ using Oceananigans.Grids: ynode, znode
 
 Logging.global_logger(OceananigansLogger())
 
-default_boundary_layer_closure = ConvectiveAdjustmentVerticalDiffusivity(convective_κz = 1.0, convective_νz = 0.0)
+default_boundary_layer_closure = ConvectiveAdjustmentVerticalDiffusivity(convective_κz = 1.0)
 
 #####
 ##### Boundary conditions and forcing functions
@@ -30,14 +30,14 @@ end
 @inline u_drag(i, j, grid, clock, model_fields, p) = @inbounds -p.Cᵈ * model_fields.u[i, j, 1] * sqrt(model_fields.u[i, j, 1]^2 + model_fields.v[i, j, 1]^2)
 @inline v_drag(i, j, grid, clock, model_fields, p) = @inbounds -p.Cᵈ * model_fields.v[i, j, 1] * sqrt(model_fields.u[i, j, 1]^2 + model_fields.v[i, j, 1]^2)
 
-@inline initial_buoyancy(z, p) = p.ΔB * exp(z / p.h) + p.ΔB / p.Ly # Ensures relaxation is cooling at first
+@inline initial_buoyancy(y, z, p) = p.ΔB * (exp(z / p.h) - 1) + p.ΔB * y / p.Ly
 @inline mask(y, p) = max(0.0, y - p.y_sponge) / (p.Ly - p.y_sponge)
 
 @inline function buoyancy_relaxation(i, j, k, grid, clock, model_fields, p)
     timescale = p.λᵇ
     y = ynode(Center(), j, grid)
     z = znode(Center(), k, grid)
-    target_b = initial_buoyancy(z, p)
+    target_b = initial_buoyancy(y, z, p)
     b = @inbounds model_fields.b[i, j, k]
     return -1 / timescale * mask(y, p) * (b - target_b)
 end
@@ -81,7 +81,7 @@ function eddying_channel_simulation(;
     max_Δt                            = 20minutes,
     initial_Δt                        = 20minutes,
     buoyancy_differential             = 0.02,
-    biharmonic_horizontal_diffusivity = (extent[1] / size[1])^4 / 100days,
+    biharmonic_horizontal_diffusivity = (extent[1] / size[1])^4 / 20day,
     biharmonic_horizontal_viscosity   = biharmonic_horizontal_diffusivity,
     buoyancy_piston_velocity          = 2e-4,   # [m s⁻¹] piston velocity for surface buoyancy flux
     buoyancy_restoring_time_scale     = 7days,  # [s] Timescale for internal buoyancy restoring
@@ -199,7 +199,7 @@ function eddying_channel_simulation(;
 
     # Resting initial condition
     ε(σ) = σ * randn()
-    bᵢ(x, y, z) = initial_buoyancy(z, parameters) + ε(1e-8)
+    bᵢ(x, y, z) = initial_buoyancy(y, z, parameters) + ε(1e-8)
     uᵢ(x, y, z) = ε(1e-8)
     vᵢ(x, y, z) = ε(1e-8)
     wᵢ(x, y, z) = ε(1e-8)
