@@ -24,13 +24,13 @@ end
 
 @inline function u_stress(i, j, grid, clock, model_fields, p)
     y = ynode(Center(), j, grid)
-    return -p.τ * sin(π * y / p.Ly)
+    return - p.τ * sin(π * y / p.Ly)
 end
 
 @inline u_drag(i, j, grid, clock, model_fields, p) = @inbounds -p.Cᵈ * model_fields.u[i, j, 1] * sqrt(model_fields.u[i, j, 1]^2 + model_fields.v[i, j, 1]^2)
 @inline v_drag(i, j, grid, clock, model_fields, p) = @inbounds -p.Cᵈ * model_fields.v[i, j, 1] * sqrt(model_fields.u[i, j, 1]^2 + model_fields.v[i, j, 1]^2)
 
-@inline initial_buoyancy(z, p) = p.ΔB * (exp(z / p.h) - exp(-p.Lz / p.h)) / (1 - exp(-p.Lz / p.h))
+@inline initial_buoyancy(z, p) = p.ΔB * exp(z / p.h) + p.ΔB / p.Ly # Ensures relaxation is cooling at first
 @inline mask(y, p) = max(0.0, y - p.y_sponge) / (p.Ly - p.y_sponge)
 
 @inline function buoyancy_relaxation(i, j, k, grid, clock, model_fields, p)
@@ -81,8 +81,8 @@ function eddying_channel_simulation(;
     max_Δt                            = 20minutes,
     initial_Δt                        = 20minutes,
     buoyancy_differential             = 0.02,
-    biharmonic_horizontal_diffusivity = extent[1] / size[1] / day
-    biharmonic_horizontal_viscosity   = extent[1] / size[1] / day
+    biharmonic_horizontal_diffusivity = (extent[1] / size[1])^4 / 100days,
+    biharmonic_horizontal_viscosity   = biharmonic_horizontal_diffusivity,
     buoyancy_piston_velocity          = 2e-4,   # [m s⁻¹] piston velocity for surface buoyancy flux
     buoyancy_restoring_time_scale     = 7days,  # [s] Timescale for internal buoyancy restoring
     ridge_height                      = 0.0,
@@ -197,7 +197,7 @@ function eddying_channel_simulation(;
     ##### Initial conditions
     #####
 
-    # resting initial condition
+    # Resting initial condition
     ε(σ) = σ * randn()
     bᵢ(x, y, z) = initial_buoyancy(z, parameters) + ε(1e-8)
     uᵢ(x, y, z) = ε(1e-8)
@@ -218,9 +218,8 @@ function eddying_channel_simulation(;
     simulation = Simulation(model; Δt=initial_Δt, stop_time)
 
     # add timestep wizard callback
-    wizard = TimeStepWizard(; cfl = 0.1, max_change = 1.01, max_Δt)
+    wizard = TimeStepWizard(; cfl = 0.2, max_change = 1.01, max_Δt)
     simulation.callbacks[:wizard] = Callback(wizard, IterationInterval(100))
-    # callback!(simulation, wizard, IterationInterval(100))
 
     wall_clock[] = time_ns()
     simulation.callbacks[:print_progress] = Callback(print_progress, IterationInterval(100))
