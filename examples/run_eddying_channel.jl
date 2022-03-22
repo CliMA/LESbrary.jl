@@ -1,24 +1,23 @@
 using GLMakie
 using Oceananigans
 using Oceananigans.Units
+using Oceananigans.TurbulenceClosures.CATKEVerticalDiffusivities: CATKEVerticalDiffusivity
 using LESbrary.IdealizedExperiments: eddying_channel_simulation
-
-using Oceananigans.TurbulenceClosures.CATKEVerticalDiffusivities:
-    CATKEVerticalDiffusivity,
-    SurfaceTKEFlux
 
 #####
 ##### Setup and run the simulation
 #####
 
-surface_TKE_flux = SurfaceTKEFlux(CᵂwΔ=4.56, Cᵂu★=4.46)
-boundary_layer_closure = CATKEVerticalDiffusivity(; surface_TKE_flux, Cᴰ=0.215) 
+boundary_layer_closure = CATKEVerticalDiffusivity()
 
-simulation = eddying_channel_simulation(; architecture = GPU(),
-                                        size = (80, 40, 60),
-                                        stop_time = 1years,
-                                        Δt = 5minutes,
-                                        boundary_layer_closure)
+simulation = eddying_channel_simulation(; 
+                                        # boundary_layer_closure,
+                                        architecture = GPU(),
+                                        size = (160, 80, 60),
+                                        stop_time = 1year,
+                                        vertical_grid_refinement = 5,
+                                        initial_Δt = 20minutes,
+                                        max_Δt = 20minutes)
  
 wall_time = time_ns()
 
@@ -42,8 +41,8 @@ bn = Array(interior(b, :, :, Nz))
 ζn = Array(interior(ζ, :, :, Nz))
 
 fig = Figure(resolution=(1200, 800))
-ax_b = Axis(fig[1, 1])
-ax_ζ = Axis(fig[1, 2])
+ax_b = Axis(fig[1, 1], aspect=1)
+ax_ζ = Axis(fig[1, 2], aspect=1)
 heatmap!(ax_b, bn) 
 heatmap!(ax_ζ, ζn) 
 

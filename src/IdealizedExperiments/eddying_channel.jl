@@ -4,6 +4,7 @@ using Logging
 using JLD2
 using NCDatasets
 using Oceananigans
+using Oceananigans.TurbulenceClosures.CATKEVerticalDiffusivities: CATKEVerticalDiffusivity
 using Oceananigans.Grids: ynode, znode
 
 Logging.global_logger(OceananigansLogger())
@@ -68,22 +69,21 @@ end
 #####
 
 function eddying_channel_simulation(;
-    name                              = "",
+    name                              = "eddying_channel",
     architecture                      = CPU(),
     size                              = (80, 40, 30),
     extent                            = (4000kilometers, 2000kilometers, 3kilometers),
-    vertically_stretched              = true,
+    vertical_grid_refinement          = nothing,
     peak_momentum_flux                = 1.5e-4,
     bottom_drag_coefficient           = 2e-3,
     f₀                                = - 1e-4,
     β                                 = 1e-11,
-    Δt                                = 20minutes,
+    max_Δt                            = 20minutes,
+    initial_Δt                        = 20minutes,
     buoyancy_differential             = 0.02,
-    background_horizontal_diffusivity = 0.5e-5, # [m² s⁻¹] horizontal diffusivity
-    background_horizontal_viscosity   = 30.0,   # [m² s⁻¹] horizontal viscocity
-    background_vertical_diffusivity   = 0.5e-5, # [m² s⁻¹] vertical diffusivity
-    background_vertical_viscosity     = 3e-4,   # [m² s⁻¹] vertical viscocity
-    buoyancy_piston_velocity          = 2e-4,   # [m s⁻¹] piston velocity for surface buoyancy flux / relaxation
+    biharmonic_horizontal_diffusivity = extent[1] / size[1] / day
+    biharmonic_horizontal_viscosity   = extent[1] / size[1] / day
+    buoyancy_piston_velocity          = 2e-4,   # [m s⁻¹] piston velocity for surface buoyancy flux
     buoyancy_restoring_time_scale     = 7days,  # [s] Timescale for internal buoyancy restoring
     ridge_height                      = 0.0,
     boundary_layer_closure            = default_boundary_layer_closure,
@@ -94,19 +94,29 @@ function eddying_channel_simulation(;
     stop_time                         = 2years,
     pickup                            = false)
 
-    filepath = name * "eddying_channel_tau_" * string(peak_momentum_flux) * "_beta_" * string(β) * "_ridge_height_" * string(ridge_height)
-    filename = filepath
+    filename = string(name,
+                      "_tau_", peak_momentum_flux,
+                      "_beta_", β,
+                      "_ridge_height_", ridge_height)
+                      
 
     # Domain
     Lx, Ly, Lz = extent
     Nx, Ny, Nz = size
 
-    if vertically_stretched
-        σ = 1.05 # linear stretching factor
-        Δz_center_linear(k) = Lz * (σ - 1) * σ^(Nz - k) / (σ^Nz - 1) # k=1 is the bottom-most cell, k=Nz is the top cell
-        z(k) = k==1 ? -Lz : - Lz + sum(Δz_center_linear.(1:k-1))
-    else
+    if isnothing(vertical_grid_refinement)
         z = (-Lz, 0)
+    else # we're gonna stretch
+        r = 1 - 1 / vertical_grid_refinement
+        # Controls relative depth of stretching
+        # (smaller concentrates stretching near surface):
+        w = 0.5
+
+        # Near-surface stretching, near-constant interior spacing:
+        δ(k) = 1 - r * (1 + tanh((k - Nz) / (w * Nz)))
+        Δz₁ = Lz / sum(δ.(1:Nz)) # Spacing at k = 1
+        Δz(k) = Δz₁ * δ(k)
+        z(k) = k == 1 ? -Lz : -Lz + sum(Δz.(1:k-1))
     end
 
     grid = RectilinearGrid(architecture; size, z,
@@ -124,8 +134,8 @@ function eddying_channel_simulation(;
     parameters = (; Ly, Lz,
         τ        = peak_momentum_flux,       # surface kinematic wind stress [m² s⁻²]
         Cᵈ       = bottom_drag_coefficient,  # quadratic bottom drag coefficient []
-        ΔB       = buoyancy_differential,    # surface horizontal buoyancy gradient [s⁻²]
         h        = 1000.0,                   # exponential decay scale of stable stratification [m]
+        ΔB       = buoyancy_differential,    # ∂z(b) ~ ΔB / h, ∂y(b) ~ ΔB / Ly
         y_sponge = 19 / 20 * Ly,             # southern boundary of sponge layer [m]
         λᵇ       = 7days,                    # internal buoyancy restoring time scale [s]
         q★       = buoyancy_piston_velocity, # surface buoyancy relaxation flux velocity [m/s]
@@ -157,14 +167,11 @@ function eddying_channel_simulation(;
     ##### Turbulence closures
     #####
 
-    κh = background_horizontal_diffusivity
-    νh = background_horizontal_viscosity
-    κz = background_vertical_diffusivity
-    νz = background_vertical_viscosity
+    κh = biharmonic_horizontal_diffusivity
+    νh = biharmonic_horizontal_viscosity
 
-    vertical_diffusive_closure = VerticalScalarDiffusivity(VerticallyImplicitTimeDiscretization(), ν = νz, κ = κz)
-    horizontal_diffusive_closure = HorizontalScalarDiffusivity(ν = νh, κ = κh)
-    closure = (horizontal_diffusive_closure, vertical_diffusive_closure, boundary_layer_closure)
+    horizontal_diffusive_closure = HorizontalScalarBiharmonicDiffusivity(ν = νh, κ = κh)
+    closure = (horizontal_diffusive_closure, boundary_layer_closure)
 
     #####
     ##### Model building
@@ -172,12 +179,15 @@ function eddying_channel_simulation(;
 
     @info "Building a model..."
 
-    model = HydrostaticFreeSurfaceModel(; grid, closure, coriolis,
+    tracers = [:b, :c]
+    boundary_layer_closure isa CATKEVerticalDiffusivity && push!(tracers, :e)
+    tracers = Tuple(tracers)
+
+    model = HydrostaticFreeSurfaceModel(; grid, coriolis, tracers, closure,
+                                        momentum_advection = WENO5(), # WENO5(; grid),
+                                        tracer_advection = WENO5(), #WENO5(; grid),
                                         free_surface = ImplicitFreeSurface(),
-                                        momentum_advection = WENO5(; grid),
-                                        tracer_advection = WENO5(; grid),
                                         buoyancy = BuoyancyTracer(),
-                                        tracers = (:b, :c, :e),
                                         boundary_conditions = (b = b_bcs, u = u_bcs, v = v_bcs),
                                         forcing = (; b = Fb))
 
@@ -205,11 +215,12 @@ function eddying_channel_simulation(;
     ##### Simulation building
     #####
 
-    simulation = Simulation(model; Δt, stop_time)
+    simulation = Simulation(model; Δt=initial_Δt, stop_time)
 
     # add timestep wizard callback
-    wizard = TimeStepWizard(cfl = 0.1, max_change = 1.1, max_Δt = Δt)
-    simulation.callbacks[:wizard] = Callback(wizard, IterationInterval(20))
+    wizard = TimeStepWizard(; cfl = 0.1, max_change = 1.01, max_Δt)
+    simulation.callbacks[:wizard] = Callback(wizard, IterationInterval(100))
+    # callback!(simulation, wizard, IterationInterval(100))
 
     wall_clock[] = time_ns()
     simulation.callbacks[:print_progress] = Callback(print_progress, IterationInterval(100))
@@ -261,7 +272,7 @@ function eddying_channel_simulation(;
         simulation.output_writers[:time] =
             JLD2OutputWriter(model, zonally_averaged_outputs;
                              schedule = AveragedTimeInterval(zonal_averages_interval),
-                             prefix = filename * "_zonal_time_averages",
+                             prefix = filename * "_time_averages",
                              force = true)
     end
 
@@ -284,10 +295,11 @@ function eddying_channel_simulation(;
                              force = true)
     end
 
-    simulation.output_writers[:checkpointer] = Checkpointer(model,
-        schedule = TimeInterval(10years),
-        prefix = filename,
-        force = true)
+    simulation.output_writers[:checkpointer] =
+        Checkpointer(model,
+                     schedule = TimeInterval(10years),
+                     prefix = filename,
+                     force = true)
 
     return simulation
 end
