@@ -27,8 +27,8 @@ end
     return - p.τ * sin(π * y / p.Ly)
 end
 
-@inline u_drag(i, j, grid, clock, model_fields, p) = @inbounds -p.Cᵈ * model_fields.u[i, j, 1] * sqrt(model_fields.u[i, j, 1]^2 + model_fields.v[i, j, 1]^2)
-@inline v_drag(i, j, grid, clock, model_fields, p) = @inbounds -p.Cᵈ * model_fields.v[i, j, 1] * sqrt(model_fields.u[i, j, 1]^2 + model_fields.v[i, j, 1]^2)
+@inline u_drag(i, j, grid, clock, fields, p) = @inbounds -p.Cᵈ * fields.u[i, j, 1] * sqrt(fields.u[i, j, 1]^2 + fields.v[i, j, 1]^2)
+@inline v_drag(i, j, grid, clock, fields, p) = @inbounds -p.Cᵈ * fields.v[i, j, 1] * sqrt(fields.u[i, j, 1]^2 + fields.v[i, j, 1]^2)
 
 @inline initial_buoyancy(y, z, p) = p.ΔB * (exp(z / p.h) - 1) + p.ΔB * y / p.Ly
 @inline mask(y, p) = max(0.0, y - p.y_sponge) / (p.Ly - p.y_sponge)
@@ -49,15 +49,23 @@ end
 wall_clock = Ref(time_ns())
 
 function print_progress(sim)
-    @printf("[%05.2f%%] i: %d, t: %s, wall time: %s, max(u): (%6.3e, %6.3e, %6.3e) m/s, next Δt: %s\n",
-            100 * (sim.model.clock.time / sim.stop_time),
-            sim.model.clock.iteration,
-            prettytime(sim.model.clock.time),
-            prettytime(1e-9 * (time_ns() - wall_clock[])),
-            maximum(abs, sim.model.velocities.u),
-            maximum(abs, sim.model.velocities.v),
-            maximum(abs, sim.model.velocities.w),
-            prettytime(sim.Δt))
+
+    msg = @sprintf("[%05.2f%%] i: %d, t: %s, Δt: %s, wall time: %s, max(u): (%6.2e, %6.2e, %6.2e) m s⁻¹",
+                   100 * (time(sim) / sim.stop_time),
+                   iteration(sim),
+                   prettytime(sim),
+                   prettytime(sim.Δt),
+                   prettytime(1e-9 * (time_ns() - wall_clock[])),
+                   maximum(abs, sim.model.velocities.u),
+                   maximum(abs, sim.model.velocities.v),
+                   maximum(abs, sim.model.velocities.w))
+
+    if :e ∈ propertynames(sim.model.tracers)
+        e = sim.model.tracers.e
+        msg *= @sprintf(", max(e): %6.2e", maximum(abs, e))
+    end
+
+    println(msg)
 
     wall_clock[] = time_ns()
 
@@ -80,8 +88,9 @@ function eddying_channel_simulation(;
     β                                 = 1e-11,
     max_Δt                            = 20minutes,
     initial_Δt                        = 20minutes,
-    buoyancy_differential             = 0.02,
-    biharmonic_horizontal_diffusivity = (extent[1] / size[1])^4 / 20day,
+    buoyancy_increment                = 0.02, # surface N² ~ buoyancy_increment / scale_height
+    scale_height                      = 1000,
+    biharmonic_horizontal_diffusivity = (extent[1] / size[1])^4 / 30days,
     biharmonic_horizontal_viscosity   = biharmonic_horizontal_diffusivity,
     buoyancy_piston_velocity          = 2e-4,   # [m s⁻¹] piston velocity for surface buoyancy flux
     buoyancy_restoring_time_scale     = 7days,  # [s] Timescale for internal buoyancy restoring
@@ -134,8 +143,8 @@ function eddying_channel_simulation(;
     parameters = (; Ly, Lz,
         τ        = peak_momentum_flux,       # surface kinematic wind stress [m² s⁻²]
         Cᵈ       = bottom_drag_coefficient,  # quadratic bottom drag coefficient []
-        h        = 1000.0,                   # exponential decay scale of stable stratification [m]
-        ΔB       = buoyancy_differential,    # ∂z(b) ~ ΔB / h, ∂y(b) ~ ΔB / Ly
+        h        = scale_height,             # exponential decay scale of stable stratification [m]
+        ΔB       = buoyancy_increment,       # ∂z(b) ~ ΔB / h, ∂y(b) ~ ΔB / Ly
         y_sponge = 19 / 20 * Ly,             # southern boundary of sponge layer [m]
         λᵇ       = 7days,                    # internal buoyancy restoring time scale [s]
         q★       = buoyancy_piston_velocity, # surface buoyancy relaxation flux velocity [m/s]

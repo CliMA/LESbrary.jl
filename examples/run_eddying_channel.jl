@@ -9,14 +9,15 @@ using LESbrary.IdealizedExperiments: eddying_channel_simulation
 ##### Setup and run the simulation
 #####
 
-boundary_layer_closure = CATKEVerticalDiffusivity()
+#boundary_layer_closure = CATKEVerticalDiffusivity()
+boundary_layer_closure = ConvectiveAdjustmentVerticalDiffusivity(convective_κz=1.0)
 
-simulation = eddying_channel_simulation(; 
-                                        # boundary_layer_closure,
+simulation = eddying_channel_simulation(; boundary_layer_closure,
                                         architecture = GPU(),
-                                        size = (160, 80, 50),
+                                        peak_momentum_flux = 1.5e-4,
+                                        size = (160, 80, 40),
                                         stop_time = 1year,
-                                        vertical_grid_refinement = 5,
+                                        vertical_grid_refinement = 8,
                                         initial_Δt = 20minutes,
                                         max_Δt = 20minutes)
  
