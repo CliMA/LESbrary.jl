@@ -90,8 +90,8 @@ function eddying_channel_simulation(;
     initial_Δt                        = 20minutes,
     buoyancy_increment                = 0.02, # surface N² ~ buoyancy_increment / scale_height
     scale_height                      = 1000,
-    biharmonic_horizontal_diffusivity = (extent[1] / size[1])^4 / 30days,
-    biharmonic_horizontal_viscosity   = biharmonic_horizontal_diffusivity,
+    biharmonic_horizontal_viscosity   = (extent[1] / size[1])^4 / 30days,
+    biharmonic_horizontal_diffusivity = biharmonic_horizontal_viscosity,
     buoyancy_piston_velocity          = 2e-4,   # [m s⁻¹] piston velocity for surface buoyancy flux
     buoyancy_restoring_time_scale     = 7days,  # [s] Timescale for internal buoyancy restoring
     ridge_height                      = 0.0,
@@ -179,8 +179,14 @@ function eddying_channel_simulation(;
     κh = biharmonic_horizontal_diffusivity
     νh = biharmonic_horizontal_viscosity
 
-    horizontal_diffusive_closure = HorizontalScalarBiharmonicDiffusivity(ν = νh, κ = κh)
-    closure = (horizontal_diffusive_closure, boundary_layer_closure)
+    horizontal_biharmonic = HorizontalScalarBiharmonicDiffusivity(ν = νh, κ = κh)
+    vertical_background = VerticalScalarDiffusivity(VerticallyImplicitTimeDiscretization(), ν=3e-4, κ=3e-4)
+
+    if isnothing(boundary_layer_closure)
+        closure = (horizontal_biharmonic, vertical_background)
+    else
+        closure = (horizontal_biharmonic, boundary_layer_closure, vertical_background)
+    end
 
     #####
     ##### Model building
