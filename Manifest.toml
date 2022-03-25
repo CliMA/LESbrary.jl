@@ -681,11 +681,11 @@ version = "0.73.2"
 
 [[Oceanostics]]
 deps = ["Oceananigans", "Printf"]
-git-tree-sha1 = "23b0549078e4fcdbed24b40dfeb90e0e8675d472"
-repo-rev = "compathelper/new_version/2022-03-17-01-17-09-126-01348334698"
+git-tree-sha1 = "3c4e8d609ac223bea1966dbcdfcdbad3a2a0bb2a"
+repo-rev = "main"
 repo-url = "https://github.com/tomchor/Oceanostics.jl.git"
 uuid = "d0ccf422-c8fb-49b5-a76d-74acdde946ac"
-version = "0.7.2"
+version = "0.8.1"
 
 [[OffsetArrays]]
 deps = ["Adapt"]
