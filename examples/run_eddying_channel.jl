@@ -9,16 +9,28 @@ using LESbrary.IdealizedExperiments: eddying_channel_simulation
 ##### Setup and run the simulation
 #####
 
-#boundary_layer_closure = CATKEVerticalDiffusivity()
-boundary_layer_closure = ConvectiveAdjustmentVerticalDiffusivity(convective_κz=1.0)
+Ly = 2000kilometers
+Lz = 3kilometers
+Ny = 80
+Nz = 40
+
+boundary_layer_closure = CATKEVerticalDiffusivity()
+κ₄ᵇ = (Ly / Ny)^4 / 30days
+κ₄ᵉ = (Ly / Ny)^4 / 10minutes
+biharmonic_horizontal_diffusivity = (b=κ₄ᵇ, c=κ₄ᵇ, e=κ₄ᵉ)
+
+# boundary_layer_closure = ConvectiveAdjustmentVerticalDiffusivity(convective_κz=0.1)
+# biharmonic_horizontal_diffusivity = b=κ₄ᵇ
 
 simulation = eddying_channel_simulation(; boundary_layer_closure,
+                                        biharmonic_horizontal_diffusivity,
                                         architecture = GPU(),
                                         peak_momentum_flux = 1.5e-4,
-                                        size = (160, 80, 40),
+                                        size = (2Ny, Ny, Nz),
+                                        extent = (2Ly, Ly, Lz),
                                         stop_time = 1year,
                                         vertical_grid_refinement = 8,
-                                        initial_Δt = 20minutes,
+                                        initial_Δt = 1,
                                         max_Δt = 20minutes)
  
 wall_time = time_ns()
@@ -40,18 +52,23 @@ c = simulation.model.tracers.c
 ζ = Field(∂x(v) - ∂y(u))
 compute!(ζ)
 
+shear = @at (Center, Center, Center) sqrt(∂z(u)^2 + ∂z(v)^2)
+
 B = Field(Average(b, dims=1))
 C = Field(Average(c, dims=1))
 U = Field(Average(u, dims=1))
+S = Field(Average(shear, dims=1))
 
 compute!(B)
 compute!(C)
 compute!(U)
+compute!(S)
 
 Nz = simulation.model.grid.Nz
 Bn = Array(interior(B, 1, :, :))
 Cn = Array(interior(C, 1, :, :))
 Un = Array(interior(U, 1, :, :))
+Sn = Array(interior(S, 1, :, :))
 bn = Array(interior(b, :, :, Nz))
 ζn = Array(interior(ζ, :, :, Nz))
 
@@ -73,16 +90,18 @@ colorrange = (-ζlim, ζlim)
 heatmap!(ax_b, xb, yb, bn) 
 heatmap!(ax_ζ, xζ, yζ, ζn; colorrange, colormap=:redblue) 
 
-ax_c = Axis(fig[2, 1], aspect=2, xlabel="y", ylabel="z", title="Tracer")
-ax_u = Axis(fig[2, 2], aspect=2, xlabel="y", ylabel="z", title="Zonal velocity")
+ax_c = Axis(fig[2, 1], aspect=2, xlabel="y", ylabel="z", title="Zonally-averaged tracer")
+ax_u = Axis(fig[2, 2], aspect=2, xlabel="y", ylabel="z", title="Zonally-averaged shear")
 
 heatmap!(ax_c, yb, zb, Cn)
 contour!(ax_c, yb, zb, Bn, levels=15, linewidth=2, color=(:black, 0.6)) 
 
-umax = maximum(abs, Un)
-ulim = umax
-colorrange = (-ulim, ulim)
-heatmap!(ax_u, yu, zu, Un; colormap=:redblue, colorrange)
-contour!(ax_u, yb, zb, Bn, levels=15, linewidth=2, color=(:black, 0.6)) 
+smax = maximum(abs, Sn)
+slim = smax / 2
+colorrange = (0, slim)
+heatmap!(ax_u, yb, zb, Sn; colorrange)
+contour!(ax_u, yb, zb, Bn, levels=15, linewidth=2, color=(:black, 0.6))
 
 display(fig)
+
+# save("/home/greg/Desktop/test.png", fig)

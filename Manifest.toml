@@ -300,9 +300,9 @@ uuid = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 
 [[DualNumbers]]
 deps = ["Calculus", "NaNMath", "SpecialFunctions"]
-git-tree-sha1 = "90b158083179a6ccbce2c7eb1446d5bf9d7ae571"
+git-tree-sha1 = "5837a837389fccf076445fce071c8ddaea35a566"
 uuid = "fa6b7ba4-c1ee-5f82-b5fc-ecf0adba8f74"
-version = "0.6.7"
+version = "0.6.8"
 
 [[EarCut_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -423,9 +423,9 @@ version = "2.10.4+0"
 
 [[FreeTypeAbstraction]]
 deps = ["ColorVectorSpace", "Colors", "FreeType", "GeometryBasics", "StaticArrays"]
-git-tree-sha1 = "4f35ba91a3e3fad462c0bdcb1fdf4077373c36fe"
+git-tree-sha1 = "8e76bcd47f98ee25c8f8be4b9a1c60f48efa4f9e"
 uuid = "663a7486-cb36-511b-a19d-713bb74d65c9"
-version = "0.9.6"
+version = "0.9.7"
 
 [[FriBidi_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1015,17 +1015,19 @@ version = "0.4.0"
 
 [[Oceananigans]]
 deps = ["Adapt", "CUDA", "CUDAKernels", "Crayons", "CubedSphere", "Dates", "DocStringExtensions", "FFTW", "Glob", "IncompleteLU", "InteractiveUtils", "IterativeSolvers", "JLD2", "KernelAbstractions", "LinearAlgebra", "Logging", "MPI", "NCDatasets", "OffsetArrays", "OrderedCollections", "PencilFFTs", "Pkg", "Printf", "Random", "Rotations", "SafeTestsets", "SeawaterPolynomials", "SparseArrays", "Statistics", "StructArrays", "Tullio"]
-git-tree-sha1 = "fbc98e1370d9011249c59bedb1723ec3389a1e7d"
+git-tree-sha1 = "90b579cc06c9e59f7a19b064589cfb6afc525cfa"
+repo-rev = "glw/ri-based-vertical-diffusivity"
+repo-url = "https://github.com/CliMA/Oceananigans.jl.git"
 uuid = "9e8cae18-63c1-5223-a75c-80ca9d6e9a09"
 version = "0.73.3"
 
 [[Oceanostics]]
 deps = ["Oceananigans", "Printf"]
-git-tree-sha1 = "971b47c2e7bfbd76b56dec2f03fc8ac654e5e76a"
-repo-rev = "compathelper/new_version/2022-03-17-01-17-09-126-01348334698"
+git-tree-sha1 = "3c4e8d609ac223bea1966dbcdfcdbad3a2a0bb2a"
+repo-rev = "main"
 repo-url = "https://github.com/tomchor/Oceanostics.jl.git"
 uuid = "d0ccf422-c8fb-49b5-a76d-74acdde946ac"
-version = "0.7.2"
+version = "0.8.1"
 
 [[OffsetArrays]]
 deps = ["Adapt"]
@@ -1206,9 +1208,9 @@ uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 
 [[ProgressMeter]]
 deps = ["Distributed", "Printf"]
-git-tree-sha1 = "afadeba63d90ff223a6a48d2009434ecee2ec9e8"
+git-tree-sha1 = "d7a7aef8f8f2d537104f170139553b14dfe39fe9"
 uuid = "92933f4c-e287-5a05-a399-4b506db050ca"
-version = "1.7.1"
+version = "1.7.2"
 
 [[QOI]]
 deps = ["ColorTypes", "FileIO", "FixedPointNumbers"]
