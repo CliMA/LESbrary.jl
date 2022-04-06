@@ -83,7 +83,7 @@ function eddying_channel_simulation(;
     extent                            = (4000kilometers, 2000kilometers, 3kilometers),
     vertical_grid_refinement          = nothing,
     peak_momentum_flux                = 1.5e-4,
-    bottom_drag_coefficient           = 2e-2,
+    bottom_drag_coefficient           = 1e-2,
     f₀                                = - 1e-4,
     β                                 = 1e-11,
     max_Δt                            = 20minutes,
