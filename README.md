@@ -2,6 +2,8 @@
 
 This package is a framework for building a library of large eddy simulations (LES) of ocean surface boundary layer turbulence — the _LESbrary_ — with [Oceananigans.jl](https://github.com/climate-machine/Oceananigans.jl). The LESbrary will archive turbulence data for both idealized and realistic oceanic scenarios.
 
+LESbrary.jl is developed by the [Climate Modeling Alliance](https://clima.caltech.edu) and collaborators.
+
 ## Adding LESbrary.jl to a julia environment
 
 To add `LESbrary.jl` to your julia environment, type
