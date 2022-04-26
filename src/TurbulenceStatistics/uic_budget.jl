@@ -1,4 +1,5 @@
 
+# Assuming that if there is a velocity it's in terms[1]
 function uic_budget(model;
                     terms = (:u, :c),
                     with_flux_divergences = false,

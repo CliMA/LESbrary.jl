@@ -5,11 +5,11 @@
 
 using LESbrary, Printf, Statistics, Oceananigans, Oceananigans.Units
 
-Nh = 128
+Nh = 32
 
 # Domain
 
-grid = RectilinearGrid(GPU(), size=(Nh, Nh, Nh), x=(0, 128), y=(0, 128), z=(-64, 0))
+grid = RectilinearGrid(CPU(), size=(Nh, Nh, Nh), x=(0, 128), y=(0, 128), z=(-64, 0))
 
 # Buoyancy and boundary conditions
 

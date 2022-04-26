@@ -75,19 +75,20 @@ end
 ############# To remove (I do not seem to be able to use using from Oceanostics)
 using Oceananigans.TurbulenceClosures: νᶜᶜᶜ
 
+## These νᶜᶜᶜ have the signature of an old Oceananigans version
 @inline _νᶜᶜᶜ(args...) = νᶜᶜᶜ(args...)
-@inline _νᶜᶜᶜ(i, j, k, grid, closure_tuple::Tuple{}, K::Tuple{}, clock) = zero(eltype(grid))
-@inline _νᶜᶜᶜ(i, j, k, grid, closure_tuple::Tuple, K::Tuple, clock) =
-     νᶜᶜᶜ(i, j, k, grid, closure_tuple[1],     K[1],     clock) + 
-    _νᶜᶜᶜ(i, j, k, grid, closure_tuple[2:end], K[2:end], clock)
+@inline _νᶜᶜᶜ(i, j, k, grid, closure_tuple::Tuple{}, K::Tuple{}, args...) = zero(eltype(grid))
+@inline _νᶜᶜᶜ(i, j, k, grid, closure_tuple::Tuple, K::Tuple, args...) =
+     νᶜᶜᶜ(i, j, k, grid, closure_tuple[1],     K[1], args...) + 
+    _νᶜᶜᶜ(i, j, k, grid, closure_tuple[2:end], K[2:end], args...)
     
 using Oceananigans.TurbulenceClosures: κᶜᶜᶜ
 
 @inline _κᶜᶜᶜ(args...) = κᶜᶜᶜ(args...)
-@inline _κᶜᶜᶜ(i, j, k, grid, closure_tuple::Tuple{}, K::Tuple{}, id, clock) = zero(eltype(grid))
-@inline _κᶜᶜᶜ(i, j, k, grid, closure_tuple::Tuple, K::Tuple, id, clock) =
-     κᶜᶜᶜ(i, j, k, grid, closure_tuple[1],     K[1],     id, clock) + 
-    _κᶜᶜᶜ(i, j, k, grid, closure_tuple[2:end], K[2:end], id, clock)
+@inline _κᶜᶜᶜ(i, j, k, grid, closure_tuple::Tuple{}, K::Tuple{}, id, args...) = zero(eltype(grid))
+@inline _κᶜᶜᶜ(i, j, k, grid, closure_tuple::Tuple, K::Tuple, id, args...) =
+     κᶜᶜᶜ(i, j, k, grid, closure_tuple[1],     K[1],     id, args...) + 
+    _κᶜᶜᶜ(i, j, k, grid, closure_tuple[2:end], K[2:end], id, args...)
 
 #############
 
@@ -106,7 +107,7 @@ function TermWiseViscousDissipationRate(model, mean1, mean2; name1 = :u, name2 =
     parameters = (closure = model.closure,
                   diffusivity_fields = model.diffusivity_fields,
                   clock = model.clock,
-                  vel_names = (name(name1), name(name2)))
+                  names = (name(name1), name(name2)))
 
     return KernelFunctionOperation{Center, Center, Center}(termwise_viscous_dissipation_rate_ccc, model.grid;
                         computed_dependencies=(field1 - mean1, field2 - mean2),
@@ -119,19 +120,19 @@ end
 
 @inline function termwise_viscous_dissipation_rate_ccc(i, j, k, grid, u1, u2, p)
 
-    ∂x, ∂y, ∂z, ℑx, ℑy, ℑz = derivatives(p.name[1])
+    ∂x, ∂y, ∂z, ℑx, ℑy, ℑz = derivatives(p.names[1])
  
     dx1 = ℑx(i, j, k, grid, ∂x, u1)
     dy1 = ℑy(i, j, k, grid, ∂y, u1)
     dz1 = ℑz(i, j, k, grid, ∂z, u1)
 
-    ∂x, ∂y, ∂z, ℑx, ℑy, ℑz = derivatives(p.name[2])
+    ∂x, ∂y, ∂z, ℑx, ℑy, ℑz = derivatives(p.names[2])
 
     dx2 = ℑx(i, j, k, grid, ∂x, u2)
     dy2 = ℑy(i, j, k, grid, ∂y, u2)
     dz2 = ℑz(i, j, k, grid, ∂z, u2)
 
-    K = diffusion_coefficient(i, j, k, grid, p.closure, p.diffusivity_fields, p.clock, p.vel_name)
+    K = diffusion_coefficient(i, j, k, grid, p.closure, p.diffusivity_fields, p.clock, p.names)
     return K * (dx1 * dx2 + dy1 * dy2 + dz1 * dz2)
 end
 
