@@ -14,5 +14,7 @@ ViscousDissipation(model; kw...) = Oceanostics.IsotropicViscousDissipationRate(m
 include("first_through_third_order.jl")
 include("subfilter_fluxes.jl")
 include("turbulent_kinetic_energy_budget.jl")
+include("uiuj_budget.jl")
+include("uic_budget.jl")
 
 end # module
