@@ -5,8 +5,10 @@ function uic_budget(model;
                     b = BuoyancyField(model),
                     p = model.pressures.pHY′ + model.pressures.pNHS)
 
-    u = Field(@at (Center, Center, Center) model.velocities[terms[1]])
-    c = Field(@at (Center, Center, Center) model.tracers[terms[2]])
+    fields = merge(model.velocities, model.tracers)
+
+    u = Field(fields[terms[1]])
+    c = Field(fields[terms[2]])
     w = model.velocities.w
 
     U = Field(Average(u, dims=(1, 2)))
@@ -15,21 +17,27 @@ function uic_budget(model;
     P = Field(Average(p, dims=(1, 2)))
     W = Field(Average(w, dims=(1, 2)))
 
+    u′ = u - U
+    c′ = c - C
+    w′ = w - W
+    b′ = b - B
+    p′ = p - P   
+    
     ∂x1 = directional_derivative(terms[1])
 
-    advective_flux = @at (Center, Center, Center) model.velocities.w * u * c
+    advective_flux = @at (Center, Center, Center) w′ * u′ * c′
     if terms[1] == :w
-        buoyancy_flux = @at (Center, Center, Center) c * b
+        buoyancy_flux = @at (Center, Center, Center) c′ * b′
     else
         buoyancy_flux = ZeroField()
     end
 
-    shear_production    = @at (Center, Center, Center) (w - W) * ((u - U) * ∂z(C) + (c - C) * ∂z(U))
-    viscous_dissipation = TermWiseViscousDissipationRate(model, U, C; vel_name1 = terms[1], vel_name2 = terms[2])
-    pressure_term       = @at (Center, Center, Center) (c - C) * ∂x1(p - P) 
+    shear_production    = @at (Center, Center, Center) w′ * (u′ * ∂z(C) + c′ * ∂z(U))
+    viscous_dissipation = TermWiseViscousDissipationRate(model, U, C; name1 = terms[1], name2 = terms[2])
+    pressure_term       = @at (Center, Center, Center) c′ * ∂x1(p′) 
     turbulence_statistics = Dict()
 
-    turbulence_statistics[:uic]                   = Field(Average((u - U) * (c - C),   dims=(1, 2)))
+    turbulence_statistics[:uic]                  = Field(Average(u′ * c′,             dims=(1, 2)))
     turbulence_statistics[:uic_shear_production] = Field(Average(shear_production,    dims=(1, 2)))
     turbulence_statistics[:uic_advective_flux]   = Field(Average(advective_flux,      dims=(1, 2)))
     turbulence_statistics[:uic_pressure_term]    = Field(Average(pressure_term,       dims=(1, 2)))
