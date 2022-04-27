@@ -177,13 +177,17 @@ function three_layer_constant_fluxes_simulation(;
     
     @info "Framing the model..."
 
+    Δz = CUDA.@allowscalar grid.Δzᵃᵃᶜ[grid.Nz]
+    @show Δz
+    Cᴬᴹᴰ = SurfaceEnhancedModelConstant(Δz, C₀ = 1/12, enhancement = 7, decay_scale = 4Δz)
+
     tracers = passive_tracers ? (:T, :c₀, :c₁, :c₂) : :T
     
     model = NonhydrostaticModel(; grid, buoyancy, tracers, stokes_drift,
                                 timestepper = :RungeKutta3,
                                 advection = WENO5(; grid),
                                 coriolis = FPlane(f=f),
-                                closure = AnisotropicMinimumDissipation(),
+                                closure = AnisotropicMinimumDissipation(C=Cᴬᴹᴰ),
                                 boundary_conditions = (T=θ_bcs, u=u_bcs),
                                 forcing = (u=u_sponge, v=v_sponge, w=w_sponge, T=T_sponge,
                                            c₀=c₀_forcing, c₁=c₁_forcing, c₂=c₂_forcing))
