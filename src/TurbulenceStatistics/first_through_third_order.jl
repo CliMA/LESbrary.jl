@@ -15,8 +15,8 @@ function horizontally_averaged_velocities(model)
     u, v, w = model.velocities
 
     averages = Dict(
-                    :u => Field(Average(u, dims=(1, 2))),
-                    :v => Field(Average(v, dims=(1, 2)))
+                    :u => Average(u, dims=(1, 2)),
+                    :v => Average(v, dims=(1, 2))
                    )
 
     return averages
@@ -35,7 +35,7 @@ function horizontally_averaged_tracers(model)
 
     for tracer in keys(model.tracers)
         c = getproperty(model.tracers, tracer)
-        averages[tracer] = Field(Average(c, dims=(1, 2)))
+        averages[tracer] = Average(c, dims=(1, 2))
     end
 
     return averages
@@ -60,12 +60,12 @@ function velocity_covariances(model; u_scratch = XFaceField(model.grid),
     u, v, w = model.velocities
 
     covariances = Dict(
-                       :uu => Field(Average(u * u, dims=(1, 2))),
-                       :vv => Field(Average(v * v, dims=(1, 2))),
-                       :ww => Field(Average(w * w, dims=(1, 2))),
-                       :uv => Field(Average(u * v, dims=(1, 2))),
-                       :wv => Field(Average(w * v, dims=(1, 2))),
-                       :wu => Field(Average(w * u, dims=(1, 2)))
+                       :uu => Average(u * u, dims=(1, 2)),
+                       :vv => Average(v * v, dims=(1, 2)),
+                       :ww => Average(w * w, dims=(1, 2)),
+                       :uv => Average(u * v, dims=(1, 2)),
+                       :wv => Average(w * v, dims=(1, 2)),
+                       :wu => Average(w * u, dims=(1, 2))
                        )
 
     return covariances
@@ -106,15 +106,15 @@ function tracer_covariances(model; b = BuoyancyField(model),
         vc = Symbol(:v, tracer)
         wc = Symbol(:w, tracer)
 
-        covariances[cc] = Field(Average(c * c, dims=(1, 2)))
-        covariances[uc] = Field(Average(u * c, dims=(1, 2)))
-        covariances[vc] = Field(Average(v * c, dims=(1, 2)))
-        covariances[wc] = Field(Average(w * c, dims=(1, 2)))
+        covariances[cc] = Average(c * c, dims=(1, 2))
+        covariances[uc] = Average(u * c, dims=(1, 2))
+        covariances[vc] = Average(v * c, dims=(1, 2))
+        covariances[wc] = Average(w * c, dims=(1, 2))
 
         # Add covariance of tracer with buoyancy
         if tracer != :b && !has_buoyancy_tracer(model)
             bc = Symbol(:b, tracer)
-            covariances[bc] = Field(Average(b * c, dims=(1, 2)))
+            covariances[bc] = Average(b * c, dims=(1, 2))
         end
     end
 
@@ -148,34 +148,34 @@ function third_order_velocity_statistics(model; u_scratch = XFaceField(model.gri
     Σʸᶻ = 0.5 * (∂z(v) + ∂y(w)) # CFF
 
     third_order_statistics = Dict(
-                                  :uuu => Field(Average(u * u * u, dims=(1, 2))),
-                                  :uuv => Field(Average(u * u * v, dims=(1, 2))),
-                                  :uuw => Field(Average(u * u * w, dims=(1, 2))),
-                                  :uvv => Field(Average(u * v * v, dims=(1, 2))),
-                                  :uww => Field(Average(u * w * w, dims=(1, 2))),
+                                  :uuu => Average(u * u * u, dims=(1, 2)),
+                                  :uuv => Average(u * u * v, dims=(1, 2)),
+                                  :uuw => Average(u * u * w, dims=(1, 2)),
+                                  :uvv => Average(u * v * v, dims=(1, 2)),
+                                  :uww => Average(u * w * w, dims=(1, 2)),
 
-                                  :vvv => Field(Average(v * v * v, dims=(1, 2))),
-                                  :vvw => Field(Average(v * v * w, dims=(1, 2))),
-                                  :vww => Field(Average(v * w * w, dims=(1, 2))),
+                                  :vvv => Average(v * v * v, dims=(1, 2)),
+                                  :vvw => Average(v * v * w, dims=(1, 2)),
+                                  :vww => Average(v * w * w, dims=(1, 2)),
 
-                                  :www => Field(Average(w * w * w, dims=(1, 2))),
-                                  :wvu => Field(Average(w * v * u, dims=(1, 2))),
+                                  :www => Average(w * w * w, dims=(1, 2)),
+                                  :wvu => Average(w * v * u, dims=(1, 2)),
 
-                                   :up => Field(Average(u * p,     dims=(1, 2))),
-                                   :vp => Field(Average(v * p,     dims=(1, 2))),
-                                   :wp => Field(Average(w * p,     dims=(1, 2))),
+                                   :up => Average(u * p,     dims=(1, 2)),
+                                   :vp => Average(v * p,     dims=(1, 2)),
+                                   :wp => Average(w * p,     dims=(1, 2)),
 
-                                  :pux => Field(Average(p * ∂x(u), dims=(1, 2))),
-                                  :puy => Field(Average(p * ∂y(u), dims=(1, 2))),
-                                  :puz => Field(Average(p * ∂z(u), dims=(1, 2))),
+                                  :pux => Average(p * ∂x(u), dims=(1, 2)),
+                                  :puy => Average(p * ∂y(u), dims=(1, 2)),
+                                  :puz => Average(p * ∂z(u), dims=(1, 2)),
 
-                                  :pvx => Field(Average(p * ∂x(v), dims=(1, 2))),
-                                  :pvy => Field(Average(p * ∂y(v), dims=(1, 2))),
-                                  :pvz => Field(Average(p * ∂z(v), dims=(1, 2))),
+                                  :pvx => Average(p * ∂x(v), dims=(1, 2)),
+                                  :pvy => Average(p * ∂y(v), dims=(1, 2)),
+                                  :pvz => Average(p * ∂z(v), dims=(1, 2)),
 
-                                  :pwx => Field(Average(p * ∂x(w), dims=(1, 2))),
-                                  :pwy => Field(Average(p * ∂y(w), dims=(1, 2))),
-                                  :pwz => Field(Average(p * ∂z(w), dims=(1, 2))),
+                                  :pwx => Average(p * ∂x(w), dims=(1, 2)),
+                                  :pwy => Average(p * ∂y(w), dims=(1, 2)),
+                                  :pwz => Average(p * ∂z(w), dims=(1, 2)),
                                  )
 
     return third_order_statistics
@@ -213,11 +213,11 @@ function third_order_tracer_statistics(model; u_scratch = XFaceField(model.grid)
         cpy = Symbol(tracer, :py)
         cpz = Symbol(tracer, :pz)
 
-        third_order_statistics[wcc] = Field(Average(w * c * c, dims=(1, 2)))
-        third_order_statistics[cwu] = Field(Average(c * w * u, dims=(1, 2)))
-        third_order_statistics[cpx] = Field(Average(c * ∂x(p), dims=(1, 2)))
-        third_order_statistics[cpy] = Field(Average(c * ∂y(p), dims=(1, 2)))
-        third_order_statistics[cpz] = Field(Average(c * ∂z(p), dims=(1, 2)))
+        third_order_statistics[wcc] = Average(w * c * c, dims=(1, 2))
+        third_order_statistics[cwu] = Average(c * w * u, dims=(1, 2))
+        third_order_statistics[cpx] = Average(c * ∂x(p), dims=(1, 2))
+        third_order_statistics[cpy] = Average(c * ∂y(p), dims=(1, 2))
+        third_order_statistics[cpz] = Average(c * ∂z(p), dims=(1, 2))
     end
 
     return third_order_statistics
@@ -230,15 +230,13 @@ function first_order_statistics(model; b = BuoyancyField(model),
                                        c_scratch = CenterField(model.grid),
                                        p = model.pressures.pHY′ + model.pressures.pNHS)
 
-    output = merge(
-                   horizontally_averaged_velocities(model),
-                   horizontally_averaged_tracers(model),
-                   )
+    output = merge(horizontally_averaged_velocities(model),
+                   horizontally_averaged_tracers(model))
 
-    output[:p] = Field(Average(p, dims=(1, 2)))
+    output[:p] = Average(p, dims=(1, 2))
 
     if !has_buoyancy_tracer(model)
-        output[:b] = Field(Average(b, dims=(1, 2)))
+        output[:b] = Average(b, dims=(1, 2))
     end
 
     return output
@@ -267,9 +265,9 @@ function second_order_statistics(model; b = BuoyancyField(model),
     if !has_buoyancy_tracer(model)
         u, v, w = model.velocities
 
-        output[:ub] = Field(Average(u * b, dims=(1, 2)))
-        output[:vb] = Field(Average(v * b, dims=(1, 2)))
-        output[:wb] = Field(Average(w * b, dims=(1, 2)))
+        output[:ub] = Average(u * b, dims=(1, 2))
+        output[:vb] = Average(v * b, dims=(1, 2))
+        output[:wb] = Average(w * b, dims=(1, 2))
     end
 
     return output
@@ -281,8 +279,7 @@ function third_order_statistics(model; u_scratch = XFaceField(model.grid),
                                        c_scratch = CenterField(model.grid),
                                        p = model.pressures.pHY′ + model.pressures.pNHS)
 
-    output = merge(
-                   third_order_velocity_statistics(model, p = p,
+    output = merge(third_order_velocity_statistics(model, p = p,
                                                    u_scratch = u_scratch,
                                                    v_scratch = v_scratch,
                                                    w_scratch = w_scratch,
@@ -292,8 +289,7 @@ function third_order_statistics(model; u_scratch = XFaceField(model.grid),
                                                  u_scratch = u_scratch,
                                                  v_scratch = v_scratch,
                                                  w_scratch = w_scratch,
-                                                 c_scratch = c_scratch)
-                   )
+                                                 c_scratch = c_scratch))
 
     return output
 end
@@ -306,8 +302,7 @@ function first_through_second_order(model; b = BuoyancyField(model),
                                            p = model.pressures.pHY′ + model.pressures.pNHS)
 
 
-    output = merge(
-                   first_order_statistics(model, b = b, p = p,
+    output = merge(first_order_statistics(model, b = b, p = p,
                                           u_scratch = u_scratch,
                                           v_scratch = v_scratch,
                                           w_scratch = w_scratch,
@@ -318,9 +313,7 @@ function first_through_second_order(model; b = BuoyancyField(model),
                                            v_scratch = v_scratch,
                                            w_scratch = w_scratch,
                                            c_scratch = c_scratch,
-                                                   b = b),
-
-                  )
+                                                   b = b))
 
     return output
 end
@@ -333,8 +326,7 @@ function first_through_third_order(model; b = BuoyancyField(model),
                                           p = model.pressures.pHY′ + model.pressures.pNHS)
 
 
-    output = merge(
-                   first_order_statistics(model, b = b, p = p,
+    output = merge(first_order_statistics(model, b = b, p = p,
                                           u_scratch = u_scratch,
                                           v_scratch = v_scratch,
                                           w_scratch = w_scratch,
@@ -351,9 +343,8 @@ function first_through_third_order(model; b = BuoyancyField(model),
                                           u_scratch = u_scratch,
                                           v_scratch = v_scratch,
                                           w_scratch = w_scratch,
-                                          c_scratch = c_scratch)
-
-                  )
-
+                                          c_scratch = c_scratch))
+    
     return output
 end
+

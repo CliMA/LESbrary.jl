@@ -100,7 +100,7 @@ hlines!(ax_u, -128, xmin=umin, xmax=umax, color=:gray23)
 lines!(ax_u, un, z)
 lines!(ax_u, vn, z)
 
-@show emax = maximum(maximum(e[n])
+@show emax = maximum(maximum(e[n]) for n in 1:Nt)
 hlines!(ax_e, -128, xmin=-0.1emax, xmax=emax, color=:gray23)
 scatter!(ax_e, en, z)
 xlims!(ax_e, -0.1emax, emax)

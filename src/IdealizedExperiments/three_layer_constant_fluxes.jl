@@ -249,7 +249,7 @@ function three_layer_constant_fluxes_simulation(;
     simulation = Simulation(model; Δt=initial_Δt, stop_time)
                         
     # Adaptive time-stepping
-    wizard = TimeStepWizard(cfl=0.8, max_change=1.1, min_Δt=0.01, max_Δt=30.0)
+    wizard = TimeStepWizard(cfl=0.8, max_change=1.1, min_Δt=0.01, max_Δt=60.0)
     simulation.callbacks[:wizard] = Callback(wizard, IterationInterval(10))
     simulation.callbacks[:progress] = Callback(SimulationProgressMessenger(wizard), IterationInterval(100))
     
@@ -263,13 +263,9 @@ function three_layer_constant_fluxes_simulation(;
         Checkpointer(model, schedule = TimeInterval(stop_time/3), prefix = prefix * "_checkpointer", dir = data_directory)
     
     @info "Squeezing out statistics..."
-    
-    # Prepare turbulence statistics
-    zF = CUDA.@allowscalar Array(znodes(Face, grid))
-    k_xy_slice = searchsortedfirst(zF, -slice_depth)
-    
+
     b = BuoyancyField(model)
-    p = Field(sum(model.pressures))
+    p = sum(model.pressures)
     
     ccc_scratch = Field{Center, Center, Center}(model.grid)
     ccf_scratch = Field{Center, Center, Face}(model.grid)
@@ -286,11 +282,14 @@ function three_layer_constant_fluxes_simulation(;
         subfilter_momentum_fluxes(model, uz_scratch=ccf_scratch, vz_scratch=cff_scratch, c_scratch=ccc_scratch),
         subfilter_tracer_fluxes(model, w_scratch=ccf_scratch))
     
-    U = primitive_statistics[:u]
-    V = primitive_statistics[:v]
-    B = primitive_statistics[:b]
-    e = Field(Average(TurbulentKineticEnergy(model, U=U, V=V), dims=(1, 2)))
+    U = Field(primitive_statistics[:u])
+    V = Field(primitive_statistics[:v])
+    B = Field(primitive_statistics[:b])
 
+    e = TurbulentKineticEnergy(model, U=U, V=V)
+    fields_to_output = merge(model.velocities, model.tracers, (; e=e))
+
+    #=
     e = Field(TurbulentKineticEnergy(model, U=U, V=V))
     shear_production = Field(ZShearProduction(model, U=U, V=V))
     dissipation = Field(ViscousDissipation(model))
@@ -298,17 +297,17 @@ function three_layer_constant_fluxes_simulation(;
                                                             b=b, p=p, U=U, V=V, e=e,
                                                             shear_production=shear_production,
                                                             dissipation=dissipation)
+    #pop!(tke_budget_statistics, :tke_dissipation)
+    =#
     
-    dynamics_statistics = Dict(:Ri => Field(∂z(B) / (∂z(U)^2 + ∂z(V)^2)))
-    #fields_to_output = merge(model.velocities, model.tracers, (e=e, ϵ=dissipation))
-    fields_to_output = merge(model.velocities, model.tracers, (; e=e))
+    additional_statistics = Dict(:e => Average(TurbulentKineticEnergy(model, U=U, V=V), dims=(1, 2)),
+                                 :Ri => ∂z(B) / (∂z(U)^2 + ∂z(V)^2))
 
-    statistics_to_output = merge(primitive_statistics,
-                                 subfilter_flux_statistics,
-                                 tke_budget_statistics,
-                                 dynamics_statistics)
+    statistics_to_output = merge(primitive_statistics, subfilter_flux_statistics, additional_statistics)
 
-    pop!(statistics_to_output, :tke_dissipation)
+                                 #subfilter_flux_statistics,
+                                 #tke_budget_statistics)
+
 
     @info "Garnishing output writers..."
     
@@ -352,6 +351,10 @@ function three_layer_constant_fluxes_simulation(;
     
     ## Add JLD2 output writers
     
+    # Prepare turbulence statistics
+    zF = CUDA.@allowscalar Array(znodes(Face, grid))
+    k_xy_slice = searchsortedfirst(zF, -slice_depth)
+
     if jld2_output
         simulation.output_writers[:xy] =
             JLD2OutputWriter(model, fields_to_output,
