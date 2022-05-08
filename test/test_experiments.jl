@@ -31,7 +31,7 @@ end
 
 
 @testset "Three layer constant flux simulation" begin
-    simulation = three_layer_constant_fluxes_simulation(size = (1, 1, 16),
+    simulation = three_layer_constant_fluxes_simulation(size = (2, 2, 16),
                                                         stokes_drift = false,
                                                         stop_time = 2.0,
                                                         snapshot_time_interval = 1.0,
@@ -41,7 +41,7 @@ end
 
     @test simulation.stop_time == 2.0
 
-    simulation = three_layer_constant_fluxes_simulation(size = (2, 2, 32),
+    simulation = three_layer_constant_fluxes_simulation(size = (4, 4, 16),
                                                         stokes_drift_peak_wavenumber = 2π / 300,
                                                         momentum_flux = -1e-4,
                                                         stop_time = 2.0,

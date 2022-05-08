@@ -6,8 +6,9 @@ using Oceananigans.Units
 using LESbrary.IdealizedExperiments: three_layer_constant_fluxes_simulation
 using LESbrary.IdealizedExperiments: two_day_suite_parameters
 
-using CairoMakie
-using ElectronDisplay
+using GLMakie
+#using CairoMakie
+#using ElectronDisplay
 
 # LESbrary parameters
 # ===================
@@ -29,10 +30,10 @@ using ElectronDisplay
 # certain parameters below.
 
 configuration = (;
-    architecture = GPU(),
-    size = (128, 128, 128),
+    architecture = CPU(),
+    size = (32, 32, 32),
     snapshot_time_interval = 2minute,
-    passive_tracers = true,
+    passive_tracers = false,
     time_averaged_statistics = false,
 )
 
@@ -66,33 +67,43 @@ Nt = length(e.times)
 z = znodes(u)
 
 fig = Figure(resolution=(1800, 600))
-ax_T = Axis(fig[1, 1], xlabel="Temperature (ᵒC)", ylabel="z (m)", title=p[:name])
-ax_u = Axis(fig[1, 2], xlabel="Velocity (cm s⁻¹)", ylabel="z (m)", title=p[:name])
-ax_e = Axis(fig[1, 3], xlabel="Turbulent kinetic energy (cm² s⁻²)", ylabel="z (m)", title=p[:name])
+ax_T = Axis(fig[2, 1], xlabel="Temperature (ᵒC)", ylabel="z (m)")
+ax_u = Axis(fig[2, 2], xlabel="Velocity (cm s⁻¹)", ylabel="z (m)")
+ax_e = Axis(fig[2, 3], xlabel="Turbulent kinetic energy (cm² s⁻²)", ylabel="z (m)")
 
-slider = Slider(fig[2, 1:3], range=1:Nt, startvalue=1)
+slider = Slider(fig[3, 1:3], range=1:Nt, startvalue=1)
 n = slider.value
+
+name = replace(string(p[:name]), "_" => " ")
+title = @lift string(name, " at t = ", prettytime(e.times[$n]))
+Label(fig[1, 1:3], title)
 
 Tn = @lift interior(T[$n], 1, 1, :)
 un = @lift interior(u[$n], 1, 1, :)
 vn = @lift interior(v[$n], 1, 1, :)
 en = @lift interior(e[$n], 1, 1, :)
 
-@show Tmin = minimum(T)
-@show Tmax = maximum(T)
+@show Tmin = minimum(minimum(T[n]) for n in 1:Nt)
+@show Tmax = maximum(minimum(T[n]) for n in 1:Nt)
 hlines!(ax_T, -128, xmin=Tmin, xmax=Tmax, color=:gray23)
 lines!(ax_T, Tn, z)
 
-@show umin = min(minimum(1e2 * u), minimum(1e2 * v))
-@show umax = max(maximum(1e2 * u), maximum(1e2 * v))
-hlines!(ax_u, -128, xmin=umin, xmax=umax, color=:gray23)
-lines!(ax_u, 1e2 * un, z)
-lines!(ax_u, 1e2 * vn, z)
+umin = minimum(minimum(u[n]) for n in 1:Nt)
+umax = maximum(maximum(u[n]) for n in 1:Nt)
+vmin = minimum(minimum(v[n]) for n in 1:Nt)
+vmax = maximum(maximum(v[n]) for n in 1:Nt)
 
-emin = minimum(1e4 * en)
-emax = maximum(1e4 * en)
-hlines!(ax_e, -128, xmin=emin, xmax=emax, color=:gray23)
-lines!(ax_e, 1e4 * en, z)
+@show umin = min(umin, vmin)
+@show umax = max(umax, vmax)
+
+hlines!(ax_u, -128, xmin=umin, xmax=umax, color=:gray23)
+lines!(ax_u, un, z)
+lines!(ax_u, vn, z)
+
+@show emax = maximum(maximum(e[n])
+hlines!(ax_e, -128, xmin=-0.1emax, xmax=emax, color=:gray23)
+scatter!(ax_e, en, z)
+xlims!(ax_e, -0.1emax, emax)
 
 display(fig)
 
