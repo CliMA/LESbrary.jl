@@ -17,7 +17,7 @@ Random.seed!(1234)
 arch = GPU()
 with_ridge = false
 
-filename = "eddying_channel_no_sponge"
+filename = "new_simulation"
 
 # Domain
 const Lx = 1000kilometers # zonal domain length [m]
@@ -90,7 +90,7 @@ else
 end
 
 parameters = (
-    channel_Ly = 2kilometers,
+    channel_Ly = 2000kilometers,
     Ly=Ly,
     Lz=Lz,
     Qᵇ= 10 / (ρ * cᵖ) * α * g,        # buoyancy flux magnitude [m² s⁻³]
@@ -105,7 +105,7 @@ parameters = (
     λs=2e-4,                          # relaxation time scale for the surface [s]
 )
 
-@inline relaxation_profile(y, p) = min(p.ΔB * (y / p.Ly), p.ΔB)
+@inline relaxation_profile(y, p) =  min(p.ΔB * (y / p.Ly), p.ΔB)
 @inline function buoyancy_flux(i, j, grid, clock, model_fields, p)
     y = ynode(Center(), j, grid)
     return @inbounds p.λs * (model_fields.b[i, j, grid.Nz] - relaxation_profile(y, p))

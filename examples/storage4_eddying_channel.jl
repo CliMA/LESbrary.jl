@@ -20,12 +20,12 @@ with_ridge = false
 filename = "eddying_channel_no_sponge"
 
 # Domain
-const Lx = 4000kilometers # zonal domain length [m]
+const Lx = 1000kilometers # zonal domain length [m]
 const Ly = 2000kilometers # meridional domain length [m]
 const Lz = 3kilometers    # depth [m]
 
 # number of grid points
-Nx = 400
+Nx = 100
 Ny = 200
 Nz = 30
 
