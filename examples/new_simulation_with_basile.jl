@@ -20,13 +20,13 @@ with_ridge = false
 filename = "eddying_channel_no_sponge"
 
 # Domain
-const Lx = 4000kilometers # zonal domain length [m]
-const Ly = 2000kilometers # meridional domain length [m]
+const Lx = 1000kilometers # zonal domain length [m]
+const Ly = 2500kilometers # meridional domain length [m]
 const Lz = 3kilometers    # depth [m]
 
 # number of grid points
-Nx = 400
-Ny = 200
+Nx = 100
+Ny = 250
 Nz = 30
 
 save_fields_interval = 50years
@@ -89,21 +89,23 @@ else
     μ = 1e-2
 end
 
-parameters = (Ly=Ly,
+parameters = (
+    channel_Ly = 2kilometers,
+    Ly=Ly,
     Lz=Lz,
-    Qᵇ=10 / (ρ * cᵖ) * α * g,         # buoyancy flux magnitude [m² s⁻³]
+    Qᵇ= 10 / (ρ * cᵖ) * α * g,        # buoyancy flux magnitude [m² s⁻³]
     y_shutoff=5 / 6 * Ly,             # shutoff location for buoyancy flux [m]
-    τ = 0.15 / ρ ,               # surface kinematic wind stress [m² s⁻²]
+    τ = 0.15 / ρ ,                    # surface kinematic wind stress [m² s⁻²]
     μ = μ,                            # quadratic bottom drag coefficient []
     ΔB= 8 * α * g,                    # surface vertical buoyancy gradient [s⁻²]
     H=Lz,                             # domain depth [m]
     h=1000.0,                         # exponential decay scale of stable stratification [m]
-    y_sponge=19 / 20 * Ly,               # southern boundary of sponge layer [m]
-    λt=7days,                          # relaxation time scale for the northen sponge [s]
+    y_sponge=19 / 20 * Ly,            # southern boundary of sponge layer [m]
+    λt=7days,                         # relaxation time scale for the northen sponge [s]
     λs=2e-4,                          # relaxation time scale for the surface [s]
 )
 
-@inline relaxation_profile(y, p) = p.ΔB * (y / p.Ly)
+@inline relaxation_profile(y, p) = min(p.ΔB * (y / p.Ly), p.ΔB)
 @inline function buoyancy_flux(i, j, grid, clock, model_fields, p)
     y = ynode(Center(), j, grid)
     return @inbounds p.λs * (model_fields.b[i, j, grid.Nz] - relaxation_profile(y, p))
@@ -111,10 +113,10 @@ end
 
 buoyancy_flux_bc = FluxBoundaryCondition(buoyancy_flux, discrete_form=true, parameters=parameters)
 
-
+# bit of a hack
 @inline function u_stress(i, j, grid, clock, model_fields, p)
     y = ynode(Center(), j, grid)
-    return -p.τ * sin(π * y / p.Ly)
+    return -p.τ * max(sin(π * y / p.channel_Ly), 0.0)
 end
 
 u_stress_bc = FluxBoundaryCondition(u_stress, discrete_form=true, parameters=parameters)
@@ -212,7 +214,7 @@ model = HydrostaticFreeSurfaceModel(grid=grid,
     buoyancy=BuoyancyTracer(),
     coriolis=coriolis,
     closure=(horizontal_diffusive_closure, vertical_diffusive_closure, convective_adjustment),
-    tracers=(:b, :c, :e),
+    tracers=(:b, :c),
     boundary_conditions= boundary_conditions,
     # forcing= forcings
     )
