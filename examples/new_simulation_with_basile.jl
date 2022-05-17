@@ -17,7 +17,7 @@ Random.seed!(1234)
 arch = GPU()
 with_ridge = false
 
-filename = "new_simulation"
+filename = "new_simulation_weak_strate"
 
 # Domain
 const Lx = 1000kilometers # zonal domain length [m]
@@ -31,7 +31,7 @@ Nz = 30
 
 save_fields_interval = 50years
 stop_time = 200years + 1day
-Δt₀ = 7.5minutes * 2.0
+Δt₀ = 15minutes # 7.5minutes * 1.0
 
 # stretched grid
 
@@ -90,22 +90,22 @@ else
 end
 
 parameters = (
-    channel_Ly = 2000kilometers,
+    channel_Ly=2000kilometers,
     Ly=Ly,
     Lz=Lz,
-    Qᵇ= 10 / (ρ * cᵖ) * α * g,        # buoyancy flux magnitude [m² s⁻³]
+    Qᵇ=10 / (ρ * cᵖ) * α * g,        # buoyancy flux magnitude [m² s⁻³]
     y_shutoff=5 / 6 * Ly,             # shutoff location for buoyancy flux [m]
-    τ = 0.15 / ρ ,                    # surface kinematic wind stress [m² s⁻²]
-    μ = μ,                            # quadratic bottom drag coefficient []
-    ΔB= 8 * α * g,                    # surface vertical buoyancy gradient [s⁻²]
+    τ=0.15 / ρ,                    # surface kinematic wind stress [m² s⁻²]
+    μ=μ,                            # quadratic bottom drag coefficient []
+    ΔB=8 * α * g,                    # surface vertical buoyancy gradient [s⁻²]
     H=Lz,                             # domain depth [m]
     h=1000.0,                         # exponential decay scale of stable stratification [m]
     y_sponge=19 / 20 * Ly,            # southern boundary of sponge layer [m]
     λt=7days,                         # relaxation time scale for the northen sponge [s]
-    λs=2e-4,                          # relaxation time scale for the surface [s]
+    λs=2e-4,                          # relaxation time scale for the surface [m/s]
 )
 
-@inline relaxation_profile(y, p) =  min(p.ΔB * (y / p.Ly), p.ΔB)
+@inline relaxation_profile(y, p) = min(p.ΔB * (y / p.channel_Ly), p.ΔB)
 @inline function buoyancy_flux(i, j, grid, clock, model_fields, p)
     y = ynode(Center(), j, grid)
     return @inbounds p.λs * (model_fields.b[i, j, grid.Nz] - relaxation_profile(y, p))
@@ -193,7 +193,7 @@ convective_adjustment = ConvectiveAdjustmentVerticalDiffusivity(convective_κz=1
 
 @info "Building a model..."
 
-ridge(x, y) = 1e3*exp(-(x-1e6)^2/(2e5)^2) - 3e3 
+ridge(x, y) = 1e3 * exp(-(x - 1e6)^2 / (2e5)^2) - 3e3
 
 
 if with_ridge
@@ -207,10 +207,11 @@ else
     forcings = (; b=Fb)
 end
 
+
 model = HydrostaticFreeSurfaceModel(grid=grid,
     free_surface=ImplicitFreeSurface(),
     momentum_advection=WENO5(),
-    tracer_advection=WENO5(),
+    tracer_advection=WENO5(bounds  = (0.0, parameters.ΔB)),
     buoyancy=BuoyancyTracer(),
     coriolis=coriolis,
     closure=(horizontal_diffusive_closure, vertical_diffusive_closure, convective_adjustment),
@@ -219,6 +220,17 @@ model = HydrostaticFreeSurfaceModel(grid=grid,
     # forcing= forcings
     )
 
+#=
+model = NonhydrostaticModel(;
+    grid=grid,
+    advection=WENO5(),
+    buoyancy=BuoyancyTracer(),
+    coriolis=coriolis,
+    closure=(horizontal_diffusive_closure, vertical_diffusive_closure), # , convective_adjustment),
+    tracers=(:b, :c),
+    boundary_conditions=boundary_conditions
+)
+=#
 @info "Built $model."
 
 #####
@@ -227,7 +239,7 @@ model = HydrostaticFreeSurfaceModel(grid=grid,
 
 # resting initial condition
 ε(σ) = σ * randn()
-bᵢ(x, y, z) = parameters.ΔB * (exp(z / parameters.h) - exp(-Lz / parameters.h)) / (1 - exp(-Lz / parameters.h)) + ε(1e-8)
+bᵢ(x, y, z) = parameters.ΔB * (1 + 0.5 * z / Lz) # (exp(z / parameters.h) - exp(-Lz / parameters.h)) / (1 - exp(-Lz / parameters.h)) + ε(1e-8)
 uᵢ(x, y, z) = ε(1e-8)
 vᵢ(x, y, z) = ε(1e-8)
 wᵢ(x, y, z) = ε(1e-8)
@@ -277,14 +289,14 @@ simulation.callbacks[:print_progress] = Callback(print_progress, IterationInterv
 
 u, v, w = model.velocities
 b, c = model.tracers.b, model.tracers.c
-η = model.free_surface.η
+# η = model.free_surface.η
 
 ζ = Field(∂x(v) - ∂y(u))
 
 B = Field(Average(b, dims=1))
 C = Field(Average(c, dims=1))
 U = Field(Average(u, dims=1))
-η̄ = Field(Average(η, dims=1))
+# η ̄ = Field(Average(η, dims=1))
 V = Field(Average(v, dims=1))
 W = Field(Average(w, dims=1))
 
@@ -314,7 +326,8 @@ wc = Field(Average(c * w, dims=1))
 
 outputs = (; b, c, ζ, u, v, w)
 
-zonally_averaged_outputs = (b=B, u=U, v=V, w=W, c=C, η=η̄, uu=uu, vv=vv, ww=ww, uv=uv, vw=vw, uw=uw, bb=bb, vb=vb, wb=wb, cc=cc, vc=vc, wc=wc)
+# zonally_averaged_outputs = (b=B, u=U, v=V, w=W, c=C, η=η̄, uu=uu, vv=vv, ww=ww, uv=uv, vw=vw, uw=uw, bb=bb, vb=vb, wb=wb, cc=cc, vc=vc, wc=wc)
+zonally_averaged_outputs = (b=B, u=U, v=V, w=W, c=C, uu=uu, vv=vv, ww=ww, uv=uv, vw=vw, uw=uw, bb=bb, vb=vb, wb=wb, cc=cc, vc=vc, wc=wc)
 #=
  vb=v′b′, wb=w′b′, vc=v′c′, wc=w′c′, bb=b′b′,
     tke=tke, uv=u′v′, vw=v′w′, uw=u′w′, cc=c′c′
@@ -326,8 +339,8 @@ zonally_averaged_outputs = (b=B, u=U, v=V, w=W, c=C, η=η̄, uu=uu, vv=vv, ww=w
 simulation.output_writers[:checkpointer] = Checkpointer(model,
     schedule=TimeInterval(10years),
     prefix=filename,
-    overwrite_existing =true)
-    
+    overwrite_existing=true)
+
 
 slicers = (west=(1, :, :),
     east=(grid.Nx, :, :),
@@ -342,8 +355,8 @@ for side in keys(slicers)
     simulation.output_writers[side] = JLD2OutputWriter(model, outputs;
         schedule=TimeInterval(save_fields_interval),
         indices,
-        filename =filename * "_$(side)_slice",
-        overwrite_existing =true)
+        filename=filename * "_$(side)_slice",
+        overwrite_existing=true)
 end
 
 #=
@@ -357,7 +370,7 @@ simulation.output_writers[:averaged_stats_nc] =
     NetCDFOutputWriter(model, zonally_averaged_outputs,
         filename=filename * "_zonal_time_averaged_statistics.nc",
         schedule=AveragedTimeInterval(10 * 365days, window=10 * 365days, stride=10),
-        )
+    )
 
 #=
 simulation.output_writers[:zonal] = JLD2OutputWriter(model, zonally_averaged_outputs;
