@@ -17,7 +17,7 @@ Random.seed!(1234)
 arch = GPU()
 with_ridge = false
 
-filename = "new_simulation_weak_strate"
+filename = "please_dont_crash"
 
 # Domain
 const Lx = 1000kilometers # zonal domain length [m]
@@ -239,7 +239,7 @@ model = NonhydrostaticModel(;
 
 # resting initial condition
 ε(σ) = σ * randn()
-bᵢ(x, y, z) = parameters.ΔB * (1 + 0.5 * z / Lz) # (exp(z / parameters.h) - exp(-Lz / parameters.h)) / (1 - exp(-Lz / parameters.h)) + ε(1e-8)
+bᵢ(x, y, z) = parameters.ΔB * (exp(z / parameters.h) - exp(-Lz / parameters.h)) / (1 - exp(-Lz / parameters.h)) + ε(1e-8)
 uᵢ(x, y, z) = ε(1e-8)
 vᵢ(x, y, z) = ε(1e-8)
 wᵢ(x, y, z) = ε(1e-8)
