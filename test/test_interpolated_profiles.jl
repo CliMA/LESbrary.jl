@@ -1,7 +1,7 @@
 using Test
 using Statistics
 using LESbrary.Utils
-using LESbrary.Utils: ∂z, ∂t
+import LESbrary.Utils
 
 @testset "InterpolatedProfile" begin
 
@@ -30,13 +30,13 @@ using LESbrary.Utils: ∂z, ∂t
 
     prof = InterpolatedProfile(data, zs, Δz, zs[end])
 
-    @test ∂z(prof, 2) ≈ (f(5) - f(0)) / Δz
-    @test ∂z(prof, 7.4) ≈ (f(10) - f(5)) / Δz
-    @test ∂z(prof, 11.8) ≈ (f(15) - f(10)) / Δz
+    @test Utils.∂z(prof, 2) ≈ (f(5) - f(0)) / Δz
+    @test Utils.∂z(prof, 7.4) ≈ (f(10) - f(5)) / Δz
+    @test Utils.∂z(prof, 11.8) ≈ (f(15) - f(10)) / Δz
 
-    @test ∂z(prof, 2) == ∂z(prof, 4)
-    @test ∂z(prof, 7.4) == ∂z(prof, 9.99)
-    @test ∂z(prof, 11.8) == ∂z(prof, 10.01)
+    @test Utils.∂z(prof, 2) == Utils.∂z(prof, 4)
+    @test Utils.∂z(prof, 7.4) == Utils.∂z(prof, 9.99)
+    @test Utils.∂z(prof, 11.8) == Utils.∂z(prof, 10.01)
 end
 
 @testset "InterpolatedProfileTimeSeries" begin
@@ -74,9 +74,9 @@ end
 
     prof = InterpolatedProfileTimeSeries(data, zs, ts, Δz, Δt, zs[end], ts[end])
 
-    @test ∂z(prof, 3, 0) ≈ (f(5, 0) - f(0, 0)) / Δz
-    @test ∂z(prof, 7.5, 10) ≈ (f(10, 10) - f(5, 10)) / Δz
-    @test ∂z(prof, 10.01, 420.69) ≈ (f(15, 420.69) - f(10, 420.69)) / Δz
+    @test Utils.∂z(prof, 3, 0) ≈ (f(5, 0) - f(0, 0)) / Δz
+    @test Utils.∂z(prof, 7.5, 10) ≈ (f(10, 10) - f(5, 10)) / Δz
+    @test Utils.∂z(prof, 10.01, 420.69) ≈ (f(15, 420.69) - f(10, 420.69)) / Δz
 
     @test ∂t(prof, 0, 45) ≈ (f(0, 60) - f(0, 0)) / Δt
     @test ∂t(prof, 6, 100) ≈ (f(6, 120) - f(6, 60)) / Δt
