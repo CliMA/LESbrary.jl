@@ -278,9 +278,7 @@ function three_layer_constant_fluxes_simulation(;
         primitive_statistics = first_order_statistics(model, b=b, p=p, w_scratch=ccf_scratch, c_scratch=ccc_scratch)
     end
     
-    subfilter_flux_statistics = merge(
-        subfilter_momentum_fluxes(model, uz_scratch=ccf_scratch, vz_scratch=cff_scratch, c_scratch=ccc_scratch),
-        subfilter_tracer_fluxes(model, w_scratch=ccf_scratch))
+    subfilter_flux_statistics = merge(subfilter_momentum_fluxes(model), subfilter_tracer_fluxes(model))
     
     U = Field(primitive_statistics[:u])
     V = Field(primitive_statistics[:v])
