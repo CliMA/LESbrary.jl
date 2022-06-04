@@ -1,41 +1,33 @@
-using Oceananigans.Fields: ZFaceField, CenterField
 using Oceananigans.TurbulenceClosures: AnisotropicMinimumDissipation
 
 subfilter_diffusivity(::AnisotropicMinimumDissipation, diffusivity_fields, name) =
     getproperty(diffusivity_fields.κₑ, name)
 
 """
-    subfilter_momentum_fluxes(model,
-                              uz_scratch = Field{Face, Center, Face}(model.grid),
-                              vz_scratch = Field{Center, Face, Face}(model.grid),
-                              c_scratch = CenterField(model.grid))
+    subfilter_momentum_fluxes(model)
 
 Returns a dictionary of horizontally-averaged subfilter momentum fluxes.
 """
-function subfilter_momentum_fluxes(model;
-                                   uz_scratch = Field{Face, Center, Face}(model.grid),
-                                   vz_scratch = Field{Center, Face, Face}(model.grid),
-                                   c_scratch = CenterField(model.grid))
+function subfilter_momentum_fluxes(model)
 
     u, v, w = model.velocities
-
     νₑ = model.diffusivity_fields.νₑ
 
     averages = Dict(
-                    :νₑ_∂z_u => Field(Average(∂z(u) * νₑ, dims=(1, 2))),
-                    :νₑ_∂z_v => Field(Average(∂z(v) * νₑ, dims=(1, 2))),
-                    :νₑ_∂z_w => Field(Average(∂z(w) * νₑ, dims=(1, 2)))
+                    :νₑ_∂z_u => Average(∂z(u) * νₑ, dims=(1, 2)),
+                    :νₑ_∂z_v => Average(∂z(v) * νₑ, dims=(1, 2)),
+                    :νₑ_∂z_w => Average(∂z(w) * νₑ, dims=(1, 2))
                    )
 
     return averages
 end
 
 """
-    subfilter_tracer_fluxes(model, w_scratch=ZFaceField(model.grid))
+    subfilter_tracer_fluxes(model)
 
 Returns a dictionary of horizontally-averaged subfilter tracer fluxes.
 """
-function subfilter_tracer_fluxes(model; w_scratch = ZFaceField(model.grid))
+function subfilter_tracer_fluxes(model)
 
     averages = Dict()
 
@@ -45,7 +37,7 @@ function subfilter_tracer_fluxes(model; w_scratch = ZFaceField(model.grid))
 
         name = Symbol(:κₑ_∂z_, tracer)
 
-        averages[name] = Field(Average(∂z(c) * κₑ, dims=(1, 2)))
+        averages[name] = Average(∂z(c) * κₑ, dims=(1, 2))
     end
 
     return averages
