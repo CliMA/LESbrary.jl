@@ -6,7 +6,7 @@ using Oceananigans.Units
 using LESbrary.IdealizedExperiments: three_layer_constant_fluxes_simulation
 using LESbrary.IdealizedExperiments: two_day_suite_parameters
 
-using GLMakie
+#using GLMakie
 #using CairoMakie
 #using ElectronDisplay
 
@@ -32,25 +32,17 @@ using GLMakie
 configuration = (;
     architecture = GPU(),
     size = (128, 128, 128),
-    snapshot_time_interval = 2minute,
+    snapshot_time_interval = 10minutes,
     passive_tracers = false,
     time_averaged_statistics = false,
 )
 
-#=
-for parameters in values(two_day_suite_parameters)
-    @show "Running with $parameters..."
-    simulation = three_layer_constant_fluxes_simulation(; configuration..., parameters...)
-    run!(simulation)
-end
-=#
-
-#p = (name="free_convection",          momentum_flux = 0.0,     buoyancy_flux = 5.5e-8, f = 1e-4, stop_time = 4day)
-#p = (name="weak_wind_strong_cooling", momentum_flux = -1.5e-4, buoyancy_flux = 5.0e-8, f = 1e-4, stop_time = 4day)
-#p = (name="med_wind_med_cooling",     momentum_flux = -1.8e-4, buoyancy_flux = 3.5e-8, f = 1e-4, stop_time = 4day)
-#p = (name="strong_wind_weak_cooling", momentum_flux = -2.5e-4, buoyancy_flux = 1.0e-8, f = 1e-4, stop_time = 4day)
-p = (name="strong_wind",              momentum_flux = -3.2e-4, buoyancy_flux = 0.0,    f = 1e-4, stop_time = 4day)
-#p = (name="strong_wind_no_rotation",  momentum_flux = -1.0e-4, buoyancy_flux = 0.0,    f = 0.0,  stop_time = 4day)
+#p = (name="free_convection",          momentum_flux = 0.0,     buoyancy_flux = 3.7e-8, f = 1e-4, stop_time = 6day)
+p = (name="weak_wind_strong_cooling", momentum_flux = -5.0e-5, buoyancy_flux = 3.3e-8, f = 1e-4, stop_time = 6day, stokes_drift_peak_wavenumber=0.1)
+#p = (name="med_wind_med_cooling",     momentum_flux = -2.5e-4, buoyancy_flux = 4.0e-8, f = 1e-4, stop_time = 6day)
+#p = (name="strong_wind_weak_cooling", momentum_flux = -2.8e-4, buoyancy_flux = 2.5e-8, f = 1e-4, stop_time = 6day)
+#p = (name="strong_wind",              momentum_flux = -3.2e-4, buoyancy_flux = 0.0,    f = 1e-4, stop_time = 6day)
+#p = (name="strong_wind_no_rotation",  momentum_flux = -1.0e-4, buoyancy_flux = 0.0,    f = 0.0,  stop_time = 6day)
 
 @show "Running with $p..."
 simulation = three_layer_constant_fluxes_simulation(; configuration..., p...)
@@ -106,4 +98,3 @@ scatter!(ax_e, en, z)
 xlims!(ax_e, -0.1emax, emax)
 
 display(fig)
-
