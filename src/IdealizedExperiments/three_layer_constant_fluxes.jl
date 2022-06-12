@@ -3,7 +3,6 @@ using Printf
 using Logging
 using JLD2
 using NCDatasets
-using GeoData
 using Oceanostics
 using Oceananigans
 using Oceananigans.Units
@@ -56,8 +55,8 @@ function three_layer_constant_fluxes_simulation(;
     netcdf_output                   = false,
     statistics                      = "first_order", # or "second_order"
     snapshot_time_interval          = 2minutes,
-    averages_time_interval          = 3hours,
-    averages_time_window            = 15minutes,
+    averages_time_interval          = 2hours,
+    averages_time_window            = 10minutes,
     time_averaged_statistics        = false,
     data_directory                  = joinpath(pwd(), "data"))
     # End kwargs
@@ -257,7 +256,7 @@ function three_layer_constant_fluxes_simulation(;
     
     @info "Strapping on checkpointer..."
     
-    force = !pickup
+    overwrite_existing = !pickup
     
     simulation.output_writers[:checkpointer] =
         Checkpointer(model, schedule = TimeInterval(stop_time/3), prefix = prefix * "_checkpointer", dir = data_directory)
@@ -355,53 +354,53 @@ function three_layer_constant_fluxes_simulation(;
 
     if jld2_output
         simulation.output_writers[:xy] =
-            JLD2OutputWriter(model, fields_to_output,
+            JLD2OutputWriter(model, fields_to_output;
                              dir = data_directory,
-                             prefix = name * "_xy_slice",
+                             filename = name * "_xy_slice",
                              schedule = TimeInterval(snapshot_time_interval),
                              indices = (:, :, k_xy_slice),
                              with_halos = true,
-                             force = force,
+                             overwrite_existing,
                              init = init_save_some_metadata!)
 
         simulation.output_writers[:xz] =
-            JLD2OutputWriter(model, fields_to_output,
+            JLD2OutputWriter(model, fields_to_output;
                              dir = data_directory,
-                             prefix = name * "_xz_slice",
+                             filename = name * "_xz_slice",
                              schedule = TimeInterval(snapshot_time_interval),
                              indices = (:, 1, :),
                              with_halos = true,
-                             force = force,
+                             overwrite_existing,
                              init = init_save_some_metadata!)
 
         simulation.output_writers[:yz] =
-            JLD2OutputWriter(model, fields_to_output,
+            JLD2OutputWriter(model, fields_to_output;
                              dir = data_directory,
-                             prefix = name * "_yz_slice",
+                             filename = name * "_yz_slice",
                              schedule = TimeInterval(snapshot_time_interval),
                              indices = (1, :, :),
                              with_halos = true,
-                             force = force,
+                             overwrite_existing,
                              init = init_save_some_metadata!)
 
         simulation.output_writers[:statistics] =
-            JLD2OutputWriter(model, statistics_to_output,
+            JLD2OutputWriter(model, statistics_to_output;
                              dir = data_directory,
-                             prefix = name * "_instantaneous_statistics",
+                             filename = name * "_instantaneous_statistics",
                              schedule = TimeInterval(snapshot_time_interval),
                              with_halos = true,
-                             force = force,
+                             overwrite_existing,
                              init = init_save_some_metadata!)
 
         if time_averaged_statistics
             simulation.output_writers[:time_averaged_statistics] =
-                JLD2OutputWriter(model, statistics_to_output,
+                JLD2OutputWriter(model, statistics_to_output;
                                  dir = data_directory,
-                                 prefix = name * "_time_averaged_statistics",
+                                 filename = name * "_time_averaged_statistics",
                                  schedule = AveragedTimeInterval(averages_time_interval,
                                                                  window = averages_time_window),
                                  with_halos = true,
-                                 force = force,
+                                 overwrite_existing,
                                  init = init_save_some_metadata!)
         end
     end

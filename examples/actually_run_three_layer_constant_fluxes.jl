@@ -30,10 +30,11 @@ using LESbrary.IdealizedExperiments: four_day_suite_parameters
 
 configuration = (;
     architecture = GPU(),
-    size = (256, 256, 256),
+    size = (384, 384, 384),
     snapshot_time_interval = 10minutes,
     passive_tracers = false,
-    time_averaged_statistics = false,
+    time_averaged_statistics = true,
+    data_directory = "/nobackup/users/glwagner/"
 )
 
 cases = (:free_convection,
@@ -43,8 +44,11 @@ cases = (:free_convection,
          :strong_wind,
          :strong_wind_no_rotation)
 
-for case in cases[4:6]
-    parameters = four_day_suite_parameters[case]
+#for case in cases[1:2]
+#for case in cases[3:4]
+for case in cases[5:6]
+    #parameters = two_day_suite_parameters[case]
+    parameters = one_day_suite_parameters[case]
     @show "Running with $parameters..."
     simulation = three_layer_constant_fluxes_simulation(; configuration..., parameters...)
     run!(simulation)
