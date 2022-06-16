@@ -3,6 +3,7 @@ using Statistics
 using JLD2
 
 using Oceananigans
+using CUDA
 using Oceananigans.Units
 using Oceananigans.OutputReaders: FieldTimeSeries
 using Oceananigans.Grids: xnode, ynode, znode
@@ -17,7 +18,11 @@ Random.seed!(1234)
 arch = GPU()
 with_ridge = false
 
-filename = "please_dont_crash"
+filename = "please_dont_crash_no_wind"
+
+load_initial_condition = true
+ic_filepath = "quick.jld2" # without parameterizations etc.
+qs_filepath = "quick.jld2"
 
 # Domain
 const Lx = 1000kilometers # zonal domain length [m]
@@ -29,8 +34,8 @@ Nx = 100
 Ny = 250
 Nz = 30
 
-save_fields_interval = 50years
-stop_time = 200years + 1day
+save_fields_interval = 10years
+stop_time = 11years + 1day
 Δt₀ = 15minutes # 7.5minutes * 1.0
 
 # stretched grid
@@ -95,7 +100,7 @@ parameters = (
     Lz=Lz,
     Qᵇ=10 / (ρ * cᵖ) * α * g,        # buoyancy flux magnitude [m² s⁻³]
     y_shutoff=5 / 6 * Ly,             # shutoff location for buoyancy flux [m]
-    τ=0.15 / ρ,                    # surface kinematic wind stress [m² s⁻²]
+    τ=0.15 / ρ * 0.0,                    # surface kinematic wind stress [m² s⁻²]
     μ=μ,                            # quadratic bottom drag coefficient []
     ΔB=8 * α * g,                    # surface vertical buoyancy gradient [s⁻²]
     H=Lz,                             # domain depth [m]
@@ -211,14 +216,14 @@ end
 model = HydrostaticFreeSurfaceModel(grid=grid,
     free_surface=ImplicitFreeSurface(),
     momentum_advection=WENO5(),
-    tracer_advection=WENO5(bounds  = (0.0, parameters.ΔB)),
+    tracer_advection=WENO5(bounds=(0.0, parameters.ΔB)),
     buoyancy=BuoyancyTracer(),
     coriolis=coriolis,
     closure=(horizontal_diffusive_closure, vertical_diffusive_closure, convective_adjustment),
     tracers=(:b, :c),
-    boundary_conditions= boundary_conditions,
+    boundary_conditions=boundary_conditions,
     # forcing= forcings
-    )
+)
 
 #=
 model = NonhydrostaticModel(;
@@ -390,8 +395,36 @@ simulation.output_writers[:averages] = JLD2OutputWriter(model, averaged_outputs,
 
 @info "Running the simulation..."
 
+
+
+if load_initial_condition
+    @info "load in initial condition from " * ic_filepath
+    jlfile = jldopen(ic_filepath)
+    interior(simulation.model.velocities.u) .= CuArray(jlfile["velocities"]["u"])
+    interior(simulation.model.velocities.v) .= CuArray(jlfile["velocities"]["v"])
+    interior(simulation.model.velocities.w) .= CuArray(jlfile["velocities"]["w"])
+    interior(simulation.model.tracers.b) .= CuArray(jlfile["tracers"]["b"])
+    interior(simulation.model.tracers.c) .= CuArray(jlfile["tracers"]["c"])
+    interior(simulation.model.free_surface.η) .= CuArray(jlfile["free_surface"]["eta"])
+    close(jlfile)
+end
+
+
 run!(simulation, pickup=false)
 
+rm(qs_filepath, force=true)
+jlfile = jldopen(qs_filepath, "a+")
+JLD2.Group(jlfile, "velocities")
+JLD2.Group(jlfile, "tracers")
+JLD2.Group(jlfile, "free_surface") # don't forget free surface
+
+jlfile["velocities"]["u"] = Array(interior(simulation.model.velocities.u))
+jlfile["velocities"]["v"] = Array(interior(simulation.model.velocities.v))
+jlfile["velocities"]["w"] = Array(interior(simulation.model.velocities.w))
+jlfile["tracers"]["b"] = Array(interior(simulation.model.tracers.b))
+jlfile["tracers"]["c"] = Array(interior(simulation.model.tracers.c))
+jlfile["free_surface"]["eta"] = Array(interior(simulation.model.free_surface.η))
+close(jlfile)
 
 # simulation.stop_time += 61days
 # run!(simulation, pickup=true)
