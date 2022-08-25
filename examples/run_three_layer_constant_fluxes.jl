@@ -6,7 +6,7 @@ using Oceananigans.Units
 using LESbrary.IdealizedExperiments: three_layer_constant_fluxes_simulation
 using LESbrary.IdealizedExperiments: two_day_suite_parameters
 
-#using GLMakie
+using GLMakie
 #using CairoMakie
 #using ElectronDisplay
 
@@ -18,10 +18,11 @@ using LESbrary.IdealizedExperiments: two_day_suite_parameters
 # The strength of the forcing is tuned roughly so that the boundary layer deepens to roughly
 # 128 meters, half the depth of a 256 meter domain.
 #
-# Each suite has five cases:
+# Each suite has six cases:
 #
 # * :free_convection
 # * :weak_wind_strong_cooling
+# * :med_wind_med_cooling
 # * :strong_wind_weak_cooling
 # * :strong_wind
 # * :strong_wind_no_rotation
@@ -37,15 +38,26 @@ configuration = (;
     time_averaged_statistics = false,
 )
 
-#p = (name="free_convection",          momentum_flux = 0.0,     buoyancy_flux = 3.7e-8, f = 1e-4, stop_time = 6day)
-p = (name="weak_wind_strong_cooling", momentum_flux = -5.0e-5, buoyancy_flux = 3.3e-8, f = 1e-4, stop_time = 6day, stokes_drift_peak_wavenumber=0.1)
-#p = (name="med_wind_med_cooling",     momentum_flux = -2.5e-4, buoyancy_flux = 4.0e-8, f = 1e-4, stop_time = 6day)
-#p = (name="strong_wind_weak_cooling", momentum_flux = -2.8e-4, buoyancy_flux = 2.5e-8, f = 1e-4, stop_time = 6day)
-#p = (name="strong_wind",              momentum_flux = -3.2e-4, buoyancy_flux = 0.0,    f = 1e-4, stop_time = 6day)
-#p = (name="strong_wind_no_rotation",  momentum_flux = -1.0e-4, buoyancy_flux = 0.0,    f = 0.0,  stop_time = 6day)
+half_day_suite_parameters = Dict{Symbol, Any}(
+    :free_convection          => Dict{Symbol, Any}(:momentum_flux => 0.0,     :buoyancy_flux => 4.8e-7, :f => 1e-4),
+    :weak_wind_strong_cooling => Dict{Symbol, Any}(:momentum_flux => -5.0e-4, :buoyancy_flux => 4.0e-7, :f => 1e-4),
+    :med_wind_med_cooling     => Dict{Symbol, Any}(:momentum_flux => -7.0e-4, :buoyancy_flux => 3.2e-7, :f => 1e-4),
+    :strong_wind_weak_cooling => Dict{Symbol, Any}(:momentum_flux => -8.0e-4, :buoyancy_flux => 2.0e-7, :f => 1e-4),
+    :strong_wind              => Dict{Symbol, Any}(:momentum_flux => -1.0e-3, :buoyancy_flux => 0.0,    :f => 1e-4),
+    :strong_wind_no_rotation  => Dict{Symbol, Any}(:momentum_flux => -6.0e-4, :buoyancy_flux => 0.0,    :f => 0.0),
+)
+
+for (name, set) in half_day_suite_parameters
+    set[:name] = string(name)
+    set[:stop_time] = 12hours
+    set[:stokes_drift] = true
+end
+
+p = half_day_suite_parameters[:strong_wind_no_rotation]
 
 @show "Running with $p..."
 simulation = three_layer_constant_fluxes_simulation(; configuration..., p...)
+
 run!(simulation)
 
 filepath = simulation.output_writers[:statistics].filepath

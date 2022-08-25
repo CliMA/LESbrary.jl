@@ -99,7 +99,7 @@ function three_layer_constant_fluxes_simulation(;
                            y = (0, extent[2]),
                            z = z_faces)
     
-    @show grid
+    # @show grid
         
     # Buoyancy and boundary conditions
     

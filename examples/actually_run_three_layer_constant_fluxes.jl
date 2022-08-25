@@ -43,6 +43,7 @@ cases = (:free_convection,
          :strong_wind,
          :strong_wind_no_rotation)
 
+#for case in cases[1:3]
 for case in cases[4:6]
     parameters = four_day_suite_parameters[case]
     @show "Running with $parameters..."

@@ -14,6 +14,21 @@ end
 include("constant_flux_stokes_drift.jl")
 include("three_layer_constant_fluxes.jl")
 
+half_day_suite_parameters = Dict{Symbol, Any}(
+    :free_convection          => Dict{Symbol, Any}(:momentum_flux => 0.0,     :buoyancy_flux => 4.8e-7, :f => 1e-4),
+    :weak_wind_strong_cooling => Dict{Symbol, Any}(:momentum_flux => -6.0e-4, :buoyancy_flux => 4.0e-7, :f => 1e-4),
+    :med_wind_med_cooling     => Dict{Symbol, Any}(:momentum_flux => -9.0e-4, :buoyancy_flux => 3.2e-7, :f => 1e-4),
+    :strong_wind_weak_cooling => Dict{Symbol, Any}(:momentum_flux => -1.2e-3, :buoyancy_flux => 2.0e-7, :f => 1e-4),
+    :strong_wind              => Dict{Symbol, Any}(:momentum_flux => -1.4e-3, :buoyancy_flux => 0.0,    :f => 1e-4),
+    :strong_wind_no_rotation  => Dict{Symbol, Any}(:momentum_flux => -6.0e-4, :buoyancy_flux => 0.0,    :f => 0.0),
+)
+
+for (name, set) in half_day_suite_parameters
+    set[:name] = string(name)
+    set[:stop_time] = 12hours
+    set[:stokes_drift] = true
+end
+
 one_day_suite_parameters = Dict{Symbol, Any}(
     :free_convection          => Dict{Symbol, Any}(:momentum_flux => 0.0,     :buoyancy_flux => 2.4e-7, :f => 1e-4),
     :weak_wind_strong_cooling => Dict{Symbol, Any}(:momentum_flux => -3.0e-4, :buoyancy_flux => 2.0e-7, :f => 1e-4),
