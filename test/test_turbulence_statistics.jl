@@ -54,6 +54,8 @@ for arch in architectures
         simulation = Simulation(model, Δt=1.0, stop_iteration=1)
 
         C  = horizontally_averaged_tracers(model)
+
+
         u² = velocity_covariances(model)
         c² = tracer_covariances(model)
         u³ = third_order_velocity_statistics(model)
@@ -71,21 +73,22 @@ for arch in architectures
 
         tke_budget = turbulent_kinetic_energy_budget(model)
 
-        @test all(ϕ isa XYReducedField for ϕ in values( C     ))
-        @test all(ϕ isa XYReducedField for ϕ in values( u²    ))
-        @test all(ϕ isa XYReducedField for ϕ in values( c²    ))
-        @test all(ϕ isa XYReducedField for ϕ in values( u³    ))
-        @test all(ϕ isa XYReducedField for ϕ in values( u³    ))
+        @test all(ϕ isa Reduction for ϕ in values( C     ))
 
-        @test all(ϕ isa XYReducedField for ϕ in values( ψ¹    ))
-        @test all(ϕ isa XYReducedField for ϕ in values( ψ²    ))
-        @test all(ϕ isa XYReducedField for ϕ in values( ψ³    ))
+        @test all(ϕ isa Reduction for ϕ in values( u²    ))
+        @test all(ϕ isa Reduction for ϕ in values( c²    ))
+        @test all(ϕ isa Reduction for ϕ in values( u³    ))
+        @test all(ϕ isa Reduction for ϕ in values( u³    ))
 
-        @test all(ϕ isa XYReducedField for ϕ in values( ψ¹_ψ² ))
-        @test all(ϕ isa XYReducedField for ϕ in values( ψ¹_ψ³ ))
+        @test all(ϕ isa Reduction for ϕ in values( ψ¹    ))
+        @test all(ϕ isa Reduction for ϕ in values( ψ²    ))
+        @test all(ϕ isa Reduction for ϕ in values( ψ³    ))
 
-        @test all(ϕ isa XYReducedField for ϕ in values( Qᵘ    ))
-        @test all(ϕ isa XYReducedField for ϕ in values( Qᶜ    ))
+        @test all(ϕ isa Reduction for ϕ in values( ψ¹_ψ² ))
+        @test all(ϕ isa Reduction for ϕ in values( ψ¹_ψ³ ))
+
+        @test all(ϕ isa Reduction for ϕ in values( Qᵘ    ))
+        @test all(ϕ isa Reduction for ϕ in values( Qᶜ    ))
 
         @test output_works(simulation, C, "Horizontally averaged tracers")
         @test output_works(simulation, u², "Velocity covariances")
