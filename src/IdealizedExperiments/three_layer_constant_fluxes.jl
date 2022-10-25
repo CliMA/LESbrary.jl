@@ -259,7 +259,8 @@ function three_layer_constant_fluxes_simulation(;
     overwrite_existing = !pickup
     
     simulation.output_writers[:checkpointer] =
-        Checkpointer(model, schedule = TimeInterval(stop_time/3), prefix = prefix * "_checkpointer", dir = data_directory)
+        Checkpointer(model, schedule = WallTimeInterval(20minutes),
+                     prefix = prefix * "_checkpointer", dir = data_directory, cleanup=true)
     
     @info "Squeezing out statistics..."
 
