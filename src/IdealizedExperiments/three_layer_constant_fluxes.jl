@@ -1,11 +1,10 @@
 using Statistics
 using Printf
 using Logging
-using JLD2
-using NCDatasets
 using Oceanostics
 using Oceananigans
 using Oceananigans.Units
+using Oceananigans.Utils: WallTimeInterval
 using Oceananigans.Operators: Δzᶜᶜᶜ
 
 using Oceanostics.TKEBudgetTerms: TurbulentKineticEnergy, ZShearProduction
@@ -53,6 +52,7 @@ function three_layer_constant_fluxes_simulation(;
     pickup                          = false,
     jld2_output                     = true,
     netcdf_output                   = false,
+    checkpoint                      = false,
     statistics                      = "first_order", # or "second_order"
     snapshot_time_interval          = 2minutes,
     averages_time_interval          = 2hours,
@@ -187,7 +187,7 @@ function three_layer_constant_fluxes_simulation(;
     
     model = NonhydrostaticModel(; grid, buoyancy, tracers, stokes_drift,
                                 timestepper = :RungeKutta3,
-                                advection = WENO5(; grid),
+                                advection = WENO(; grid),
                                 coriolis = FPlane(f=f),
                                 closure = AnisotropicMinimumDissipation(),
                                 boundary_conditions = (T=θ_bcs, u=u_bcs),
@@ -254,13 +254,16 @@ function three_layer_constant_fluxes_simulation(;
     
     # # Prepare Output
     
-    @info "Strapping on checkpointer..."
-    
     overwrite_existing = !pickup
     
-    simulation.output_writers[:checkpointer] =
-        Checkpointer(model, schedule = WallTimeInterval(20minutes),
-                     prefix = prefix * "_checkpointer", dir = data_directory, cleanup=true)
+    if checkpoint
+        @info "Strapping on checkpointer..."
+        simulation.output_writers[:checkpointer] =
+            Checkpointer(model, schedule = WallTimeInterval(20minutes),
+                         prefix = prefix * "_checkpointer", dir = data_directory, cleanup=true)
+    else
+        pickup && throw(ArgumentError("Cannot pickup when checkpoint=false!"))
+    end
     
     @info "Squeezing out statistics..."
 

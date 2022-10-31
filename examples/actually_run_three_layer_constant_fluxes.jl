@@ -31,24 +31,45 @@ using LESbrary.IdealizedExperiments: four_day_suite_parameters
 
 configuration = (;
     architecture = GPU(),
-    size = (128, 128, 128),
+    size = (256, 256, 256),
     snapshot_time_interval = 10minutes,
     passive_tracers = false,
+    jld2_output = true,
+    checkpoint = true,
     time_averaged_statistics = true,
-    data_directory = "/home/greg/Projects/LESbrary.jl/data"
+    #data_directory = "/home/greg/Projects/LESbrary.jl/data"
+    data_directory = "/nobackup/users/glwagner"
 )
 
-cases = (:free_convection,
+cases = (#:free_convection,
          :weak_wind_strong_cooling, 
          :med_wind_med_cooling,     
          :strong_wind_weak_cooling, 
          :strong_wind,
          :strong_wind_no_rotation)
 
+#=
 for case in cases
     parameters = two_day_suite_parameters[case]
+    #parameters = one_day_suite_parameters[case]
+    #parameters = half_day_suite_parameters[case]
     @show "Running with $parameters..."
     simulation = three_layer_constant_fluxes_simulation(; configuration..., parameters...)
     run!(simulation)
 end
+=#
+
+case = :weak_wind_strong_cooling
+parameters = two_day_suite_parameters[case]
+@show "Running with $parameters..."
+simulation = three_layer_constant_fluxes_simulation(; configuration..., parameters...)
+run!(simulation)
+
+#=
+case = :weak_wind_strong_cooling
+parameters = two_day_suite_parameters[case]
+@show "Running with $parameters..."
+simulation = three_layer_constant_fluxes_simulation(; configuration..., parameters...)
+run!(simulation)
+=#
 
