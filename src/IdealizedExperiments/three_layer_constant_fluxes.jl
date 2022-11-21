@@ -1,6 +1,7 @@
 using Statistics
 using Printf
 using Logging
+using OrderedCollections
 using Oceanostics
 using Oceananigans
 using Oceananigans.Units
@@ -169,19 +170,14 @@ function three_layer_constant_fluxes_simulation(;
         ρʷ = stokes_drift.water_density
         ρᵃ = stokes_drift.air_density
         u★ = a★ * sqrt(ρᵃ / ρʷ)
-        @printf "Air u★: %.4f, water u★: %.4f, λᵖ: %.4f, Surface Stokes drift: %.4f m s⁻¹\n" a★ u★ 2π/kᵖ uˢ₀
+        La = sqrt(u★ / uˢ₀)
+        @info @sprintf("Air u★: %.4f, water u★: %.4f, λᵖ: %.4f, La: %.3f, Surface Stokes drift: %.4f m s⁻¹",
+                       a★, u★, 2π/kᵖ, La, uˢ₀)
     else
         stokes_drift = nothing
     end
     
     @info "Framing the model..."
-
-    #=
-    Δz = CUDA.@allowscalar grid.Δzᵃᵃᶜ[grid.Nz]
-    @show Δz
-    Cᴬᴹᴰ = SurfaceEnhancedModelConstant(Δz, C₀ = 1/12, enhancement = 7, decay_scale = 4Δz)
-    closure = AnisotropicMinimumDissipation(C=Cᴬᴹᴰ),
-    =#
 
     tracers = passive_tracers ? (:T, :c₀, :c₁, :c₂) : :T
     
@@ -306,42 +302,50 @@ function three_layer_constant_fluxes_simulation(;
 
     statistics_to_output = merge(primitive_statistics, subfilter_flux_statistics, additional_statistics)
 
-                                 #subfilter_flux_statistics,
-                                 #tke_budget_statistics)
-
-
     @info "Garnishing output writers..."
     
-    global_attributes = (
-        LESbrary_jl_commit_SHA1 = execute(`git rev-parse HEAD`).stdout |> strip,
-        name = name,
-        thermocline_type = thermocline_type,
-        buoyancy_flux = Qᵇ,
-        momentum_flux = Qᵘ,
-        temperature_flux = Qᶿ,
-        coriolis_parameter = f,
-        thermal_expansion_coefficient = α,
-        gravitational_acceleration = g,
-        boundary_condition_θ_top = Qᶿ,
-        boundary_condition_θ_bottom = dθdz_deep,
-        boundary_condition_u_top = Qᵘ,
-        boundary_condition_u_bottom = 0.0,
-        surface_layer_depth = surface_layer_depth,
-        thermocline_width = thermocline_width,
-        N²_surface_layer = N²_surface_layer,
-        N²_thermocline = N²_thermocline,
-        N²_deep = N²_deep,
-        dθdz_surface_layer = dθdz_surface_layer,
-        dθdz_thermocline = dθdz_thermocline,
-        dθdz_deep = dθdz_deep,
-        θ_surface = θ_surface,
-        θ_transition = θ_transition,
-        θ_deep = θ_deep,
-        z_transition = z_transition,
-        z_deep = z_deep,
-        k_transition = k_transition,
-        k_deep = k_deep
-    )
+    global_attributes = OrderedDict()
+
+    global_attributes[:LESbrary_jl_commit_SHA1]       = execute(`git rev-parse HEAD`).stdout |> strip
+    global_attributes[:name]                          = name
+    global_attributes[:thermocline_type]              = thermocline_type
+    global_attributes[:buoyancy_flux]                 = Qᵇ
+    global_attributes[:momentum_flux]                 = Qᵘ
+    global_attributes[:temperature_flux]              = Qᶿ
+    global_attributes[:coriolis_parameter]            = f
+    global_attributes[:thermal_expansion_coefficient] = α
+    global_attributes[:gravitational_acceleration]    = g
+    global_attributes[:boundary_condition_θ_top]      = Qᶿ
+    global_attributes[:boundary_condition_θ_bottom]   = dθdz_deep
+    global_attributes[:boundary_condition_u_top]      = Qᵘ
+    global_attributes[:boundary_condition_u_bottom]   = 0.0
+    global_attributes[:surface_layer_depth]           = surface_layer_depth
+    global_attributes[:thermocline_width]             = thermocline_width
+    global_attributes[:N²_surface_layer]              = N²_surface_layer
+    global_attributes[:N²_thermocline]                = N²_thermocline
+    global_attributes[:N²_deep]                       = N²_deep
+    global_attributes[:dθdz_surface_layer]            = dθdz_surface_layer
+    global_attributes[:dθdz_thermocline]              = dθdz_thermocline
+    global_attributes[:dθdz_deep]                     = dθdz_deep
+    global_attributes[:θ_surface]                     = θ_surface
+    global_attributes[:θ_transition]                  = θ_transition
+    global_attributes[:θ_deep]                        = θ_deep
+    global_attributes[:z_transition]                  = z_transition
+    global_attributes[:z_deep]                        = z_deep
+    global_attributes[:k_transition]                  = k_transition
+    global_attributes[:k_deep]                        = k_deep
+
+    if !isnothing(stokes_drift)
+        global_attributes[:stokes_drift_surface_velocity] = uˢ₀  = CUDA.@allowscalar stokes_drift.uˢ[1, 1, grid.Nz]
+        global_attributes[:stokes_drift_peak_wavenumber]         = stokes_drift_peak_wavenumber
+        global_attributes[:stokes_drift_air_friction_velocity]   = stokes_drift.air_friction_velocity
+        global_attributes[:stokes_drift_water_density]           = stokes_drift.water_density
+        global_attributes[:stokes_drift_air_density]             = stokes_drift.air_density
+        global_attributes[:stokes_drift_water_friction_velocity] = u★ = a★ * sqrt(ρᵃ / ρʷ)
+        global_attributes[:stokes_drift_Langmuir_number]         = sqrt(u★ / uˢ₀)
+    end
+
+    global_attributes = NamedTuple(global_attributes)
     
     function init_save_some_metadata!(file, model)
         for (name, value) in pairs(global_attributes)

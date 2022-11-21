@@ -97,13 +97,13 @@ end
 
 const CFSD = ConstantFluxStokesDrift
 
-@inline ∂t_uˢ(i, j, k, grid, sd::CFSD, time) = zero(eltype(grid))
-@inline ∂t_vˢ(i, j, k, grid, sd::CFSD, time) = zero(eltype(grid))
+@inline ∂t_uˢ(i, j, k, grid, sd::CFSD, time) = zero(grid)
+@inline ∂t_vˢ(i, j, k, grid, sd::CFSD, time) = zero(grid)
 @inline ∂t_wˢ(i, j, k, grid::AbstractGrid{FT}, ::CFSD, time) where FT = zero(FT)
 
 @inline x_curl_Uˢ_cross_U(i, j, k, grid, sd::CFSD, U, t) = @inbounds +ℑxzᶠᵃᶜ(i, j, k, grid, U.w) * ℑzᵃᵃᶜ(1, 1, k, grid, sd.∂z_uˢ)
 @inline z_curl_Uˢ_cross_U(i, j, k, grid, sd::CFSD, U, t) = @inbounds -ℑxzᶜᵃᶠ(i, j, k, grid, U.u) * sd.∂z_uˢ[1, 1, k]
-@inline y_curl_Uˢ_cross_U(i, j, k, grid,   ::CFSD, U, t) = zero(eltype(grid))
+@inline y_curl_Uˢ_cross_U(i, j, k, grid,   ::CFSD, U, t) = zero(grid)
 
 #####
 ##### Stokes drift computation...
