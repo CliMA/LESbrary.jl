@@ -1,6 +1,6 @@
 name = "LESbrary"
 uuid = "0d21a966-bb61-11e9-3e8e-8da3363c58dd"
-authors = ["ali-ramadhan <ali.hh.ramadhan@gmail.com>"]
+authors = ["Climate Modeling Alliance and contributors"]
 version = "0.1.0"
 
 [deps]
