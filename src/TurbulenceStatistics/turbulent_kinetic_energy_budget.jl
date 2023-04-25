@@ -42,8 +42,8 @@ function turbulent_kinetic_energy_budget(model;
                                          U = Field(Average(model.velocities.u, dims=(1, 2))),
                                          V = Field(Average(model.velocities.v, dims=(1, 2))),
                                          e = Oceanostics.TurbulentKineticEnergy(model; U, V),
-                                         shear_production = Oceanostics.ZShearProduction(model; U, V),
-                                         dissipation = Oceanostics.IsotropicViscousDissipationRate(model; U, V))
+                                         shear_production = Oceanostics.ZShearProductionRate(model; U, V),
+                                         dissipation = Oceanostics.IsotropicKineticEnergyDissipationRate(model; U, V))
 
     u, v, w = model.velocities
 

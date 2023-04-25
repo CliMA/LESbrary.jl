@@ -8,7 +8,7 @@ using Oceananigans.Units
 using Oceananigans.Utils: WallTimeInterval
 using Oceananigans.Operators: Δzᶜᶜᶜ
 
-using Oceanostics.TKEBudgetTerms: TurbulentKineticEnergy, ZShearProduction
+using Oceanostics.TKEBudgetTerms: TurbulentKineticEnergy
 
 using LESbrary.Utils: SimulationProgressMessenger, fit_cubic, poly
 using LESbrary.NearSurfaceTurbulenceModels: SurfaceEnhancedModelConstant
@@ -286,17 +286,6 @@ function three_layer_constant_fluxes_simulation(;
     e = TurbulentKineticEnergy(model, U=U, V=V)
     fields_to_output = merge(model.velocities, model.tracers, (; e=e))
 
-    #=
-    e = Field(TurbulentKineticEnergy(model, U=U, V=V))
-    shear_production = Field(ZShearProduction(model, U=U, V=V))
-    dissipation = Field(ViscousDissipation(model))
-    tke_budget_statistics = turbulent_kinetic_energy_budget(model,
-                                                            b=b, p=p, U=U, V=V, e=e,
-                                                            shear_production=shear_production,
-                                                            dissipation=dissipation)
-    #pop!(tke_budget_statistics, :tke_dissipation)
-    =#
-    
     additional_statistics = Dict(:e => Average(TurbulentKineticEnergy(model, U=U, V=V), dims=(1, 2)),
                                  :Ri => ∂z(B) / (∂z(U)^2 + ∂z(V)^2))
 
