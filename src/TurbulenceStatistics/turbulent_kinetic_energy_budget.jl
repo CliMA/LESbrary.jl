@@ -41,10 +41,9 @@ function turbulent_kinetic_energy_budget(model;
                                          p = model.pressures.pHY′ + model.pressures.pNHS,
                                          U = Field(Average(model.velocities.u, dims=(1, 2))),
                                          V = Field(Average(model.velocities.v, dims=(1, 2))),
-                                         e = Oceanostics.TurbulentKineticEnergy(model, U=U, V=V),
-                                         shear_production = Oceanostics.ZShearProduction(model, U=U, V=V),
-                                         dissipation = ViscousDissipation(model),
-                                        )
+                                         e = Oceanostics.TurbulentKineticEnergy(model; U, V),
+                                         shear_production = Oceanostics.ZShearProductionRate(model; U, V),
+                                         dissipation = Oceanostics.IsotropicKineticEnergyDissipationRate(model; U, V))
 
     u, v, w = model.velocities
 
@@ -54,12 +53,12 @@ function turbulent_kinetic_energy_budget(model;
 
     turbulence_statistics = Dict()
 
-    turbulence_statistics[:e] = Field(Average(e, dims=(1, 2)))
-    turbulence_statistics[:tke_shear_production] = Field(Average(shear_production, dims=(1, 2)))
-    turbulence_statistics[:tke_advective_flux]   = Field(Average(advective_flux,   dims=(1, 2)))
-    turbulence_statistics[:tke_pressure_flux]    = Field(Average(pressure_flux,    dims=(1, 2)))
-    turbulence_statistics[:tke_dissipation]      = Field(Average(dissipation,      dims=(1, 2)))
-    turbulence_statistics[:tke_buoyancy_flux]    = Field(Average(buoyancy_flux,    dims=(1, 2)))
+    turbulence_statistics[:e] = Average(e, dims=(1, 2))
+    turbulence_statistics[:tke_shear_production] = Average(shear_production, dims=(1, 2))
+    turbulence_statistics[:tke_advective_flux]   = Average(advective_flux,   dims=(1, 2))
+    turbulence_statistics[:tke_pressure_flux]    = Average(pressure_flux,    dims=(1, 2))
+    turbulence_statistics[:tke_dissipation]      = Average(dissipation,      dims=(1, 2))
+    turbulence_statistics[:tke_buoyancy_flux]    = Average(buoyancy_flux,    dims=(1, 2))
 
     if with_flux_divergences
         advective_flux_field = Field(advective_flux)
@@ -68,8 +67,8 @@ function turbulent_kinetic_energy_budget(model;
         advective_flux_divergence = ∂z(advective_flux_field)
         pressure_flux_divergence = ∂z(pressure_flux_field)
 
-        turbulence_statistics[:tke_advective_flux_divergence] = Field(Average(advective_flux_divergence, dims=(1, 2)))
-        turbulence_statistics[:tke_pressure_flux_divergence]  = Field(Average(pressure_flux_divergence,  dims=(1, 2)))
+        turbulence_statistics[:tke_advective_flux_divergence] = Average(advective_flux_divergence, dims=(1, 2))
+        turbulence_statistics[:tke_pressure_flux_divergence]  = Average(pressure_flux_divergence,  dims=(1, 2))
     end
 
     return turbulence_statistics
