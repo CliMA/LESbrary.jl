@@ -80,19 +80,19 @@ def get_profile_time_series(ds, var, lat, lon, day_offset, days):
             time_series = ds[var].isel(time=time_slice).sel(XC=lon, YC=lat, method="nearest").values
     return time_series
 
-def compute_geostrophic_velocities(ds, lat, lon, day_offset, days, zF, α, β, g, f):
+def compute_geostrophic_velocities(ds, lat, lon, day_offset, days, g, ρ0, f):
     logging.info(f"Computing geostrophic velocities at ({lat}°N, {lon}°E) for {days} days...")
 
     # Reverse z index so we calculate cumulative integrals bottom up
-    ds = ds.reindex(Z=ds.Z[::-1], Zl=ds.Zl[::-1])
+    with dask.config.set(**{'array.slicing.split_large_chunks': False}):
+        ds = ds.reindex(Z=ds.Z[::-1], Zl=ds.Zl[::-1])
 
-    # Only pull out the data we need as time has chunk size 1.
+    # Only pull out the data we need as time has chunk size 10.
     time_slice = slice(day_offset, day_offset + days + 1)
 
     U =  ds.UVEL.isel(time=time_slice)
     V =  ds.VVEL.isel(time=time_slice)
-    Θ = ds.THETA.isel(time=time_slice)
-    S =  ds.SALT.isel(time=time_slice)
+    dρdz = ds.DRHODR.isel(time=time_slice)
 
     # Set up grid metric
     # See: https://xgcm.readthedocs.io/en/latest/grid_metrics.html#Using-metrics-with-xgcm
@@ -112,20 +112,26 @@ def compute_geostrophic_velocities(ds, lat, lon, day_offset, days, zF, α, β, g
     # https://pangeo.io/use_cases/physical-oceanography/SOSE.html#create-xgcm-grid
     grid = xgcm.Grid(ds, metrics=metrics, periodic=('X', 'Y'))
 
-    # Vertical integrals from z'=-Lz to z'=z (cumulative integrals)
-    Σdz_dΘdx = grid.cumint(grid.derivative(Θ, 'X'), 'Z', boundary="extend")
-    Σdz_dΘdy = grid.cumint(grid.derivative(Θ, 'Y'), 'Z', boundary="extend")
-    Σdz_dSdx = grid.cumint(grid.derivative(S, 'X'), 'Z', boundary="extend")
-    Σdz_dSdy = grid.cumint(grid.derivative(S, 'Y'), 'Z', boundary="extend")
+    # Vertical integral from z'=-H to z'=z (cumulative integrals)
+    # `extend` sets values outside the array to the nearest array value.
+    # (i.e. a limited form of Neumann boundary condition.)
+    dρdz = grid.interp(dρdz, 'Z', boundary="extend")
+    B = -g/ρ0 * grid.cumint(dρdz, 'Z', boundary="extend")
 
-    # Assuming linear equation of state
-    Σdz_dBdx = g * (α * Σdz_dΘdx - β * Σdz_dSdx)
-    Σdz_dBdy = g * (α * Σdz_dΘdy - β * Σdz_dSdy)
+    dBdx = grid.interp(grid.derivative(B, 'X'), 'Z', boundary="extend")
+    dBdy = grid.interp(grid.derivative(B, 'Y'), 'Z', boundary="extend")
+
+    Σdz_dBdx = grid.cumint(dBdx, 'Z', boundary="extend")
+    Σdz_dBdy = grid.cumint(dBdy, 'Z', boundary="extend")
 
     # Velocities at depth
     z_bottom = ds.Z.values[0]
     U_d = U.sel(XG=lon, YC=lat, Z=z_bottom, method="nearest")
     V_d = V.sel(XC=lon, YG=lat, Z=z_bottom, method="nearest")
+
+    print(z_bottom)
+    print(U_d)
+    print(V_d)
 
     with ProgressBar():
         U_geo = (U_d - 1/f * Σdz_dBdy).sel(XC=lon, YG=lat, method="nearest").values
