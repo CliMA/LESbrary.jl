@@ -8,11 +8,11 @@ using CUDA
 using SpecialFunctions
 using Adapt
 
-import Oceananigans.StokesDrift: AbstractStokesDrift
-import Oceananigans.StokesDrift: ∂t_uˢ, ∂t_vˢ, ∂t_wˢ,
-                                 x_curl_Uˢ_cross_U,
-                                 y_curl_Uˢ_cross_U,
-                                 z_curl_Uˢ_cross_U
+import Oceananigans.StokesDrifts: AbstractStokesDrift
+import Oceananigans.StokesDrifts: ∂t_uˢ, ∂t_vˢ, ∂t_wˢ,
+                                  x_curl_Uˢ_cross_U,
+                                  y_curl_Uˢ_cross_U,
+                                  z_curl_Uˢ_cross_U
 
 struct ConstantFluxStokesDrift{T, K, U, UZ}
                             Cᵝ :: T   # 1, Toba's constant
