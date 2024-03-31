@@ -33,7 +33,7 @@ by constant momentum and buoyancy fluxes.
 function three_layer_constant_fluxes_simulation(;
     name                            = "",
     size                            = (32, 32, 32),
-    passive_tracers                 = true,
+    passive_tracers                 = false,
     extent                          = (512meters, 512meters, 256meters),
     architecture                    = CPU(),
     stop_time                       = 0.1hours,
@@ -94,7 +94,8 @@ function three_layer_constant_fluxes_simulation(;
     # Generating function
     z_faces(k) = Lz * (ζ₀(k) * Σ(k) - 1)
 
-    grid = RectilinearGrid(architecture; size, halo = (3, 3, 3),
+    grid = RectilinearGrid(architecture; size,
+                           halo = (5, 5, 5),
                            x = (0, extent[1]),
                            y = (0, extent[2]),
                            z = z_faces)
@@ -131,7 +132,7 @@ function three_layer_constant_fluxes_simulation(;
     # # Initial condition and sponge layer
     
     ## Fiddle with indices to get a correct discrete profile
-    z = CUDA.@allowscalar Array(znodes(Center, grid))
+    z = CUDA.@allowscalar Array(znodes(grid, Center()))
     k_transition = searchsortedfirst(z, -surface_layer_depth)
     k_deep = searchsortedfirst(z, -(surface_layer_depth + thermocline_width))
     
@@ -183,9 +184,8 @@ function three_layer_constant_fluxes_simulation(;
     
     model = NonhydrostaticModel(; grid, buoyancy, tracers, stokes_drift,
                                 timestepper = :RungeKutta3,
-                                advection = WENO(; grid),
+                                advection = WENO(order=9),
                                 coriolis = FPlane(f=f),
-                                closure = AnisotropicMinimumDissipation(),
                                 boundary_conditions = (T=θ_bcs, u=u_bcs),
                                 forcing = (u=u_sponge, v=v_sponge, w=w_sponge, T=T_sponge,
                                            c₀=c₀_forcing, c₁=c₁_forcing, c₂=c₂_forcing))
@@ -277,7 +277,6 @@ function three_layer_constant_fluxes_simulation(;
         primitive_statistics = first_order_statistics(model, b=b, p=p, w_scratch=ccf_scratch, c_scratch=ccc_scratch)
     end
     
-    subfilter_flux_statistics = merge(subfilter_momentum_fluxes(model), subfilter_tracer_fluxes(model))
     
     U = Field(primitive_statistics[:u])
     V = Field(primitive_statistics[:v])
@@ -289,7 +288,11 @@ function three_layer_constant_fluxes_simulation(;
     additional_statistics = Dict(:e => Average(TurbulentKineticEnergy(model, U=U, V=V), dims=(1, 2)),
                                  :Ri => ∂z(B) / (∂z(U)^2 + ∂z(V)^2))
 
-    statistics_to_output = merge(primitive_statistics, subfilter_flux_statistics, additional_statistics)
+    # We're changing to WENO(order=9) so there are no subfilter fluxes...
+    #subfilter_flux_statistics = merge(subfilter_momentum_fluxes(model), subfilter_tracer_fluxes(model))
+    #statistics_to_output = merge(primitive_statistics, subfilter_flux_statistics, additional_statistics)
+    
+    statistics_to_output = merge(primitive_statistics, additional_statistics)
 
     @info "Garnishing output writers..."
     
@@ -346,7 +349,7 @@ function three_layer_constant_fluxes_simulation(;
     ## Add JLD2 output writers
     
     # Prepare turbulence statistics
-    zF = CUDA.@allowscalar Array(znodes(Face, grid))
+    zF = CUDA.@allowscalar Array(znodes(grid, Face()))
     k_xy_slice = searchsortedfirst(zF, -slice_depth)
 
     if jld2_output
