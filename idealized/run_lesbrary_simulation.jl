@@ -39,15 +39,15 @@ size = (128, 128, 128)
 #size = (256, 256, 384)
 # case = :strong_wind
 snapshot_time_interval = 10minute
-data_directory = "/nobackup/users/glwagner/LESbrary/"
+data_directory = "/home/greg/Projects/LESbrary.jl/data"
 
 cases = [
     :strong_wind,
     :free_convection,
     :weak_wind_strong_cooling,
-    #:med_wind_med_cooling,
-    #:strong_wind_weak_cooling,
-    #:strong_wind_no_rotation
+    :med_wind_med_cooling,
+    :strong_wind_weak_cooling,
+    :strong_wind_no_rotation
 ]
 
 #=
@@ -57,9 +57,9 @@ suites = [twelve_hour_suite_parameters,
 =#
 
 #suite = six_hour_suite_parameters
-suite = twelve_hour_suite_parameters
+#suite = twelve_hour_suite_parameters
 #suite = twenty_four_hour_suite_parameters
-#suite = forty_eight_hour_suite_parameters
+suite = forty_eight_hour_suite_parameters
 #suite = seventy_two_hour_suite_parameters
 
 @inline κˢ(x, y, z, t) = ifelse(z > -5, 1e-2, zero(z))
@@ -75,7 +75,9 @@ for case in cases
     # name = suite_parameters[:name]
     # suite_parameters[:name] = name * "_surface_diffusivity"
     
+    name = suite_parameters[:name]
     suite_parameters[:name] = name * "_with_tracer"
+        
     simulation = three_layer_constant_fluxes_simulation(; architecture,
                                                           size,
                                                           checkpoint = false,
