@@ -21,7 +21,7 @@ end
 
 """
     SurfaceEnhancedModelConstant(Δz; FT=Float64, C₀=1/12, z₀=-Δz/2,
-                                 enhancement=2, decay_scale=8Δz)
+                                 enhancement=2, decay_scale=4Δz)
 
 Returns a callable object representing a spatially-variable model constant
 for an LES eddy diffusivity model with the surface-enhanced form
@@ -30,7 +30,7 @@ for an LES eddy diffusivity model with the surface-enhanced form
 
 """
 function SurfaceEnhancedModelConstant(Δz; FT=Float64, C₀=1/12, z₀=-Δz/2,
-                                      enhancement=2, decay_scale=8Δz)
+                                      enhancement=4, decay_scale=4Δz)
 
     return SurfaceEnhancedModelConstant{FT}(C₀, Δz, z₀, enhancement, decay_scale)
 end
@@ -57,7 +57,7 @@ function SurfaceEnhancedModelConstant(filename::String)
 
     close(file)
 
-    Cᴬᴹᴰ = SurfaceEnhancedModelConstant(Δz; C₀=1/12, z₀=-Δz/2, enhancement=2, decay_scale=8Δz)
+    Cᴬᴹᴰ = SurfaceEnhancedModelConstant(Δz; C₀=1/12, z₀=-Δz/2, enhancement=4, decay_scale=4Δz)
 
     return Cᴬᴹᴰ
 end
