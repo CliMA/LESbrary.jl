@@ -32,10 +32,10 @@ using LESbrary.IdealizedExperiments: seventy_two_hour_suite_parameters
 # which slices of the simulation is saved) from the default 2 minutes to 1 minute
 # (to make pretty movies).
 
-architecture = CPU()
+architecture = GPU()
 #size = (32, 32, 32)
-size = (64, 64, 64)
-#size = (128, 128, 128)
+#size = (64, 64, 64)
+size = (128, 128, 128)
 #size = (256, 256, 256)
 #size = (256, 256, 384)
 # case = :strong_wind
@@ -45,18 +45,18 @@ data_directory = "." #/home/greg/Projects/LESbrary.jl/data"
 cases = [
     :strong_wind_and_sunny,
     #:strong_wind,
-    #:free_convection,
+    :free_convection,
     #:weak_wind_strong_cooling,
     #:med_wind_med_cooling,
     #:strong_wind_weak_cooling,
-    #:strong_wind_no_rotation
+    :strong_wind_no_rotation
 ]
 
-#=
-suites = [twelve_hour_suite_parameters,
+suites = [six_hour_suite_parameters,
+          twelve_hour_suite_parameters,
           twenty_four_hour_suite_parameters,
-          forty_eight_hour_suite_parameters]
-=#
+          forty_eight_hour_suite_parameters,
+          seventy_two_hour_suite_parameters]
 
 suite = six_hour_suite_parameters
 #suite = twelve_hour_suite_parameters
@@ -64,19 +64,8 @@ suite = six_hour_suite_parameters
 #suite = forty_eight_hour_suite_parameters
 #suite = seventy_two_hour_suite_parameters
 
-@inline κˢ(x, y, z, t) = ifelse(z > -5, 1e-2, zero(z))
-
 for case in cases
-    suite_parameters = suite[case]
-
-    # suite_parameters[:stokes_drift] = false
-    # name = suite_parameters[:name]
-    # suite_parameters[:name] = name * "_no_stokes"
-
-    # suite_parameters[:background_diffusivity] = κˢ
-    # name = suite_parameters[:name]
-    # suite_parameters[:name] = name * "_surface_diffusivity"
-    
+    suite_parameters = deepcopy(suite[case])
     name = suite_parameters[:name]
     suite_parameters[:name] = name * "_with_tracer"
         
@@ -89,5 +78,47 @@ for case in cases
                                                           snapshot_time_interval,
                                                           suite_parameters...)
     run!(simulation)
+
+    #####
+    ##### To run the case with no Stokes drift
+    #####
+
+    #=
+    suite_parameters = deepcopy(suite[case])
+    suite_parameters[:stokes_drift] = false
+    name = suite_parameters[:name]
+    suite_parameters[:name] = name * "_no_stokes"
+
+    simulation = three_layer_constant_fluxes_simulation(; architecture,
+                                                          size,
+                                                          checkpoint = false,
+                                                          pickup = false,
+                                                          passive_tracers = true,
+                                                          data_directory,
+                                                          snapshot_time_interval,
+                                                          suite_parameters...)
+    run!(simulation)
+    =#
+
+    #####
+    ##### To run with a subgrid closure
+    #####
+
+    #=
+    suite_parameters = deepcopy(suite[case])
+    suite_parameters[:explicit_closure] = true
+    name = suite_parameters[:name]
+    suite_parameters[:name] = name * "_explicit_closure"
+
+    simulation = three_layer_constant_fluxes_simulation(; architecture,
+                                                          size,
+                                                          checkpoint = false,
+                                                          pickup = false,
+                                                          passive_tracers = true,
+                                                          data_directory,
+                                                          snapshot_time_interval,
+                                                          suite_parameters...)
+    run!(simulation)
+    =#
 end
 

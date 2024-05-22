@@ -30,7 +30,7 @@ for an LES eddy diffusivity model with the surface-enhanced form
 
 """
 function SurfaceEnhancedModelConstant(Δz; FT=Float64, C₀=1/12, z₀=-Δz/2,
-                                      enhancement=4, decay_scale=4Δz)
+                                      enhancement=10, decay_scale=8Δz)
 
     return SurfaceEnhancedModelConstant{FT}(C₀, Δz, z₀, enhancement, decay_scale)
 end
