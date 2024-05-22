@@ -34,6 +34,7 @@ function three_layer_constant_fluxes_simulation(;
     name                            = "",
     size                            = (32, 32, 32),
     passive_tracers                 = false,
+    background_diffusivity          = nothing,
     extent                          = (512meters, 512meters, 256meters),
     architecture                    = CPU(),
     stop_time                       = 0.1hours,
@@ -180,15 +181,23 @@ function three_layer_constant_fluxes_simulation(;
     
     @info "Framing the model..."
 
-    tracers = passive_tracers ? (:T, :c₀, :c₁, :c₂) : :T
+    #tracers = passive_tracers ? (:T, :c₀, :c₁, :c₂) : :T
+    tracers = passive_tracers ? (:T, :c) : :T
+
+    if isnothing(background_diffusivity)
+        closure = nothing
+    else
+        closure = ScalarDiffusivity(κ=background_diffusivity)
+    end
     
-    model = NonhydrostaticModel(; grid, buoyancy, tracers, stokes_drift,
+    model = NonhydrostaticModel(; grid, buoyancy, tracers, stokes_drift, closure,
                                 timestepper = :RungeKutta3,
                                 advection = WENO(order=9),
-                                coriolis = FPlane(f=f),
+                                coriolis = FPlane(; f),
                                 boundary_conditions = (T=θ_bcs, u=u_bcs),
                                 forcing = (u=u_sponge, v=v_sponge, w=w_sponge, T=T_sponge,
-                                           c₀=c₀_forcing, c₁=c₁_forcing, c₂=c₂_forcing))
+                                           c=c₁_forcing))
+                                           #c₀=c₀_forcing, c₁=c₁_forcing, c₂=c₂_forcing))
     
     # # Set Initial condition
     
@@ -224,7 +233,7 @@ function three_layer_constant_fluxes_simulation(;
     and is augmented by three-dimensional, surface-concentrated random noise.
     """
     function initial_temperature(x, y, z)
-        noise = 1e-6 * Ξ(z) * dθdz_surface_layer * grid.Lz
+        noise = 1e-3 * Ξ(z) * dθdz_surface_layer * grid.Lz
     
         if z_transition < z <= 0
             return θ_surface + dθdz_surface_layer * z + noise

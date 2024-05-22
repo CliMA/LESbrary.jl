@@ -7,6 +7,8 @@ using LESbrary.IdealizedExperiments: three_layer_constant_fluxes_simulation
 using LESbrary.IdealizedExperiments: forty_eight_hour_suite_parameters
 using LESbrary.IdealizedExperiments: twenty_four_hour_suite_parameters
 using LESbrary.IdealizedExperiments: twelve_hour_suite_parameters
+using LESbrary.IdealizedExperiments: six_hour_suite_parameters
+using LESbrary.IdealizedExperiments: seventy_two_hour_suite_parameters
 
 # LESbrary parameters
 # ===================
@@ -31,21 +33,57 @@ using LESbrary.IdealizedExperiments: twelve_hour_suite_parameters
 # (to make pretty movies).
 
 architecture = GPU()
-size = (64, 64, 64)
+#size = (64, 64, 64)
+size = (128, 128, 128)
+#size = (256, 256, 256)
+#size = (256, 256, 384)
 # case = :strong_wind
-snapshot_time_interval = 1minute
+snapshot_time_interval = 10minute
 data_directory = "/nobackup/users/glwagner/LESbrary/"
 
-#for case in [:strong_wind]
-#for case in [:free_convection, :weak_wind_strong_cooling]
-#for case in [:med_wind_med_cooling, :strong_wind_weak_cooling]
-for case in [:strong_wind_no_rotation]
+cases = [
+    :strong_wind,
+    :free_convection,
+    :weak_wind_strong_cooling,
+    #:med_wind_med_cooling,
+    #:strong_wind_weak_cooling,
+    #:strong_wind_no_rotation
+]
+
+#=
+suites = [twelve_hour_suite_parameters,
+          twenty_four_hour_suite_parameters,
+          forty_eight_hour_suite_parameters]
+=#
+
+#suite = six_hour_suite_parameters
+suite = twelve_hour_suite_parameters
+#suite = twenty_four_hour_suite_parameters
+#suite = forty_eight_hour_suite_parameters
+#suite = seventy_two_hour_suite_parameters
+
+@inline κˢ(x, y, z, t) = ifelse(z > -5, 1e-2, zero(z))
+
+for case in cases
+    suite_parameters = suite[case]
+
+    # suite_parameters[:stokes_drift] = false
+    # name = suite_parameters[:name]
+    # suite_parameters[:name] = name * "_no_stokes"
+
+    # suite_parameters[:background_diffusivity] = κˢ
+    # name = suite_parameters[:name]
+    # suite_parameters[:name] = name * "_surface_diffusivity"
+    
+    suite_parameters[:name] = name * "_with_tracer"
     simulation = three_layer_constant_fluxes_simulation(; architecture,
                                                           size,
+                                                          checkpoint = false,
+                                                          pickup = false,
+                                                          passive_tracers = true,
                                                           data_directory,
                                                           snapshot_time_interval,
-                                                          twelve_hour_suite_parameters[case]...)
-
+                                                          suite_parameters...)
     run!(simulation)
 end
 
