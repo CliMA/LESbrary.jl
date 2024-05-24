@@ -181,3 +181,5 @@ data
 
 # DS_STORE...
 .DS_STORE
+
+*.pdf
