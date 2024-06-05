@@ -27,24 +27,6 @@ Logging.global_logger(OceananigansLogger())
 const ce = Center()
 const fa = Face()
 
-struct TwoExponentialPenetratingFlux{FT} <: Function
-    surface_flux :: FT
-    first_fraction :: FT
-    first_decay_scale :: FT
-    second_decay_scale :: FT
-end
-
-function TwoExponentialPenetratingFlux(surface_flux,
-                                       first_fraction = 0.6,
-                                       first_decay_scale = 1.0,
-                                       second_decay_scale = 20.0)
-
-    return TwoExponentialPenetratingFlux(surface_flux,
-                                         first_fraction,
-                                         first_decay_scale,
-                                         second_decay_scale)
-end
-
 function minus_penetrating_flux_divergence(grid; I₀, ϵ₁=0.6, λ₁=1.0, λ₂=20.0)
     I_field = Field{Nothing, Nothing, Face}(grid)
     I(z) = I₀ * (ϵ₁ * exp(z / λ₁) + (1 - ϵ₁) * exp(z / λ₂))
@@ -62,37 +44,40 @@ initially quiescent with a "three layer" stratification structure, and forced
 by constant momentum and buoyancy fluxes.
 """
 function three_layer_constant_fluxes_simulation(;
-    name                            = "",
-    size                            = (32, 32, 32),
-    passive_tracers                 = false,
-    explicit_closure                = false,
-    extent                          = (512meters, 512meters, 256meters),
-    architecture                    = CPU(),
-    stop_time                       = 0.1hours,
-    initial_Δt                      = 1.0,
-    f                               = 0.0,
-    buoyancy_flux                   = 0.0,
-    penetrating_buoyancy_flux       = nothing,
-    momentum_flux                   = 0.0,
-    tracer_forcing_timescale        = 6hours,
-    thermocline_type                = "linear",
-    surface_layer_depth             = 48.0,
-    thermocline_width               = 24.0,
-    surface_layer_buoyancy_gradient = 2e-6,
-    thermocline_buoyancy_gradient   = 1e-5,
-    deep_buoyancy_gradient          = 2e-6,
-    stokes_drift                    = true, # will use ConstantFluxStokesDrift with stokes_drift_peak_wavenumber
-    stokes_drift_peak_wavenumber    = 1e-6 * 9.81 / abs(momentum_flux), # severe approximation, it is what it is
-    pickup                          = false,
-    jld2_output                     = true,
-    netcdf_output                   = false,
-    checkpoint                      = false,
-    statistics                      = "first_order", # or "second_order"
-    snapshot_time_interval          = 2minutes,
-    averages_time_interval          = 2hours,
-    averages_time_window            = 10minutes,
-    time_averaged_statistics        = false,
-    data_directory                  = joinpath(pwd(), "data"))
+    name                             = "",
+    size                             = (32, 32, 32),
+    passive_tracers                  = false,
+    explicit_closure                 = false,
+    extent                           = (512meters, 512meters, 256meters),
+    architecture                     = CPU(),
+    stop_time                        = 0.1hours,
+    initial_Δt                       = 1.0,
+    f                                = 0.0,
+    buoyancy_flux                    = 0.0,
+    penetrating_buoyancy_flux        = nothing,
+    first_light_penetration_fraction = 0.6,
+    first_light_penetration_scale    = 1.0,
+    second_light_penetration_scale   = 20.0
+    momentum_flux                    = 0.0,
+    tracer_forcing_timescale         = 6hours,
+    thermocline_type                 = "linear",
+    surface_layer_depth              = 48.0,
+    thermocline_width                = 24.0,
+    surface_layer_buoyancy_gradient  = 2e-6,
+    thermocline_buoyancy_gradient    = 1e-5,
+    deep_buoyancy_gradient           = 2e-6,
+    stokes_drift                     = true, # will use ConstantFluxStokesDrift with stokes_drift_peak_wavenumber
+    stokes_drift_peak_wavenumber     = 1e-6 * 9.81 / abs(momentum_flux), # severe approximation, it is what it is
+    pickup                           = false,
+    jld2_output                      = true,
+    netcdf_output                    = false,
+    checkpoint                       = false,
+    statistics                       = "first_order", # or "second_order"
+    snapshot_time_interval           = 2minutes,
+    averages_time_interval           = 2hours,
+    averages_time_window             = 10minutes,
+    time_averaged_statistics         = false,
+    data_directory                   = joinpath(pwd(), "data"))
     # End kwargs
 
     Nx, Ny, Nz = size
@@ -191,7 +176,10 @@ function three_layer_constant_fluxes_simulation(;
 
     if penetrating_buoyancy_flux isa Number
         Iᵇ = penetrating_buoyancy_flux
-        dIdz = minus_penetrating_flux_divergence(grid; I₀=Iᵇ)
+        dIdz = minus_penetrating_flux_divergence(grid; I₀=Iᵇ,
+                                                 ϵ₁ = first_light_penetration_fraction,
+                                                 λ₁ = first_light_penetration_scale,
+                                                 λ₂ = second_light_penetration_scale)
         b_penetrating_flux = Forcing(dIdz)
         b_forcing = (b_sponge, b_penetrating_flux)
     elseif isnothing(penetrating_buoyancy_flux)
@@ -358,33 +346,38 @@ function three_layer_constant_fluxes_simulation(;
     
     global_attributes = OrderedDict()
 
-    global_attributes[:LESbrary_jl_commit_SHA1]       = execute(`git rev-parse HEAD`).stdout |> strip
-    global_attributes[:name]                          = name
-    global_attributes[:thermocline_type]              = thermocline_type
-    global_attributes[:buoyancy_flux]                 = Jᵇ
-    global_attributes[:penetrating_buoyancy_flux]     = penetrating_buoyancy_flux
-    global_attributes[:momentum_flux]                 = τˣ
-    global_attributes[:coriolis_parameter]            = f
-    global_attributes[:tracer_forcing_timescale]      = tracer_forcing_timescale
-    global_attributes[:tracer_forcing_width]          = λ
-    global_attributes[:tracer_forcing_depth]          = -z₀
-    global_attributes[:boundary_condition_b_top]      = Jᵇ
-    global_attributes[:boundary_condition_b_bottom]   = N²_deep
-    global_attributes[:boundary_condition_u_top]      = τˣ
-    global_attributes[:boundary_condition_u_bottom]   = 0.0
-    global_attributes[:surface_layer_depth]           = surface_layer_depth
-    global_attributes[:thermocline_width]             = thermocline_width
-    global_attributes[:N²_surface_layer]              = N²_surface_layer
-    global_attributes[:N²_thermocline]                = N²_thermocline
-    global_attributes[:N²_deep]                       = N²_deep
-    global_attributes[:N²_surface_layer]              = N²_surface_layer
-    global_attributes[:b_surface]                     = b_surface
-    global_attributes[:b_transition]                  = b_transition
-    global_attributes[:b_deep]                        = b_deep
-    global_attributes[:z_transition]                  = z_transition
-    global_attributes[:z_deep]                        = z_deep
-    global_attributes[:k_transition]                  = k_transition
-    global_attributes[:k_deep]                        = k_deep
+    global_attributes[:LESbrary_jl_commit_SHA1]          = execute(`git rev-parse HEAD`).stdout |> strip
+    global_attributes[:name]                             = name
+    global_attributes[:thermocline_type]                 = thermocline_type
+    global_attributes[:buoyancy_flux]                    = Jᵇ
+    global_attributes[:penetrating_buoyancy_flux]        = penetrating_buoyancy_flux
+    global_attributes[:first_light_penetration_fraction] = first_light_penetration_fraction
+    global_attributes[:first_light_penetration_scale]    = first_light_penetration_scale
+    global_attributes[:second_light_penetration_scale]   = second_light_penetration_scale
+    global_attributes[:penetrating_buoyancy_flux]        = penetrating_buoyancy_flux
+    global_attributes[:penetrating_buoyancy_flux]        = penetrating_buoyancy_flux
+    global_attributes[:momentum_flux]                    = τˣ
+    global_attributes[:coriolis_parameter]               = f
+    global_attributes[:tracer_forcing_timescale]         = tracer_forcing_timescale
+    global_attributes[:tracer_forcing_width]             = λ
+    global_attributes[:tracer_forcing_depth]             = -z₀
+    global_attributes[:boundary_condition_b_top]         = Jᵇ
+    global_attributes[:boundary_condition_b_bottom]      = N²_deep
+    global_attributes[:boundary_condition_u_top]         = τˣ
+    global_attributes[:boundary_condition_u_bottom]      = 0.0
+    global_attributes[:surface_layer_depth]              = surface_layer_depth
+    global_attributes[:thermocline_width]                = thermocline_width
+    global_attributes[:N²_surface_layer]                 = N²_surface_layer
+    global_attributes[:N²_thermocline]                   = N²_thermocline
+    global_attributes[:N²_deep]                          = N²_deep
+    global_attributes[:N²_surface_layer]                 = N²_surface_layer
+    global_attributes[:b_surface]                        = b_surface
+    global_attributes[:b_transition]                     = b_transition
+    global_attributes[:b_deep]                           = b_deep
+    global_attributes[:z_transition]                     = z_transition
+    global_attributes[:z_deep]                           = z_deep
+    global_attributes[:k_transition]                     = k_transition
+    global_attributes[:k_deep]                           = k_deep
 
     if !isnothing(stokes_drift)
         global_attributes[:stokes_drift_surface_velocity] = uˢ₀  = CUDA.@allowscalar stokes_drift.uˢ[1, 1, grid.Nz]
