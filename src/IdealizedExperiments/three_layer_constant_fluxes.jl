@@ -170,13 +170,18 @@ function three_layer_constant_fluxes_simulation(;
     b_deep = b_transition + (z_deep - z_transition) * N²_thermocline
     
     # Passive tracer parameters
-    λ = 4.0
+    λ = 8
     μ⁺ = 1 / tracer_forcing_timescale
-    μ₀ = √(2π) * λ / grid.Lz * μ⁺ / 2
-    μ∞ = √(2π) * λ / grid.Lz * μ⁺
-    c_forcing = Forcing(passive_tracer_forcing, parameters=(z₀=-48.0, λ=λ, μ⁺=μ⁺, μ⁻=μ∞))
-    
-    # Sponge layer for u, v, w, and T
+    μ⁻ = √(2π) * λ / grid.Lz * μ⁺
+    z₀ = -96
+    c_forcing_func(x, y, z) = μ⁺ * exp(-(z - z₀)^2 / (2 * λ^2)) - μ⁻
+    c_forcing_field = CenterField(grid)
+    set!(c_forcing_field, c_forcing_func)
+    c_forcing = Forcing(c_forcing_field)
+
+    #c_forcing = Forcing(passive_tracer_forcing, parameters=(z₀=-64.0, λ=λ, μ⁺=μ⁺, μ⁻=μ∞))
+
+    # Sponge layer for u, v, w, and b
     gaussian_mask = GaussianMask{:z}(center=-grid.Lz, width=grid.Lz/10)
     u_sponge = v_sponge = w_sponge = Relaxation(rate=4/hour, mask=gaussian_mask)
     
@@ -215,10 +220,11 @@ function three_layer_constant_fluxes_simulation(;
     tracers = passive_tracers ? (:b, :c) : :b
 
     if explicit_closure
-        Nz = Base.size(grid, 3)
-        Δz = CUDA.@allowscalar zspacing(1, 1, Nz, grid, ce, ce, ce)
-        C = SurfaceEnhancedModelConstant(Δz)
-        closure = AnisotropicMinimumDissipation(; C)
+        # Nz = Base.size(grid, 3)
+        # Δz = CUDA.@allowscalar zspacing(1, 1, Nz, grid, ce, ce, ce)
+        # C = SurfaceEnhancedModelConstant(Δz)
+        # closure = AnisotropicMinimumDissipation(; C)
+        closure = SmagorinskyLilly()
         advection = CenteredSecondOrder()
     else
         closure = nothing
@@ -359,6 +365,9 @@ function three_layer_constant_fluxes_simulation(;
     global_attributes[:penetrating_buoyancy_flux]     = penetrating_buoyancy_flux
     global_attributes[:momentum_flux]                 = τˣ
     global_attributes[:coriolis_parameter]            = f
+    global_attributes[:tracer_forcing_timescale]      = tracer_forcing_timescale
+    global_attributes[:tracer_forcing_width]          = λ
+    global_attributes[:tracer_forcing_depth]          = -z₀
     global_attributes[:boundary_condition_b_top]      = Jᵇ
     global_attributes[:boundary_condition_b_bottom]   = N²_deep
     global_attributes[:boundary_condition_u_top]      = τˣ
