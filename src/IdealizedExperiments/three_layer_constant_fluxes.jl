@@ -57,7 +57,7 @@ function three_layer_constant_fluxes_simulation(;
     penetrating_buoyancy_flux        = nothing,
     first_light_penetration_fraction = 0.6,
     first_light_penetration_scale    = 1.0,
-    second_light_penetration_scale   = 20.0
+    second_light_penetration_scale   = 20.0,
     momentum_flux                    = 0.0,
     tracer_forcing_timescale         = 6hours,
     thermocline_type                 = "linear",
