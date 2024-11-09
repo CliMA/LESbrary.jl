@@ -182,10 +182,8 @@ function three_layer_constant_fluxes_simulation(;
     tracers = passive_tracers ? (:T, :c₀, :c₁, :c₂) : :T
     
     model = NonhydrostaticModel(; grid, buoyancy, tracers, stokes_drift,
-                                timestepper = :RungeKutta3,
-                                advection = WENO(; grid),
-                                coriolis = FPlane(f=f),
-                                closure = AnisotropicMinimumDissipation(),
+                                advection = WENO(order=9),
+                                coriolis = FPlane(; f),
                                 boundary_conditions = (T=θ_bcs, u=u_bcs),
                                 forcing = (u=u_sponge, v=v_sponge, w=w_sponge, T=T_sponge,
                                            c₀=c₀_forcing, c₁=c₁_forcing, c₂=c₂_forcing))
