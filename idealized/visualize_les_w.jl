@@ -1,8 +1,10 @@
 using Oceananigans
 using JLD2
 using GLMakie
+using MathTeXEngine
 
-set_theme!(Theme(fontsize=28))
+fonts = (; regular=texfont())
+set_theme!(Theme(fontsize=28; fonts))
 
 dir = "/Users/gregorywagner/Projects/LESbrary.jl/data"
 
@@ -98,9 +100,9 @@ for (c, case) in enumerate(cases)
     row = case.row
     label = case.label
 
-    xy_filepath = joinpath(dir, suite, res, prefix * "_xy_slice.jld2")
-    yz_filepath = joinpath(dir, suite, res, prefix * "_yz_slice.jld2")
-    xz_filepath = joinpath(dir, suite, res, prefix * "_xz_slice.jld2")
+    xy_filepath = joinpath(dir, suite, res, prefix * "_with_tracer_xy_slice.jld2")
+    yz_filepath = joinpath(dir, suite, res, prefix * "_with_tracer_yz_slice.jld2")
+    xz_filepath = joinpath(dir, suite, res, prefix * "_with_tracer_xz_slice.jld2")
 
     w_xy_t = FieldTimeSeries(xy_filepath, "w")
     w_xz_t = FieldTimeSeries(xz_filepath, "w")
@@ -137,9 +139,9 @@ for (c, case) in enumerate(cases)
     azimuth = 6.7
     elevation = 0.50
     perspectiveness = 0.1
-    xlabel = "x (m)"
-    ylabel = "y (m)"
-    zlabel = "z (m)"
+    xlabel = L"x \, \mathrm{(m)}"
+    ylabel = L"y \, \mathrm{(m)}"
+    zlabel = L"z \, \mathrm{(m)}"
     aspect = :data
     xlabeloffset = 60
     zlabeloffset = 80

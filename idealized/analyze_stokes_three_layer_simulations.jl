@@ -1,6 +1,6 @@
 using Oceananigans
-#using GLMakie
 using CairoMakie
+using MathTeXEngine
 
 basedir = "/Users/gregorywagner/Projects/LESbrary.jl/data"
 suite = "12_hour_suite"
@@ -27,13 +27,14 @@ titles = Dict(
     "strong_wind" => "Strong wind",
     "strong_wind_no_rotation" => "Strong wind \n no rotation",
     "weak_wind_strong_cooling" => "Weak wind \n strong cooling",
-    "med_wind_med_cooling" => "Medium wind \n medium cooling",
+    "med_wind_med_cooling" => "Mid wind \n mid cooling",
     "strong_wind_weak_cooling" => "Strong wind \n weak cooling",
 )
 
 # case = "free_convection"
 
-set_theme!(Theme(fontsize=24, linewidth=3))
+fonts = (; regular=texfont())
+set_theme!(Theme(fontsize=24, linewidth=3; fonts))
 fig = Figure(size=(1200, 500))
 axc = []
 
@@ -47,22 +48,23 @@ for (c, case) in enumerate(cases)
         yaxisposition = :left
     end
 
-    if c == 1
-        xticks = [2e-4, 3e-4]
-    elseif c == 2
-        xticks = [2e-4, 4e-4]
-    elseif c == 3
-        xticks = [2e-4, 4e-4]
-    else
-        xticks = [1e-4, 3e-4, 5e-4]
-    end
-    ax = Axis(fig[2, c], xlabel="Buoyancy \n (m s⁻²)", ylabel="z (m)"; yaxisposition, xticks)
+    x = 1:9
+    xticks = (x .* 1e-4, [string(i) for i in x])
+    ax = Axis(fig[2, c], xlabel="Buoyancy \n (10⁻⁴ × m s⁻²)", ylabel=L"z \, \mathrm{(m)}"; yaxisposition, xticks)
     title = titles[case]
     Label(fig[1, c], title, tellwidth=false)
     push!(axc, ax)
 
     if c != 1 && c != length(cases)
         hideydecorations!(ax, grid=false)
+    end
+
+    if c == 1
+        hidespines!(ax, :t, :r)
+    elseif c == 4
+        hidespines!(ax, :t, :l)
+    else
+        hidespines!(ax, :t, :l, :r)
     end
     
     res = "1m"
@@ -100,11 +102,23 @@ Nc = length(cases)
 #Legend(fig[2, Nc+1], first(axc))
 axislegend(axc[1], position=(0, 0.9))
 
-# For Stokes drift comparison
-xlims!(axc[1], 1.7e-4, 3.7e-4)
-xlims!(axc[2], 1.7e-4, 4.5e-4)
-xlims!(axc[3], 1.7e-4, 4.8e-4)
-xlims!(axc[4], 1.7e-4, 5.8e-4)
+# For 12 hour suite resolution comparison
+if suite == "6_hour_suite"
+    xlims!(axc[1], 1.7e-4, 3.9e-4)
+    xlims!(axc[2], 1.7e-4, 3.9e-4)
+    xlims!(axc[3], 1.7e-4, 4.6e-4)
+    xlims!(axc[4], 1.7e-4, 6.0e-4)
+elseif suite == "24_hour_suite"
+    xlims!(axc[1], 1.7e-4, 3.9e-4)
+    xlims!(axc[2], 1.7e-4, 3.9e-4)
+    xlims!(axc[3], 1.7e-4, 4.6e-4)
+    xlims!(axc[4], 1.7e-4, 6.0e-4)
+else
+    xlims!(axc[1], 1.7e-4, 3.9e-4)
+    xlims!(axc[2], 1.7e-4, 3.9e-4)
+    xlims!(axc[3], 1.7e-4, 4.6e-4)
+    xlims!(axc[4], 1.7e-4, 6.0e-4)
+end
 
 display(fig)
 save("les_stokes_dependence_$suite.pdf", fig)

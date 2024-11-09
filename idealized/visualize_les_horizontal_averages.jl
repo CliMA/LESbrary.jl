@@ -3,7 +3,8 @@ using JLD2
 using GLMakie
 using Statistics
 
-set_theme!(Theme(fontsize=32, linewidth=6))
+fonts = (; regular=texfont())
+set_theme!(Theme(fontsize=32, linewidth=6; fonts))
 
 dir = "/Users/gregorywagner/Projects/LESbrary.jl/data"
 
@@ -147,9 +148,9 @@ z_xy = -0.001 * Lz * ones(Nx, Ny)
 azimuth = 6.7
 elevation = 0.50
 perspectiveness = 0.1
-xlabel = "x (m)"
-ylabel = "y (m)"
-zlabel = "z (m)"
+xlabel = L"x \, \mathrm{(m)}"
+ylabel = L"y \, \mathrm{(m)}"
+zlabel = L"z \, \mathrm{(m)}"
 aspect = :data
 xlabeloffset = 90
 ylabeloffset = 70
@@ -186,30 +187,30 @@ ylims!(ax_b, 0, 512)
 zlims!(ax_b, -256, 0)
 
 ticks = ([-2e-5, -1e-5, 0, 1e-5, 2e-5], ["-2", "-1", "0", "1", "2"])
-Colorbar(fig[1, 1], pl; ticks, label="Buoyancy perturbation b′ (10⁻⁵ × m s⁻²)", vertical=false, width=Relative(0.7))
+Colorbar(fig[1, 1], pl; ticks, label=L"\mathrm{Buoyancy \, perturbation} \, b\prime \, (10^{-5} \times \mathrm{m \, s^{-2}})", vertical=false, width=Relative(0.7))
 
 # Horizontal averages
 xticks = ([0, 1e-4, 2e-4, 3e-4, 4e-4], ["0", "1", "2", "3", "4"])
-ax_B = Axis(fig[1:2, 2]; xticks, xlabel="Buoyancy \n (10⁻⁴ × m s⁻²)", ylabel="z (m)")
+ax_B = Axis(fig[1:2, 2]; xticks, xlabel="Buoyancy \n (10⁻⁴ × m s⁻²)", ylabel=L"z \, \mathrm{(m)}")
 
 z = znodes(Bt)
 lines!(ax_B, Bn .- Bn[1], z)
 
 xticks = ([-0.1, 0, 0.1], ["-0.1", "0", "0.1"])
-ax_u = Axis(fig[1:2, 3]; xticks, xlabel="Velocities \n (m s⁻¹)", ylabel="z (m)")
+ax_u = Axis(fig[1:2, 3]; xticks, xlabel="Velocities \n (m s⁻¹)", ylabel=L"z \, \mathrm{(m)}")
 
-lines!(ax_u, Un, z, color=:black, label="u")
-lines!(ax_u, Vn, z, color=:forestgreen, label="v")
+lines!(ax_u, Un, z, color=:black, label=L"u")
+lines!(ax_u, Vn, z, color=:forestgreen, label=L"v")
 xlims!(ax_u, -0.19, 0.19)
 axislegend(ax_u, position=:lb)
 
 xticks = ([0, 2e-3, 4e-3], ["0", "2", "4"])
-ax_e = Axis(fig[1:2, 4]; xticks, xlabel="Kinetic energies \n (10⁻³ × m² s⁻²)", ylabel="z (m)", yaxisposition=:right)
+ax_e = Axis(fig[1:2, 4]; xticks, xlabel="Kinetic energies \n (10⁻³ × m² s⁻²)", ylabel=L"z \, \mathrm{(m)}", yaxisposition=:right)
 
 zw = znodes(W²t)
 
 lines!(ax_e, En, z,   label=L"\mathscr{E}")
-lines!(ax_e, W²n, zw, label=L"\overline{w'^2}")
+lines!(ax_e, W²n, zw, label=L"w'^2")
 axislegend(ax_e, position=:rb)
 
 #colsize!(fig.layout, 1, Relative(0.6))
