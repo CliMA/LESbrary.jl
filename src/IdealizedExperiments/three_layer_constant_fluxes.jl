@@ -5,6 +5,7 @@ using OrderedCollections
 using Oceanostics
 using Oceananigans
 using Oceananigans.Units
+using Oceananigans.Grids: zspacing
 using Oceananigans.Utils: WallTimeInterval
 using Oceananigans.Operators: Δzᶜᶜᶜ
 
@@ -23,6 +24,18 @@ Logging.global_logger(OceananigansLogger())
 
 @inline passive_tracer_forcing(x, y, z, t, p) = p.μ⁺ * exp(-(z - p.z₀)^2 / (2 * p.λ^2)) - p.μ⁻
 
+const ce = Center()
+const fa = Face()
+
+function minus_penetrating_flux_divergence(grid; I₀, ϵ₁=0.6, λ₁=1.0, λ₂=20.0)
+    I_field = Field{Nothing, Nothing, Face}(grid)
+    I(z) = I₀ * (ϵ₁ * exp(z / λ₁) + (1 - ϵ₁) * exp(z / λ₂))
+    set!(I_field, I)
+    dIdz = Field(-1 * ∂z(I_field))
+    compute!(dIdz)
+    return dIdz
+end
+
 """
     three_layer_constant_fluxes_simulation(; kw...)
 
@@ -31,47 +44,53 @@ initially quiescent with a "three layer" stratification structure, and forced
 by constant momentum and buoyancy fluxes.
 """
 function three_layer_constant_fluxes_simulation(;
-    name                            = "",
-    size                            = (32, 32, 32),
-    passive_tracers                 = true,
-    extent                          = (512meters, 512meters, 256meters),
-    architecture                    = CPU(),
-    stop_time                       = 0.1hours,
-    initial_Δt                      = 1.0,
-    f                               = 1e-4,
-    buoyancy_flux                   = 1e-8,
-    momentum_flux                   = -1e-4,
-    thermocline_type                = "linear",
-    surface_layer_depth             = 48.0,
-    thermocline_width               = 24.0,
-    surface_layer_buoyancy_gradient = 2e-6,
-    thermocline_buoyancy_gradient   = 1e-5,
-    deep_buoyancy_gradient          = 2e-6,
-    surface_temperature             = 20.0,
-    stokes_drift                    = true, # will use ConstantFluxStokesDrift with stokes_drift_peak_wavenumber
-    stokes_drift_peak_wavenumber    = 1e-6 * 9.81 / abs(momentum_flux), # severe approximation, it is what it is
-    pickup                          = false,
-    jld2_output                     = true,
-    netcdf_output                   = false,
-    checkpoint                      = false,
-    statistics                      = "first_order", # or "second_order"
-    snapshot_time_interval          = 2minutes,
-    averages_time_interval          = 2hours,
-    averages_time_window            = 10minutes,
-    time_averaged_statistics        = false,
-    data_directory                  = joinpath(pwd(), "data"))
+    name                             = "",
+    size                             = (32, 32, 32),
+    passive_tracers                  = false,
+    explicit_closure                 = false,
+    extent                           = (512meters, 512meters, 256meters),
+    architecture                     = CPU(),
+    stop_time                        = 0.1hours,
+    initial_Δt                       = 1.0,
+    f                                = 0.0,
+    buoyancy_flux                    = 0.0,
+    penetrating_buoyancy_flux        = nothing,
+    first_light_penetration_fraction = 0.6,
+    first_light_penetration_scale    = 1.0,
+    second_light_penetration_scale   = 20.0,
+    momentum_flux                    = 0.0,
+    tracer_forcing_timescale         = 6hours,
+    thermocline_type                 = "linear",
+    surface_layer_depth              = 48.0,
+    thermocline_width                = 24.0,
+    surface_layer_buoyancy_gradient  = 2e-6,
+    thermocline_buoyancy_gradient    = 1e-5,
+    deep_buoyancy_gradient           = 2e-6,
+    stokes_drift                     = true, # will use ConstantFluxStokesDrift with stokes_drift_peak_wavenumber
+    stokes_drift_peak_wavenumber     = 1e-6 * 9.81 / abs(momentum_flux), # severe approximation, it is what it is
+    pickup                           = false,
+    jld2_output                      = true,
+    netcdf_output                    = false,
+    checkpoint                       = false,
+    statistics                       = "first_order", # or "second_order"
+    snapshot_time_interval           = 2minutes,
+    averages_time_interval           = 2hours,
+    averages_time_window             = 10minutes,
+    time_averaged_statistics         = false,
+    data_directory                   = joinpath(pwd(), "data"))
     # End kwargs
 
     Nx, Ny, Nz = size
     Lx, Ly, Lz = extent
     slice_depth = 8.0
-    Qᵇ = buoyancy_flux
-    Qᵘ = momentum_flux
+    Jᵇ = buoyancy_flux
+    Iᵇ = penetrating_buoyancy_flux
+    τˣ = momentum_flux
     stop_hours = stop_time / hour
     
     ## Determine filepath prefix
     prefix = @sprintf("three_layer_constant_fluxes_%s_hr%d_Qu%.1e_Qb%.1e_f%.1e_Nh%d_Nz%d_",
-                      thermocline_type, stop_hours, abs(Qᵘ), Qᵇ, f, Nx, Nz)
+                      thermocline_type, stop_hours, abs(τˣ), Jᵇ, f, Nx, Nz)
     
     data_directory = joinpath(data_directory, prefix * name) # save data in /data/prefix
     
@@ -94,7 +113,8 @@ function three_layer_constant_fluxes_simulation(;
     # Generating function
     z_faces(k) = Lz * (ζ₀(k) * Σ(k) - 1)
 
-    grid = RectilinearGrid(architecture; size, halo = (3, 3, 3),
+    grid = RectilinearGrid(architecture; size,
+                           halo = (5, 5, 5),
                            x = (0, extent[1]),
                            y = (0, extent[2]),
                            z = z_faces)
@@ -105,24 +125,16 @@ function three_layer_constant_fluxes_simulation(;
     
     @info "Enforcing boundary conditions..."
     
-    equation_of_state = LinearEquationOfState(thermal_expansion=2e-4)
-    buoyancy = SeawaterBuoyancy(; equation_of_state, constant_salinity=35.0)
+    buoyancy = BuoyancyTracer()
 
     N²_surface_layer = surface_layer_buoyancy_gradient
     N²_thermocline   = thermocline_buoyancy_gradient
     N²_deep          = deep_buoyancy_gradient
-    α = buoyancy.equation_of_state.thermal_expansion
-    g = buoyancy.gravitational_acceleration
+
+    b_bcs = FieldBoundaryConditions(top = FluxBoundaryCondition(Jᵇ),
+                                    bottom = GradientBoundaryCondition(N²_deep))
     
-    Qᶿ = Qᵇ / (α * g)
-    dθdz_surface_layer = N²_surface_layer / (α * g)
-    dθdz_thermocline   = N²_thermocline   / (α * g)
-    dθdz_deep          = N²_deep          / (α * g)
-    
-    θ_bcs = FieldBoundaryConditions(top = FluxBoundaryCondition(Qᶿ),
-                                    bottom = GradientBoundaryCondition(dθdz_deep))
-    
-    u_bcs = FieldBoundaryConditions(top = FluxBoundaryCondition(Qᵘ))
+    u_bcs = FieldBoundaryConditions(top = FluxBoundaryCondition(τˣ))
     
     # Tracer forcing
     
@@ -131,34 +143,48 @@ function three_layer_constant_fluxes_simulation(;
     # # Initial condition and sponge layer
     
     ## Fiddle with indices to get a correct discrete profile
-    z = CUDA.@allowscalar Array(znodes(Center, grid))
+    z = CUDA.@allowscalar Array(znodes(grid, Center()))
     k_transition = searchsortedfirst(z, -surface_layer_depth)
     k_deep = searchsortedfirst(z, -(surface_layer_depth + thermocline_width))
     
     z_transition = z[k_transition]
     z_deep = z[k_deep]
     
-    θ_surface = surface_temperature
-    θ_transition = θ_surface + z_transition * dθdz_surface_layer
-    θ_deep = θ_transition + (z_deep - z_transition) * dθdz_thermocline
+    b_surface = zero(grid)
+    b_transition = b_surface + z_transition * N²_surface_layer
+    b_deep = b_transition + (z_deep - z_transition) * N²_thermocline
     
     # Passive tracer parameters
-    λ = 4.0
-    μ⁺ = 1 / 6hour
-    μ₀ = √(2π) * λ / grid.Lz * μ⁺ / 2
-    μ∞ = √(2π) * λ / grid.Lz * μ⁺
-    
-    c₀_forcing = Forcing(passive_tracer_forcing, parameters=(z₀=  0.0, λ=λ, μ⁺=μ⁺, μ⁻=μ₀))
-    c₁_forcing = Forcing(passive_tracer_forcing, parameters=(z₀=-48.0, λ=λ, μ⁺=μ⁺, μ⁻=μ∞))
-    c₂_forcing = Forcing(passive_tracer_forcing, parameters=(z₀=-96.0, λ=λ, μ⁺=μ⁺, μ⁻=μ∞))
-    
-    # Sponge layer for u, v, w, and T
+    λ = 8
+    μ⁺ = 1 / tracer_forcing_timescale
+    μ⁻ = √(2π) * λ / grid.Lz * μ⁺
+    z₀ = -96
+    c_forcing_func(x, y, z) = μ⁺ * exp(-(z - z₀)^2 / (2 * λ^2)) - μ⁻
+    c_forcing_field = CenterField(grid)
+    set!(c_forcing_field, c_forcing_func)
+    c_forcing = Forcing(c_forcing_field)
+
+    #c_forcing = Forcing(passive_tracer_forcing, parameters=(z₀=-64.0, λ=λ, μ⁺=μ⁺, μ⁻=μ∞))
+
+    # Sponge layer for u, v, w, and b
     gaussian_mask = GaussianMask{:z}(center=-grid.Lz, width=grid.Lz/10)
     u_sponge = v_sponge = w_sponge = Relaxation(rate=4/hour, mask=gaussian_mask)
     
-    T_sponge = Relaxation(rate = 4/hour,
-                          target = LinearTarget{:z}(intercept = θ_deep - z_deep*dθdz_deep, gradient = dθdz_deep),
+    b_sponge = Relaxation(rate = 4/hour,
+                          target = LinearTarget{:z}(intercept = b_deep - z_deep*N²_deep, gradient = N²_deep),
                           mask = gaussian_mask)
+
+    if penetrating_buoyancy_flux isa Number
+        Iᵇ = penetrating_buoyancy_flux
+        dIdz = minus_penetrating_flux_divergence(grid; I₀=Iᵇ,
+                                                 ϵ₁ = first_light_penetration_fraction,
+                                                 λ₁ = first_light_penetration_scale,
+                                                 λ₂ = second_light_penetration_scale)
+        b_penetrating_flux = Forcing(dIdz)
+        b_forcing = (b_sponge, b_penetrating_flux)
+    elseif isnothing(penetrating_buoyancy_flux)
+        b_forcing = b_sponge
+    end
     
     if stokes_drift && momentum_flux != 0.0
         @info "Whipping up the Stokes drift..."
@@ -179,32 +205,45 @@ function three_layer_constant_fluxes_simulation(;
     
     @info "Framing the model..."
 
-    tracers = passive_tracers ? (:T, :c₀, :c₁, :c₂) : :T
+    tracers = passive_tracers ? (:b, :c) : :b
+
+    if explicit_closure
+        # Nz = Base.size(grid, 3)
+        # Δz = CUDA.@allowscalar zspacing(1, 1, Nz, grid, ce, ce, ce)
+        # C = SurfaceEnhancedModelConstant(Δz)
+        # closure = AnisotropicMinimumDissipation(; C)
+        closure = SmagorinskyLilly()
+        advection = CenteredSecondOrder()
+    else
+        closure = nothing
+        advection = WENO(order=9)
+    end
     
-    model = NonhydrostaticModel(; grid, buoyancy, tracers, stokes_drift,
-                                advection = WENO(order=9),
+    model = NonhydrostaticModel(; grid, buoyancy, tracers, stokes_drift, closure, advection,
                                 coriolis = FPlane(; f),
-                                boundary_conditions = (T=θ_bcs, u=u_bcs),
-                                forcing = (u=u_sponge, v=v_sponge, w=w_sponge, T=T_sponge,
-                                           c₀=c₀_forcing, c₁=c₁_forcing, c₂=c₂_forcing))
+                                boundary_conditions = (b=b_bcs, u=u_bcs),
+                                forcing = (u=u_sponge, v=v_sponge, w=w_sponge, b=b_forcing, c=c_forcing))
     
     # # Set Initial condition
     
+    @info "Built model:"
+    @info "$model"
+
     @info "Setting initial conditions..."
     
     ## Noise with 8 m decay scale
     Ξ(z) = rand() * exp(z / 8)
     
-    function thermocline_structure_function(thermocline_type, z_transition, θ_transition, z_deep,
-                                            θ_deep, dθdz_surface_layer, dθdz_thermocline, dθdz_deep)
+    function thermocline_structure_function(thermocline_type, z_transition, b_transition, z_deep,
+                                            b_deep, N²_surface_layer, N²_thermocline, N²_deep)
 
         if thermocline_type == "linear"
-            return z -> θ_transition + dθdz_thermocline * (z - z_transition)
+            return z -> b_transition + N²_thermocline * (z - z_transition)
     
         elseif thermocline_type == "cubic"
-            p1 = (z_transition, θ_transition)
-            p2 = (z_deep, θ_deep)
-            coeffs = fit_cubic(p1, p2, dθdz_surface_layer, dθdz_deep)
+            p1 = (z_transition, b_transition)
+            p2 = (z_deep, b_deep)
+            coeffs = fit_cubic(p1, p2, N²_surface_layer, N²_deep)
             return z -> poly(z, coeffs)
     
         else
@@ -212,28 +251,28 @@ function three_layer_constant_fluxes_simulation(;
         end
     end
     
-    θ_thermocline = thermocline_structure_function(thermocline_type, z_transition, θ_transition, z_deep, θ_deep,
-                                                   dθdz_surface_layer, dθdz_thermocline, dθdz_deep)
+    b_thermocline = thermocline_structure_function(thermocline_type, z_transition, b_transition, z_deep, b_deep,
+                                                   N²_surface_layer, N²_thermocline, N²_deep)
     
     """
-        initial_temperature(x, y, z)
+        initial_buoyancy(x, y, z)
     
-    Returns a three-layer initial temperature distribution. The average temperature varies in z
+    Returns a three-layer initial buoyancy distribution. The average buoyancy varies in z
     and is augmented by three-dimensional, surface-concentrated random noise.
     """
-    function initial_temperature(x, y, z)
-        noise = 1e-6 * Ξ(z) * dθdz_surface_layer * grid.Lz
+    function initial_buoyancy(x, y, z)
+        noise = 1e-3 * Ξ(z) * N²_surface_layer * grid.Lz
     
         if z_transition < z <= 0
-            return θ_surface + dθdz_surface_layer * z + noise
+            return b_surface + N²_surface_layer * z + noise
         elseif z_deep < z <= z_transition
-            return θ_thermocline(z) + noise
+            return b_thermocline(z) + noise
         else
-            return θ_deep + dθdz_deep * (z - z_deep) + noise
+            return b_deep + N²_deep * (z - z_deep) + noise
         end
     end
     
-    set!(model, T = initial_temperature)
+    set!(model, b = initial_buoyancy)
     
     # # Prepare the simulation
     
@@ -270,12 +309,10 @@ function three_layer_constant_fluxes_simulation(;
     cff_scratch = Field{Center, Face, Face}(model.grid)
     
     if statistics == "first_order"
-        primitive_statistics = first_through_second_order(model, b=b, p=p, w_scratch=ccf_scratch, c_scratch=ccc_scratch)
-    elseif statistics == "second_order"
         primitive_statistics = first_order_statistics(model, b=b, p=p, w_scratch=ccf_scratch, c_scratch=ccc_scratch)
+    elseif statistics == "second_order"
+        primitive_statistics = first_through_second_order(model, b=b, p=p, w_scratch=ccf_scratch, c_scratch=ccc_scratch)
     end
-    
-    subfilter_flux_statistics = merge(subfilter_momentum_fluxes(model), subfilter_tracer_fluxes(model))
     
     U = Field(primitive_statistics[:u])
     V = Field(primitive_statistics[:v])
@@ -287,40 +324,59 @@ function three_layer_constant_fluxes_simulation(;
     additional_statistics = Dict(:e => Average(TurbulentKineticEnergy(model, U=U, V=V), dims=(1, 2)),
                                  :Ri => ∂z(B) / (∂z(U)^2 + ∂z(V)^2))
 
-    statistics_to_output = merge(primitive_statistics, subfilter_flux_statistics, additional_statistics)
+    # If we change to WENO(order=9) so there are no subfilter fluxes...
+    #subfilter_flux_statistics = merge(subfilter_momentum_fluxes(model), subfilter_tracer_fluxes(model))
+    #statistics_to_output = merge(primitive_statistics, subfilter_flux_statistics, additional_statistics)
+    #statistics_to_output = merge(primitive_statistics, additional_statistics)
+    u, v, w = model.velocities
+    b = model.tracers.b
+    c = model.tracers.c
+    # statistics_to_output = NamedTuple(u=Average(u, dims=(1, 2)) #primitive_statistics
+    statistics_to_output = (;
+        u = Average(u, dims=(1, 2)),
+        v = Average(v, dims=(1, 2)),
+        b = Average(b, dims=(1, 2)),
+        c = Average(c, dims=(1, 2)),
+    )
 
     @info "Garnishing output writers..."
+    @info "    - with fields: $(keys(fields_to_output))"
+    @info "    - with statistics: $(keys(statistics_to_output))"
     
     global_attributes = OrderedDict()
 
-    global_attributes[:LESbrary_jl_commit_SHA1]       = execute(`git rev-parse HEAD`).stdout |> strip
-    global_attributes[:name]                          = name
-    global_attributes[:thermocline_type]              = thermocline_type
-    global_attributes[:buoyancy_flux]                 = Qᵇ
-    global_attributes[:momentum_flux]                 = Qᵘ
-    global_attributes[:temperature_flux]              = Qᶿ
-    global_attributes[:coriolis_parameter]            = f
-    global_attributes[:thermal_expansion_coefficient] = α
-    global_attributes[:gravitational_acceleration]    = g
-    global_attributes[:boundary_condition_θ_top]      = Qᶿ
-    global_attributes[:boundary_condition_θ_bottom]   = dθdz_deep
-    global_attributes[:boundary_condition_u_top]      = Qᵘ
-    global_attributes[:boundary_condition_u_bottom]   = 0.0
-    global_attributes[:surface_layer_depth]           = surface_layer_depth
-    global_attributes[:thermocline_width]             = thermocline_width
-    global_attributes[:N²_surface_layer]              = N²_surface_layer
-    global_attributes[:N²_thermocline]                = N²_thermocline
-    global_attributes[:N²_deep]                       = N²_deep
-    global_attributes[:dθdz_surface_layer]            = dθdz_surface_layer
-    global_attributes[:dθdz_thermocline]              = dθdz_thermocline
-    global_attributes[:dθdz_deep]                     = dθdz_deep
-    global_attributes[:θ_surface]                     = θ_surface
-    global_attributes[:θ_transition]                  = θ_transition
-    global_attributes[:θ_deep]                        = θ_deep
-    global_attributes[:z_transition]                  = z_transition
-    global_attributes[:z_deep]                        = z_deep
-    global_attributes[:k_transition]                  = k_transition
-    global_attributes[:k_deep]                        = k_deep
+    global_attributes[:LESbrary_jl_commit_SHA1]          = execute(`git rev-parse HEAD`).stdout |> strip
+    global_attributes[:name]                             = name
+    global_attributes[:thermocline_type]                 = thermocline_type
+    global_attributes[:buoyancy_flux]                    = Jᵇ
+    global_attributes[:penetrating_buoyancy_flux]        = penetrating_buoyancy_flux
+    global_attributes[:first_light_penetration_fraction] = first_light_penetration_fraction
+    global_attributes[:first_light_penetration_scale]    = first_light_penetration_scale
+    global_attributes[:second_light_penetration_scale]   = second_light_penetration_scale
+    global_attributes[:penetrating_buoyancy_flux]        = penetrating_buoyancy_flux
+    global_attributes[:penetrating_buoyancy_flux]        = penetrating_buoyancy_flux
+    global_attributes[:momentum_flux]                    = τˣ
+    global_attributes[:coriolis_parameter]               = f
+    global_attributes[:tracer_forcing_timescale]         = tracer_forcing_timescale
+    global_attributes[:tracer_forcing_width]             = λ
+    global_attributes[:tracer_forcing_depth]             = -z₀
+    global_attributes[:boundary_condition_b_top]         = Jᵇ
+    global_attributes[:boundary_condition_b_bottom]      = N²_deep
+    global_attributes[:boundary_condition_u_top]         = τˣ
+    global_attributes[:boundary_condition_u_bottom]      = 0.0
+    global_attributes[:surface_layer_depth]              = surface_layer_depth
+    global_attributes[:thermocline_width]                = thermocline_width
+    global_attributes[:N²_surface_layer]                 = N²_surface_layer
+    global_attributes[:N²_thermocline]                   = N²_thermocline
+    global_attributes[:N²_deep]                          = N²_deep
+    global_attributes[:N²_surface_layer]                 = N²_surface_layer
+    global_attributes[:b_surface]                        = b_surface
+    global_attributes[:b_transition]                     = b_transition
+    global_attributes[:b_deep]                           = b_deep
+    global_attributes[:z_transition]                     = z_transition
+    global_attributes[:z_deep]                           = z_deep
+    global_attributes[:k_transition]                     = k_transition
+    global_attributes[:k_deep]                           = k_deep
 
     if !isnothing(stokes_drift)
         global_attributes[:stokes_drift_surface_velocity] = uˢ₀  = CUDA.@allowscalar stokes_drift.uˢ[1, 1, grid.Nz]
@@ -344,7 +400,7 @@ function three_layer_constant_fluxes_simulation(;
     ## Add JLD2 output writers
     
     # Prepare turbulence statistics
-    zF = CUDA.@allowscalar Array(znodes(Face, grid))
+    zF = CUDA.@allowscalar Array(znodes(grid, Face()))
     k_xy_slice = searchsortedfirst(zF, -slice_depth)
 
     if jld2_output

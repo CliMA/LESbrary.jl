@@ -1,3 +1,5 @@
+using Oceananigans.Fields: interior
+
 mutable struct SimulationProgressMessenger{T} <: Function
     wall_time₀ :: T  # Wall time at simulation start
     wall_time⁻ :: T  # Wall time at previous callback
@@ -25,17 +27,17 @@ function (pm::SimulationProgressMessenger)(simulation)
     pm.wall_time⁻ = 1e-9 * time_ns()
     pm.iteration⁻ = i
 
-    u_max = maximum(abs, model.velocities.u)
-    v_max = maximum(abs, model.velocities.v)
-    w_max = maximum(abs, model.velocities.w)
-    ν_max = maximum(abs, model.diffusivity_fields.νₑ)
+    u_max = maximum(abs, interior(model.velocities.u))
+    v_max = maximum(abs, interior(model.velocities.v))
+    w_max = maximum(abs, interior(model.velocities.w))
+    #ν_max = maximum(abs, model.diffusivity_fields.νₑ)
 
     @info @sprintf("[%06.2f%%] iteration: % 6d, time: % 10s, Δt: % 10s, wall time: % 8s (% 8s / time step)",
                     progress, i, prettytime(t), prettytime(simulation.Δt),
                     prettytime(current_wall_time), prettytime(wall_time_per_step))
 
-    @info @sprintf("          └── u⃗_max: (%.2e, %.2e, %.2e) m/s, ν_max: %.2e m²/s",
-                   u_max, v_max, w_max, ν_max)
+    @info @sprintf("          └── u⃗_max: (%.2e, %.2e, %.2e) m/s", #, ν_max: %.2e m²/s",
+                   u_max, v_max, w_max) #, ν_max)
 
     @info ""
 

@@ -1,7 +1,10 @@
+authors = ["Climate Modeling Alliance and contributors"]
 name = "LESbrary"
 uuid = "0d21a966-bb61-11e9-3e8e-8da3363c58dd"
-authors = ["Climate Modeling Alliance and contributors"]
 version = "0.1.0"
+
+[compat]
+julia = "^1.6"
 
 [deps]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
@@ -28,10 +31,8 @@ Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
-[compat]
-julia = "^1.6"
-
 [extras]
+CUDA_Runtime_jll = "76a88914-d11a-5bdc-97e0-2f5a05c973a2"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
