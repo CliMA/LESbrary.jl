@@ -46,7 +46,7 @@ for arch in architectures
     @testset "Turbulence Statistics [$(typeof(arch))]" begin
         @info "Testing turbulence statistics [$(typeof(arch))]..."
 
-        model = NonhydrostaticModel(grid = RectilinearGrid(arch, size=(1, 1, 1), extent=(1, 1, 1)),
+        model = NonhydrostaticModel(grid = RectilinearGrid(arch, size=(8, 8, 8), extent=(1, 1, 1)),
                                     tracers = :b,
                                     buoyancy = BuoyancyTracer(),
                                     closure = AnisotropicMinimumDissipation())

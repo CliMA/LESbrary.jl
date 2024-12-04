@@ -220,7 +220,6 @@ function three_layer_constant_fluxes_simulation(;
     end
     
     model = NonhydrostaticModel(; grid, buoyancy, tracers, stokes_drift, closure, advection,
-                                timestepper = :RungeKutta3,
                                 coriolis = FPlane(; f),
                                 boundary_conditions = (b=b_bcs, u=u_bcs),
                                 forcing = (u=u_sponge, v=v_sponge, w=w_sponge, b=b_forcing, c=c_forcing))
