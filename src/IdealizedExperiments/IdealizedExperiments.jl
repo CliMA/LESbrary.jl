@@ -13,6 +13,7 @@ end
 
 include("constant_flux_stokes_drift.jl")
 include("three_layer_constant_fluxes.jl")
+include("temperature_salinity_constant_fluxes.jl")
 
 six_hour_suite_parameters = Dict{Symbol, Any}(
     :free_convection          => Dict{Symbol, Any}(:momentum_flux => 0.0,     :buoyancy_flux => 9.6e-7,            :f => 1e-4),
